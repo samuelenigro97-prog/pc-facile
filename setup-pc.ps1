@@ -41,6 +41,28 @@ function Pausa {
 }
 
 # =============================================================================
+# REPORT FINALE + CONNETTIVITA'
+# =============================================================================
+
+$Report = [System.Collections.ArrayList]::new()
+
+function Add-Report {
+    param(
+        [string]$Voce,
+        [string]$Esito  # OK | ERRORE | SALTATO
+    )
+    [void]$Report.Add([pscustomobject]@{ Voce = $Voce; Esito = $Esito })
+}
+
+function Test-Rete {
+    try {
+        return (Test-Connection -ComputerName "8.8.8.8" -Count 1 -Quiet -ErrorAction SilentlyContinue)
+    } catch {
+        return $false
+    }
+}
+
+# =============================================================================
 # VERIFICA PRIVILEGI AMMINISTRATORE
 # =============================================================================
 
@@ -101,13 +123,36 @@ function Installa-Pacchetto {
         [string]$Nome,
         [string]$WingetId
     )
-    Write-Info "Installazione $Nome in corso..."
-    winget install --id $WingetId --silent --accept-package-agreements --accept-source-agreements
+
+    # Gia' installato?
+    winget list --id $WingetId --accept-source-agreements 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) {
-        Write-OK "$Nome installato."
-    } else {
-        Write-Errore "Installazione $Nome fallita (codice: $LASTEXITCODE)."
+        Write-OK "$Nome gia' installato. Salto."
+        Add-Report "$Nome (installazione)" "OK"
+        return
     }
+
+    $maxTentativi = 2
+    for ($tentativo = 1; $tentativo -le $maxTentativi; $tentativo++) {
+        Write-Info "Installazione $Nome in corso (tentativo $tentativo/$maxTentativi)..."
+        winget install --id $WingetId --silent --accept-package-agreements --accept-source-agreements
+        if ($LASTEXITCODE -eq 0) {
+            Write-OK "$Nome installato."
+            Add-Report "$Nome (installazione)" "OK"
+            return
+        }
+
+        Write-Errore "Installazione $Nome fallita (codice: $LASTEXITCODE)."
+        if (-not (Test-Rete)) {
+            Write-Info "Rete assente. Attendo 10s e riprovo..."
+            Start-Sleep -Seconds 10
+        } else {
+            break  # errore non dovuto alla rete, inutile ritentare
+        }
+    }
+
+    Write-Errore "$Nome NON installato dopo $maxTentativi tentativi."
+    Add-Report "$Nome (installazione)" "ERRORE"
 }
 
 # =============================================================================
@@ -137,11 +182,14 @@ if ($nomeCliente.Trim() -ne "") {
     try {
         Set-LocalUser -Name $env:USERNAME -FullName $nomeCliente.Trim()
         Write-OK "Nome utente aggiornato a: $($nomeCliente.Trim())"
+        Add-Report "Nome cliente" "OK"
     } catch {
         Write-Errore "Impossibile aggiornare il nome: $_"
+        Add-Report "Nome cliente" "ERRORE"
     }
 } else {
     Write-Info "Nome non modificato."
+    Add-Report "Nome cliente" "SALTATO"
 }
 
 Pausa
@@ -161,8 +209,10 @@ if ($risposta -match "^[Ss]") {
     Start-Process "https://setup.office.com"
     Write-OK "Browser aperto su setup.office.com"
     Write-Info "Attendi che il cliente completi il riscatto licenza prima di procedere."
+    Add-Report "Riscatto licenza Office (setup.office.com)" "OK"
 } else {
     Write-Info "Passaggio saltato."
+    Add-Report "Riscatto licenza Office (setup.office.com)" "SALTATO"
 }
 
 Pausa
@@ -232,42 +282,56 @@ $sceltaAV = Read-Host "Scelta (1-3)"
 function Installa-Antivirus {
     param(
         [string]$Nome,
-        [string]$UrlRiscatto,
-        [string]$NomeFileUSB
+        [string]$UrlRiscatto
     )
 
-    Write-Info "Apertura pagina riscatto licenza $Nome..."
+    Write-Info "Apertura pagina registrazione/riscatto $Nome..."
     Start-Process $UrlRiscatto
     Write-OK "Browser aperto su: $UrlRiscatto"
     Write-Host ""
+    Write-Host "Completa registrazione e attivazione nel browser." -ForegroundColor White
+    Write-Host "Al termine il sito scarica l'installer nella cartella Download." -ForegroundColor White
+    Read-Host "Premi INVIO QUANDO IL DOWNLOAD E' FINITO"
 
-    $installerUSB = Get-ChildItem -Path $ScriptDir -Filter $NomeFileUSB -ErrorAction SilentlyContinue | Select-Object -First 1
+    # L'installer ha nome variabile: prendo l'.exe piu' recente in Download
+    $downloadDir = Join-Path $env:USERPROFILE "Downloads"
+    $recente = Get-ChildItem -Path $downloadDir -Filter "*.exe" -ErrorAction SilentlyContinue |
+        Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-20) } |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
 
-    if ($installerUSB) {
-        Write-OK "Installer trovato sulla USB: $($installerUSB.Name)"
-        $avviaInstaller = Read-Host "Avviare l'installer locale? (S/N)"
-        if ($avviaInstaller -match "^[Ss]") {
-            Start-Process -FilePath $installerUSB.FullName
+    if ($recente) {
+        Write-OK "Installer recente trovato: $($recente.Name)"
+        $avvia = Read-Host "Avviare questo installer? (S/N)"
+        if ($avvia -match "^[Ss]") {
+            Start-Process -FilePath $recente.FullName
             Write-OK "Installer $Nome avviato."
+            Add-Report "$Nome (antivirus)" "OK"
+        } else {
+            Write-Info "Avvio installer annullato."
+            Add-Report "$Nome (antivirus)" "SALTATO"
         }
     } else {
-        Write-Info "Nessun installer locale trovato nella cartella dello script ($ScriptDir)."
-        Write-Info "Installa $Nome manualmente dopo il riscatto licenza."
+        Write-Info "Nessun .exe recente (ultimi 20 min) in $downloadDir."
+        Write-Info "Avvia l'installer $Nome manualmente."
+        Add-Report "$Nome (antivirus)" "ERRORE"
     }
 }
 
 switch ($sceltaAV) {
     "1" {
-        Installa-Antivirus -Nome "McAfee" -UrlRiscatto "https://home.mcafee.com/activate" -NomeFileUSB "*mcafee*.exe"
+        Installa-Antivirus -Nome "McAfee" -UrlRiscatto "https://home.mcafee.com/activate"
     }
     "2" {
-        Installa-Antivirus -Nome "Norton" -UrlRiscatto "https://norton.com/setup" -NomeFileUSB "*norton*.exe"
+        Installa-Antivirus -Nome "Norton" -UrlRiscatto "https://norton.com/setup"
     }
     "3" {
         Write-Info "Antivirus saltato."
+        Add-Report "Antivirus" "SALTATO"
     }
     default {
         Write-Errore "Scelta non valida. Passaggio saltato."
+        Add-Report "Antivirus" "SALTATO"
     }
 }
 
@@ -300,6 +364,7 @@ while ($true) {
         if (-not $osppPath) {
             Write-Errore "ospp.vbs non trovato. Office non installato o percorso diverso."
             Write-Info "Installa Office (STEP 3) prima di attivare, poi rilancia."
+            Add-Report "Attivazione Office perpetuo" "ERRORE"
             break
         }
         $chiaveLicenza = (Read-Host "Inserisci il product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)").Trim().ToUpper()
@@ -309,20 +374,28 @@ while ($true) {
         }
         Write-Info "Inserimento product key..."
         cscript //nologo $osppPath /inpkey:$chiaveLicenza
-        if ($LASTEXITCODE -ne 0) { Write-Errore "Inserimento chiave fallito (codice $LASTEXITCODE)."; break }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Errore "Inserimento chiave fallito (codice $LASTEXITCODE)."
+            Add-Report "Attivazione Office perpetuo" "ERRORE"
+            break
+        }
         Write-Info "Attivazione in corso..."
         cscript //nologo $osppPath /act
         if ($LASTEXITCODE -eq 0) {
             Write-OK "Office attivato con successo."
+            Add-Report "Attivazione Office perpetuo" "OK"
         } else {
             Write-Errore "Attivazione fallita (codice $LASTEXITCODE). Verifica chiave e connessione."
+            Add-Report "Attivazione Office perpetuo" "ERRORE"
         }
         break
     } elseif ($rispostaChiave -match "^[Nn]$") {
         Write-Info "Attivazione perpetua saltata."
+        Add-Report "Attivazione Office perpetuo" "SALTATO"
         break
     } elseif ($rispostaChiave -eq "") {
         Write-Info "Nessun input (fine stdin). Passaggio saltato."
+        Add-Report "Attivazione Office perpetuo" "SALTATO"
         break
     } else {
         Write-Errore "Input non valido. Rispondi con S o N."
@@ -430,16 +503,31 @@ Pausa
 # FINE
 # =============================================================================
 
-Write-Titolo "CONFIGURAZIONE COMPLETATA"
-Write-Host "Tutti i passaggi sono stati completati." -ForegroundColor Green
-Write-Host ""
-Write-Host "Riepilogo operazioni eseguite:" -ForegroundColor White
-Write-Host "  - Nome cliente impostato" -ForegroundColor White
-Write-Host "  - Licenza Office aperta per il riscatto" -ForegroundColor White
-Write-Host "  - Suite Office gestita" -ForegroundColor White
-Write-Host "  - Antivirus gestito" -ForegroundColor White
-Write-Host "  - Browser installati" -ForegroundColor White
-Write-Host "  - Applicazioni base installate" -ForegroundColor White
+Write-Titolo "CONFIGURAZIONE COMPLETATA - REPORT"
+
+if ($Report.Count -eq 0) {
+    Write-Info "Nessuna operazione registrata."
+} else {
+    $nOk      = ($Report | Where-Object { $_.Esito -eq "OK" }).Count
+    $nErrore  = ($Report | Where-Object { $_.Esito -eq "ERRORE" }).Count
+    $nSaltato = ($Report | Where-Object { $_.Esito -eq "SALTATO" }).Count
+
+    foreach ($r in $Report) {
+        switch ($r.Esito) {
+            "OK"      { $colore = "Green" }
+            "ERRORE"  { $colore = "Red" }
+            default   { $colore = "Yellow" }
+        }
+        Write-Host ("  [{0,-8}] {1}" -f $r.Esito, $r.Voce) -ForegroundColor $colore
+    }
+
+    Write-Host ""
+    Write-Host ("Totale: {0} OK, {1} ERRORE, {2} SALTATO" -f $nOk, $nErrore, $nSaltato) -ForegroundColor Cyan
+    if ($nErrore -gt 0) {
+        Write-Host "Controlla le voci in ERRORE prima di consegnare il PC." -ForegroundColor Red
+    }
+}
+
 Write-Host ""
 Write-Host "Buon lavoro!" -ForegroundColor Cyan
 Write-Host ""
