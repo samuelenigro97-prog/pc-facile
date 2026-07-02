@@ -126,10 +126,14 @@ try {
 # =============================================================================
 
 function Confirm-Winget {
+    # Risultato calcolato una sola volta per sessione (evita ricontrolli/reinstalli)
+    if ($null -ne $Global:WingetOk) { return $Global:WingetOk }
+
     Write-Info "Verifica presenza di Winget..."
 
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         Write-OK "Winget trovato."
+        $Global:WingetOk = $true
         return $true
     }
 
@@ -141,6 +145,7 @@ function Confirm-Winget {
 
         if (-not $msixBundle) {
             Write-Errore "Impossibile trovare il pacchetto Winget su GitHub."
+            $Global:WingetOk = $false
             return $false
         }
 
@@ -153,13 +158,16 @@ function Confirm-Winget {
 
         if (Get-Command winget -ErrorAction SilentlyContinue) {
             Write-OK "Winget installato con successo."
+            $Global:WingetOk = $true
             return $true
         } else {
             Write-Errore "Installazione Winget fallita."
+            $Global:WingetOk = $false
             return $false
         }
     } catch {
         Write-Errore "Errore durante installazione Winget: $_"
+        $Global:WingetOk = $false
         return $false
     }
 }
