@@ -227,6 +227,11 @@ if ($impostaLingua -match "^[Ss]") {
             Write-Info "Install-Language non disponibile (Windows 10): uso solo le impostazioni base."
         }
 
+        # Lingua UI preferita di SISTEMA (Windows 11): imposta l'interfaccia in it-IT
+        if (Get-Command Set-SystemPreferredUILanguage -ErrorAction SilentlyContinue) {
+            Set-SystemPreferredUILanguage it-IT
+        }
+
         # Lista lingue utente: italiano in cima + tastiera italiana (0410:00000410)
         $lista = New-WinUserLanguageList it-IT
         $lista[0].InputMethodTips.Clear()
@@ -238,8 +243,17 @@ if ($impostaLingua -match "^[Ss]") {
         Set-WinHomeLocation -GeoId 118    # Italia
         Set-WinSystemLocale it-IT
 
+        # Propaga lingua/regione a: schermata di login + nuovi account + account di sistema
+        # (senza questo cambia solo l'utente corrente, login e nuovi utenti restano in inglese)
+        if (Get-Command Copy-UserInternationalSettingsToSystem -ErrorAction SilentlyContinue) {
+            Write-Info "Propagazione impostazioni a login e nuovi utenti..."
+            Copy-UserInternationalSettingsToSystem -WelcomeScreen $true -NewUser $true
+        } else {
+            Write-Info "Copy-UserInternationalSettingsToSystem non disponibile: login/nuovi utenti da sistemare a mano (Impostazioni > Lingua > Amministrazione)."
+        }
+
         Write-OK "Lingua e regione impostate su Italiano (it-IT)."
-        Write-Info "La lingua di sistema si applica del tutto dopo il RIAVVIO del PC."
+        Write-Info "La lingua di sistema e del login si applicano del tutto dopo il RIAVVIO del PC."
         Add-Report "Lingua italiana (it-IT)" "OK"
     } catch {
         Write-Errore "Impossibile impostare la lingua: $_"
