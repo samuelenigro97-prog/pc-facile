@@ -291,12 +291,19 @@ function Installa-Pacchetto {
         return
     }
 
+    # Codici che indicano successo (0) o successo con riavvio richiesto (3010/1641)
+    $successo = @(0, 3010, 1641)
+
     $maxTentativi = 2
     for ($tentativo = 1; $tentativo -le $maxTentativi; $tentativo++) {
         Write-Info "Installazione $Nome in corso (tentativo $tentativo/$maxTentativi)..."
         winget install --exact --id $WingetId --silent --accept-package-agreements --accept-source-agreements
-        if ($LASTEXITCODE -eq 0) {
-            Write-OK "$Nome installato."
+        if ($successo -contains $LASTEXITCODE) {
+            if ($LASTEXITCODE -eq 0) {
+                Write-OK "$Nome installato."
+            } else {
+                Write-OK "$Nome installato (richiede riavvio)."
+            }
             Add-Report "$Nome (installazione)" "OK"
             return
         }
