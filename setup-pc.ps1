@@ -178,8 +178,8 @@ function Installa-Pacchetto {
         [string]$WingetId
     )
 
-    # Gia' installato?
-    winget list --id $WingetId --accept-source-agreements 2>$null | Out-Null
+    # Gia' installato? (--exact: evita falsi positivi da match parziale dell'ID)
+    winget list --exact --id $WingetId --accept-source-agreements 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) {
         Write-OK "$Nome gia' installato. Salto."
         Add-Report "$Nome (installazione)" "OK"
@@ -189,7 +189,7 @@ function Installa-Pacchetto {
     $maxTentativi = 2
     for ($tentativo = 1; $tentativo -le $maxTentativi; $tentativo++) {
         Write-Info "Installazione $Nome in corso (tentativo $tentativo/$maxTentativi)..."
-        winget install --id $WingetId --silent --accept-package-agreements --accept-source-agreements
+        winget install --exact --id $WingetId --silent --accept-package-agreements --accept-source-agreements
         if ($LASTEXITCODE -eq 0) {
             Write-OK "$Nome installato."
             Add-Report "$Nome (installazione)" "OK"
