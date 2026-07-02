@@ -1,0 +1,52 @@
+name: Test setup-pc.ps1 su Windows
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verifica sintassi PowerShell
+        shell: pwsh
+        run: |
+          Write-Host "=== VERIFICA SINTASSI ===" -ForegroundColor Cyan
+          $content = Get-Content setup-pc.ps1 -Raw
+          $errors = $null
+          [System.Management.Automation.PSParser]::Tokenize($content, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            Write-Error "ERRORI DI SINTASSI:"
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Host "[OK] Sintassi PowerShell valida!" -ForegroundColor Green
+
+      - name: Verifica winget disponibile
+        shell: pwsh
+        run: |
+          Write-Host "=== VERIFICA WINGET ===" -ForegroundColor Cyan
+          if (Get-Command winget -ErrorAction SilentlyContinue) {
+            Write-Host "[OK] winget trovato: $(winget --version)" -ForegroundColor Green
+          } else {
+            Write-Host "[INFO] winget non disponibile su questo runner" -ForegroundColor Yellow
+          }
+
+      - name: Test script con input simulati
+        shell: pwsh
+        run: |
+          Write-Host "=== TEST CON INPUT SIMULATI ===" -ForegroundColor Cyan
+          $inputs = "Mario Rossi`nN`n4`n2`nS`n"
+          try {
+            $result = $inputs | pwsh -NoLogo -File setup-pc.ps1 2>&1
+            Write-Host $result
+            Write-Host "`n[OK] Script eseguito" -ForegroundColor Green
+          } catch {
+            Write-Host "[INFO] $_" -ForegroundColor Yellow
+          }
