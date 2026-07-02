@@ -109,6 +109,19 @@ try {
 } catch {}
 
 # =============================================================================
+# LOG SU FILE (registro per ogni PC)
+# =============================================================================
+
+# Registra tutto l'output della sessione in un file sul Desktop, utile come
+# prova/archivio della configurazione fatta su quel PC cliente.
+$Global:LogFile = Join-Path $env:USERPROFILE ("Desktop\setup-pc_log_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+try {
+    Start-Transcript -Path $Global:LogFile -ErrorAction SilentlyContinue | Out-Null
+} catch {
+    $Global:LogFile = $null
+}
+
+# =============================================================================
 # FUNZIONE: VERIFICA E INSTALLA WINGET
 # =============================================================================
 
@@ -663,6 +676,35 @@ if ($Report.Count -eq 0) {
     Write-Host ("Totale: {0} OK, {1} ERRORE, {2} SALTATO" -f $nOk, $nErrore, $nSaltato) -ForegroundColor Cyan
     if ($nErrore -gt 0) {
         Write-Host "Controlla le voci in ERRORE prima di consegnare il PC." -ForegroundColor Red
+    }
+}
+
+# Salva il report anche su file di testo (riepilogo leggibile da archiviare)
+try {
+    $reportFile = Join-Path $env:USERPROFILE ("Desktop\setup-pc_report_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+    $righe = @("REPORT CONFIGURAZIONE PC - $(Get-Date -Format 'dd/MM/yyyy HH:mm')", "PC: $env:COMPUTERNAME", "")
+    foreach ($r in $Report) { $righe += ("[{0,-8}] {1}" -f $r.Esito, $r.Voce) }
+    $righe | Set-Content -Path $reportFile -Encoding UTF8
+    Write-OK "Report salvato in: $reportFile"
+} catch {
+    Write-Info "Impossibile salvare il report su file: $_"
+}
+
+# Chiudi il log della sessione
+try { Stop-Transcript -ErrorAction SilentlyContinue | Out-Null } catch {}
+if ($Global:LogFile) { Write-Info "Log completo sessione: $Global:LogFile" }
+
+# Offri il riavvio se la lingua e' stata cambiata (serve reboot per applicarsi)
+$linguaCambiata = @($Report | Where-Object { $_.Voce -like "Lingua italiana*" -and $_.Esito -eq "OK" }).Count -gt 0
+Write-Host ""
+if ($linguaCambiata) {
+    Write-Info "La lingua e' stata cambiata: serve un RIAVVIO per applicarla del tutto."
+    $riavvia = Read-Host "Riavviare il PC ora? (S/N)"
+    if ($riavvia -match "^[Ss]") {
+        Write-Info "Riavvio in corso..."
+        Restart-Computer -Force
+    } else {
+        Write-Info "Ricordati di riavviare il PC prima di consegnarlo."
     }
 }
 
