@@ -274,6 +274,31 @@ switch ($sceltaAV) {
 Pausa
 
 # =============================================================================
+# STEP 4b - INSERIMENTO CHIAVE DI LICENZA
+# =============================================================================
+
+Write-Titolo "STEP 4b - Chiave di Licenza"
+
+$chiaveLicenza = $null
+
+while ($true) {
+    $rispostaChiave = Read-Host "Vuoi inserire una chiave di licenza? (S/N)"
+
+    if ($rispostaChiave -match "^[Ss]$") {
+        $chiaveLicenza = Read-Host "Inserisci la chiave di licenza"
+        Write-OK "Chiave registrata: $chiaveLicenza"
+        break
+    } elseif ($rispostaChiave -match "^[Nn]$") {
+        Write-Info "Nessuna chiave inserita. Passaggio saltato."
+        break
+    } else {
+        Write-Errore "Input non valido. Rispondi con S o N."
+    }
+}
+
+Pausa
+
+# =============================================================================
 # STEP 5 - BROWSER
 # =============================================================================
 

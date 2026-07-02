@@ -42,7 +42,7 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "=== TEST CON INPUT SIMULATI ===" -ForegroundColor Cyan
-          $inputs = "Mario Rossi`nN`n4`n2`nS`n"
+          $inputs = "Mario Rossi Test`nN`nS`n3`nS`nAAAA-BBBB-CCCC-DDDD`nS`n"
           try {
             $result = $inputs | pwsh -NoLogo -File setup-pc.ps1 2>&1
             Write-Host $result
