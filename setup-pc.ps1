@@ -254,7 +254,8 @@ if ($impostaLingua -match "^[Ss]") {
                 Write-Info "Language pack it-IT gia' presente."
             }
         } else {
-            Write-Info "Install-Language non disponibile (Windows 10): uso solo le impostazioni base."
+            Write-Info "Install-Language non disponibile (Windows 10): il pacchetto lingua non si installa da script."
+            $packDaAggiungere = $true
         }
 
         # Lingua UI preferita di SISTEMA (Windows 11): imposta l'interfaccia in it-IT
@@ -285,6 +286,18 @@ if ($impostaLingua -match "^[Ss]") {
         Write-OK "Lingua e regione impostate su Italiano (it-IT)."
         Write-Info "La lingua di sistema e del login si applicano del tutto dopo il RIAVVIO del PC."
         Add-Report "Lingua italiana (it-IT)" "OK"
+
+        # Windows 10: il pacchetto lingua (display) va aggiunto a mano da Impostazioni
+        if ($packDaAggiungere) {
+            Write-Info "Su Windows 10 il pacchetto della lingua di visualizzazione va aggiunto a mano."
+            $apriImp = Read-Host "Aprire ora Impostazioni lingua per aggiungere/verificare l'Italiano? (S/N)"
+            if ($apriImp -match "^[Ss]") {
+                Start-Process "ms-settings:regionlanguage"
+                Write-Info "In Impostazioni: aggiungi 'Italiano (Italia)', impostalo come lingua di"
+                Write-Info "  visualizzazione e scarica il pacchetto lingua. Poi torna qui."
+                Pausa
+            }
+        }
     } catch {
         Write-Errore "Impossibile impostare la lingua: $_"
         Add-Report "Lingua italiana (it-IT)" "ERRORE"
