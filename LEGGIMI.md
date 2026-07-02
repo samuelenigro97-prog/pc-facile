@@ -20,20 +20,32 @@ riavvio**.
 
 ## 1. Scarica lo script
 
-Dal PC cliente apri questo link e salva il file:
+Ti servono **due file**, nella **stessa cartella** (Desktop o chiavetta USB):
 
 ```
 https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/setup-pc.ps1
+https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/Avvia.bat
 ```
 
-Tasto destro → **Salva con nome** → salva come `setup-pc.ps1`.
-⚠️ Verifica che il nome finisca in `.ps1` e **non** `.ps1.txt`.
-
-Puoi salvarlo sul Desktop o su una chiavetta USB.
+Tasto destro → **Salva con nome** su ciascuno. Salva `setup-pc.ps1` e `Avvia.bat`.
+⚠️ Verifica che i nomi finiscano in `.ps1` / `.bat` e **non** `.txt`.
 
 ---
 
-## 2. Avvio robusto (gestisce i blocchi di Windows)
+## 2. Avvio FACILE (consigliato) — doppio click
+
+**Doppio click su `Avvia.bat`.** Fa tutto da solo:
+- chiede i privilegi di amministratore (UAC → *Sì*)
+- lancia `setup-pc.ps1` con ExecutionPolicy Bypass
+
+Niente comandi da digitare. `Avvia.bat` e `setup-pc.ps1` devono stare nella stessa cartella.
+
+> Se Windows/SmartScreen avvisa sul `.bat`: *Ulteriori info → Esegui comunque*.
+> Se **Smart App Control** blocca tutto → vedi punto 3.
+
+---
+
+## 2-bis. Avvio manuale (se il .bat non va)
 
 Apri **PowerShell come Amministratore**
 (Start → scrivi `PowerShell` → tasto destro → *Esegui come amministratore*).
