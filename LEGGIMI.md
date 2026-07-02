@@ -1,0 +1,112 @@
+# Avvio PC Pro — `setup-pc.ps1`
+
+Script PowerShell per configurare i PC Windows dei clienti (negozio informatica):
+lingua italiana, nome cliente, Office, antivirus/protezione, browser, app base,
+con **report finale** degli esiti.
+
+---
+
+## 0. Prima di iniziare — Lingua in Italiano
+
+I PC installati da chiavetta USB spesso saltano la scelta lingua e partono in
+**inglese**. Lo **STEP 0** dello script imposta tutto in `it-IT` (display, formati,
+tastiera, language pack). La lingua di **sistema** si applica del tutto **dopo il
+riavvio**.
+
+> Se preferisci farlo a mano prima: Impostazioni → Ora e lingua → Lingua e area
+> geografica → aggiungi **Italiano (Italia)** e impostalo come predefinito.
+
+---
+
+## 1. Scarica lo script
+
+Dal PC cliente apri questo link e salva il file:
+
+```
+https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/setup-pc.ps1
+```
+
+Tasto destro → **Salva con nome** → salva come `setup-pc.ps1`.
+⚠️ Verifica che il nome finisca in `.ps1` e **non** `.ps1.txt`.
+
+Puoi salvarlo sul Desktop o su una chiavetta USB.
+
+---
+
+## 2. Avvio robusto (gestisce i blocchi di Windows)
+
+Apri **PowerShell come Amministratore**
+(Start → scrivi `PowerShell` → tasto destro → *Esegui come amministratore*).
+
+Poi esegui, **sostituendo il percorso** con quello reale del file
+(usa `$env:USERPROFILE` per l'utente corrente, qualunque sia il suo nome):
+
+```powershell
+# 1) consenti l'esecuzione script solo per questa sessione
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+
+# 2) rimuovi il blocco "file scaricato da Internet" (mark-of-the-web)
+Unblock-File -Path "$env:USERPROFILE\Desktop\setup-pc.ps1"
+
+# 3) avvia lo script
+& "$env:USERPROFILE\Desktop\setup-pc.ps1"
+```
+
+In alternativa, in un colpo solo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\setup-pc.ps1"
+```
+
+Se il file è su chiavetta (es. `D:`), usa `D:\setup-pc.ps1` al posto del percorso Desktop.
+
+> **Nota percorso:** usa `$env:USERPROFILE` (es. `C:\Users\telef`) — NON un nome
+> utente fisso come `oem`. Ogni PC può avere un profilo diverso.
+
+---
+
+## 3. Se lo script NON parte proprio (Smart App Control)
+
+Su alcuni PC il **Controllo intelligente delle app** (Smart App Control) blocca il
+`.ps1` scaricato da Internet **senza** dare l'opzione "Esegui comunque".
+
+Per disattivarlo:
+
+**Sicurezza di Windows → Controllo app e browser → Controllo intelligente delle app → Disattivato**
+
+> ⚠️ **IRREVERSIBILE:** una volta disattivato, Smart App Control **non si può più
+> riattivare** senza reinstallare/resettare Windows. Valuta se il cliente lo vuole
+> davvero spento. In alternativa, prepara lo script da una fonte considerata
+> attendibile (es. copialo da chiavetta invece di scaricarlo).
+
+Lo script, se riesce a partire, rileva da solo Smart App Control attivo e ti avvisa.
+
+---
+
+## 4. Cosa fa lo script (in ordine)
+
+| Step | Azione |
+|------|--------|
+| 0  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack |
+| 1  | Nome completo del cliente (cambia il "Nome visualizzato" dell'account) |
+| 2  | Riscatto licenza **Office 365 abbonamento** (`setup.office.com`) |
+| 3  | Installazione suite **Office / OpenOffice / LibreOffice** (winget) |
+| 4  | **Antivirus/protezione**: McAfee, Norton, **Unieuro Cyber Protection**, o Salta |
+| 4b | Attivazione **Office perpetuo** con product key (`ospp.vbs`) |
+| 5  | Browser: Chrome / Firefox |
+| 6  | App base: VLC, Adobe Reader, Spotify, 7-Zip, WhatsApp, Steam, AnyDesk, Discord, Zoom |
+| —  | **Report finale**: esito reale (OK / ERRORE / SALTATO) di ogni operazione |
+
+Antivirus **Norton/McAfee**: lo script apre il sito, tu registri e scarichi
+l'installer (nome variabile) → lo script trova l'`.exe` più recente in Download e
+lo avvia.
+**Unieuro Cyber Protection**: solo apertura sito + promemoria di annotare le
+credenziali per l'app mobile del cliente (nessun installer PC).
+
+---
+
+## 5. Prima prova sicura (dry-run)
+
+Per vedere il flusso senza installare nulla, rispondi:
+STEP 0 `N` · STEP 2 `N` · STEP 3 `4` · STEP 4 `4` · STEP 4b `N` · Browser `N`/`N` ·
+STEP 6 `S`. Arrivi al report finale senza toccare il PC.

@@ -78,6 +78,37 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 }
 
 # =============================================================================
+# CONTROLLO AMBIENTE (blocchi Windows)
+# =============================================================================
+
+# Rimuove il "mark-of-the-web" dallo script stesso (file scaricato da Internet)
+try {
+    if ($MyInvocation.MyCommand.Path) {
+        Unblock-File -Path $MyInvocation.MyCommand.Path -ErrorAction SilentlyContinue
+    }
+} catch {}
+
+# ExecutionPolicy: se lo script gira gia' e' ok, ma segnalo per chiarezza
+$ep = Get-ExecutionPolicy
+if ($ep -eq 'Restricted' -or $ep -eq 'AllSigned') {
+    Write-Info "ExecutionPolicy: $ep. Se hai avuto errori di avvio, rilancia con:"
+    Write-Host "  powershell -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`"" -ForegroundColor Yellow
+}
+
+# Smart App Control (Controllo intelligente delle app): puo' bloccare .ps1/installer
+try {
+    $sac = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy" `
+            -Name VerifiedAndReputablePolicyState -ErrorAction SilentlyContinue).VerifiedAndReputablePolicyState
+    if ($sac -eq 1) {
+        Write-Errore "Smart App Control ATTIVO: puo' bloccare script e installer scaricati."
+        Write-Info "Per disattivarlo: Sicurezza di Windows > Controllo app e browser >"
+        Write-Info "  Controllo intelligente delle app > Disattivato."
+        Write-Info "ATTENZIONE: la disattivazione e' IRREVERSIBILE senza reinstallare Windows."
+        Pausa
+    }
+} catch {}
+
+# =============================================================================
 # FUNZIONE: VERIFICA E INSTALLA WINGET
 # =============================================================================
 
@@ -165,6 +196,60 @@ Clear-Host
 Write-Titolo "AUTOMAZIONE CONFIGURAZIONE PC - Avvio"
 Write-Host "Questo script guida la configurazione del PC del cliente passo per passo." -ForegroundColor White
 Write-Host "Segui le istruzioni a schermo e premi INVIO quando indicato." -ForegroundColor White
+Pausa
+
+# =============================================================================
+# STEP 0 - LINGUA E REGIONE (ITALIANO)
+# =============================================================================
+
+Write-Titolo "STEP 0 - Lingua e Regione (Italiano)"
+
+Write-Host "I PC installati da chiavetta partono spesso in INGLESE." -ForegroundColor White
+Write-Host "Questo passaggio imposta display, formati, tastiera e language pack in it-IT." -ForegroundColor White
+Write-Host ""
+
+$culturaAttuale = (Get-Culture).Name
+Write-Info "Lingua/regione attuale: $culturaAttuale"
+
+$impostaLingua = Read-Host "Impostare il sistema in Italiano (it-IT)? (S/N)"
+if ($impostaLingua -match "^[Ss]") {
+    try {
+        # Language pack (Windows 11 22H2+): installa it-IT se mancante
+        if (Get-Command Install-Language -ErrorAction SilentlyContinue) {
+            $installate = (Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId
+            if ($installate -notcontains "it-IT") {
+                Write-Info "Installazione language pack it-IT (puo' richiedere qualche minuto)..."
+                Install-Language it-IT -ErrorAction Stop | Out-Null
+            } else {
+                Write-Info "Language pack it-IT gia' presente."
+            }
+        } else {
+            Write-Info "Install-Language non disponibile (Windows 10): uso solo le impostazioni base."
+        }
+
+        # Lista lingue utente: italiano in cima + tastiera italiana (0410:00000410)
+        $lista = New-WinUserLanguageList it-IT
+        $lista[0].InputMethodTips.Clear()
+        $lista[0].InputMethodTips.Add("0410:00000410")
+        Set-WinUserLanguageList $lista -Force
+
+        Set-WinUILanguageOverride -Language it-IT
+        Set-Culture it-IT
+        Set-WinHomeLocation -GeoId 118    # Italia
+        Set-WinSystemLocale it-IT
+
+        Write-OK "Lingua e regione impostate su Italiano (it-IT)."
+        Write-Info "La lingua di sistema si applica del tutto dopo il RIAVVIO del PC."
+        Add-Report "Lingua italiana (it-IT)" "OK"
+    } catch {
+        Write-Errore "Impossibile impostare la lingua: $_"
+        Add-Report "Lingua italiana (it-IT)" "ERRORE"
+    }
+} else {
+    Write-Info "Impostazione lingua saltata."
+    Add-Report "Lingua italiana (it-IT)" "SALTATO"
+}
+
 Pausa
 
 # =============================================================================
@@ -273,13 +358,14 @@ Pausa
 
 Write-Titolo "STEP 4 - Antivirus"
 
-Write-Host "Scegli l'antivirus da installare:" -ForegroundColor White
+Write-Host "Scegli l'antivirus/protezione da attivare:" -ForegroundColor White
 Write-Host "  1) McAfee"
 Write-Host "  2) Norton"
-Write-Host "  3) Salta"
+Write-Host "  3) Unieuro Cyber Protection (solo sito + credenziali app)"
+Write-Host "  4) Salta"
 Write-Host ""
 
-$sceltaAV = Read-Host "Scelta (1-3)"
+$sceltaAV = Read-Host "Scelta (1-4)"
 
 function Installa-Antivirus {
     param(
@@ -320,14 +406,41 @@ function Installa-Antivirus {
     }
 }
 
+# Servizio web-only (nessun installer PC): apre il sito, l'operatore inserisce
+# il codice e segna le credenziali per l'app mobile del cliente.
+function Attiva-ServizioWeb {
+    param(
+        [string]$Nome,
+        [string]$UrlAttivazione
+    )
+
+    Write-Info "Apertura pagina attivazione $Nome..."
+    Start-Process $UrlAttivazione
+    Write-OK "Browser aperto su: $UrlAttivazione"
+    Write-Host ""
+    Write-Host "Sul sito: inserisci il codice/PIN e completa i dati richiesti." -ForegroundColor White
+    Write-Host "IMPORTANTE: annota le credenziali per l'app mobile e consegnale al cliente." -ForegroundColor Yellow
+    $fatto = Read-Host "Attivazione completata e credenziali annotate? (S/N)"
+    if ($fatto -match "^[Ss]") {
+        Write-OK "$Nome attivato."
+        Add-Report "$Nome (protezione)" "OK"
+    } else {
+        Write-Info "$Nome non completato."
+        Add-Report "$Nome (protezione)" "SALTATO"
+    }
+}
+
 switch ($sceltaAV) {
     "1" {
         Installa-Antivirus -Nome "McAfee" -UrlRiscatto "https://home.mcafee.com/activate"
     }
     "2" {
-        Installa-Antivirus -Nome "Norton" -UrlRiscatto "https://norton.com/setup"
+        Installa-Antivirus -Nome "Norton" -UrlRiscatto "https://www.norton.com/setup"
     }
     "3" {
+        Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it"
+    }
+    "4" {
         Write-Info "Antivirus saltato."
         Add-Report "Antivirus" "SALTATO"
     }
