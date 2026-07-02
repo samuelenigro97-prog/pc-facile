@@ -64,6 +64,17 @@ function Test-Rete {
     }
 }
 
+# Cartella Desktop reale (gestisce anche il Desktop reindirizzato su OneDrive)
+function Get-DesktopDir {
+    try {
+        $d = [Environment]::GetFolderPath('Desktop')
+        if ($d -and (Test-Path $d)) { return $d }
+    } catch {}
+    $fallback = Join-Path $env:USERPROFILE "Desktop"
+    if (Test-Path $fallback) { return $fallback }
+    return $env:TEMP
+}
+
 # =============================================================================
 # VERIFICA PRIVILEGI AMMINISTRATORE
 # =============================================================================
@@ -114,7 +125,7 @@ try {
 
 # Registra tutto l'output della sessione in un file sul Desktop, utile come
 # prova/archivio della configurazione fatta su quel PC cliente.
-$Global:LogFile = Join-Path $env:USERPROFILE ("Desktop\setup-pc_log_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+$Global:LogFile = Join-Path (Get-DesktopDir) ("setup-pc_log_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
 try {
     Start-Transcript -Path $Global:LogFile -ErrorAction SilentlyContinue | Out-Null
 } catch {
@@ -689,7 +700,7 @@ if ($Report.Count -eq 0) {
 
 # Salva il report anche su file di testo (riepilogo leggibile da archiviare)
 try {
-    $reportFile = Join-Path $env:USERPROFILE ("Desktop\setup-pc_report_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+    $reportFile = Join-Path (Get-DesktopDir) ("setup-pc_report_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
     $righe = @("REPORT CONFIGURAZIONE PC - $(Get-Date -Format 'dd/MM/yyyy HH:mm')", "PC: $env:COMPUTERNAME", "")
     foreach ($r in $Report) { $righe += ("[{0,-8}] {1}" -f $r.Esito, $r.Voce) }
     $righe | Set-Content -Path $reportFile -Encoding UTF8
