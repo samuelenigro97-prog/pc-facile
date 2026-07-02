@@ -59,10 +59,20 @@ function Test-Rete {
         if (($ping.Send("8.8.8.8", 2000)).Status -eq 'Success') { return $true }
     } catch {}
     # 2) Fallback: alcuni firewall bloccano il ping (ICMP) ma non il web (TCP 443)
+    return (Test-Endpoint -HostName "www.microsoft.com")
+}
+
+# Verifica se un host e' raggiungibile su una porta (default 443) - connect TCP
+function Test-Endpoint {
+    param(
+        [string]$HostName,
+        [int]$Port = 443,
+        [int]$TimeoutMs = 2500
+    )
     try {
         $tcp = New-Object System.Net.Sockets.TcpClient
-        $async = $tcp.BeginConnect("www.microsoft.com", 443, $null, $null)
-        $ok = $async.AsyncWaitHandle.WaitOne(2500)
+        $async = $tcp.BeginConnect($HostName, $Port, $null, $null)
+        $ok = $async.AsyncWaitHandle.WaitOne($TimeoutMs)
         $connesso = $ok -and $tcp.Connected
         $tcp.Close()
         return [bool]$connesso
@@ -147,6 +157,36 @@ Write-Info "PowerShell: $($PSVersionTable.PSVersion) ($($PSVersionTable.PSEditio
 if ($PSVersionTable.PSEdition -eq 'Core') {
     Write-Info "Consiglio: usa Windows PowerShell 5.1 (Avvia.bat lo fa gia'). Su PowerShell 7"
     Write-Info "  l'installazione di riserva di winget (Add-AppxPackage) puo' non funzionare."
+}
+
+# =============================================================================
+# PREFLIGHT RETE (utile su reti aziendali con firewall/proxy)
+# =============================================================================
+
+Write-Host ""
+Write-Info "Controllo raggiungibilita' servizi (rete)..."
+$endpoints = @(
+    @{ Nome = "GitHub (download script)";            HostName = "raw.githubusercontent.com" },
+    @{ Nome = "Microsoft (winget/Windows Update)";   HostName = "www.microsoft.com" },
+    @{ Nome = "Store winget (installazione app)";    HostName = "cdn.winget.microsoft.com" }
+)
+$bloccati = 0
+foreach ($e in $endpoints) {
+    if (Test-Endpoint -HostName $e.HostName) {
+        Write-OK "OK  $($e.Nome)"
+    } else {
+        Write-Errore "KO  $($e.Nome) [$($e.HostName)]"
+        $bloccati++
+    }
+}
+if ($bloccati -gt 0) {
+    Write-Info "$bloccati servizio/i non raggiungibile/i: probabile firewall o proxy aziendale."
+    Write-Info "Rimedi: tieni setup-pc.ps1 accanto ad Avvia.bat (evita GitHub); per le"
+    Write-Info "  installazioni app usa un hotspot o una rete senza filtri."
+    Add-Report "Rete: $bloccati servizio/i bloccato/i" "ERRORE"
+    Pausa
+} else {
+    Write-OK "Tutti i servizi chiave sono raggiungibili."
 }
 
 # =============================================================================
