@@ -125,7 +125,7 @@ Utili da archiviare o allegare alla scheda cliente.
 | | Windows 11 | Windows 10 |
 |---|---|---|
 | Lingua base (tastiera, formati, regione) | ✅ | ✅ |
-| Language pack automatico (`Install-Language`) | ✅ | ❌ solo Win11 — su Win10 aggiungi il pacchetto ITA a mano |
+| Language pack automatico (`Install-Language`) | ✅ | ❌ solo Win11 — su Win10 lo script apre Impostazioni lingua per aggiungerlo a mano |
 | Lingua di sistema/login/nuovi utenti (`Copy-UserInternationalSettingsToSystem`) | ✅ | ❌ solo Win11 |
 | Rilevamento Smart App Control | ✅ | non presente (ignorato) |
 | Office, antivirus, browser, app (winget) | ✅ | ✅ (serve "App Installer" dallo Store) |
