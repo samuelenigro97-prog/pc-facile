@@ -128,6 +128,28 @@ credenziali per l'app mobile del cliente (nessun installer PC).
 Alla fine, se hai cambiato la lingua, lo script **propone il riavvio** (serve per
 applicare display language e schermata di login).
 
+All'avvio lo script fa un **preflight di rete**: controlla se GitHub, Microsoft e il
+CDN winget sono raggiungibili e avvisa subito se la rete (aziendale/proxy) blocca
+qualcosa.
+
+---
+
+## 4-bis. Rete aziendale / con firewall o proxy
+
+I PC nuovi **non sono nel dominio** aziendale: usano solo la connessione. Le policy
+aziendali (Group Policy, AppLocker) **non** si applicano al PC fresco. Il rischio è
+solo che il **firewall/proxy blocchi i download**:
+
+- **GitHub bloccato** → usa la modalità **offline**: tieni `setup-pc.ps1` accanto ad
+  `Avvia.bat` (niente download).
+- **Winget/CDN Microsoft bloccati** → le app non si installano (il report lo segnala).
+  Rimedio: **hotspot del telefono** per la fase installazioni, o installa dopo su rete
+  senza filtri.
+- **Proxy con login** → i download automatici possono fallire; usa hotspot.
+
+Il preflight all'avvio ti dice **subito** cosa è raggiungibile, così non scopri il
+blocco a metà lavoro.
+
 ---
 
 ## 5. File generati (log e report)
