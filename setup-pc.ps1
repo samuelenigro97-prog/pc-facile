@@ -56,7 +56,9 @@ function Add-Report {
 
 function Test-Rete {
     try {
-        return (Test-Connection -ComputerName "8.8.8.8" -Count 1 -Quiet -ErrorAction SilentlyContinue)
+        $ping = New-Object System.Net.NetworkInformation.Ping
+        $reply = $ping.Send("8.8.8.8", 2000)
+        return ($reply.Status -eq 'Success')
     } catch {
         return $false
     }

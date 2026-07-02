@@ -45,7 +45,8 @@ jobs:
         run: |
           Write-Host "=== PSSCRIPTANALYZER ===" -ForegroundColor Cyan
           Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -ErrorAction Stop
-          $results = Invoke-ScriptAnalyzer -Path setup-pc.ps1 -Severity Error,Warning
+          # Write-Host e' voluto (output colorato interattivo): escludo quella regola.
+          $results = Invoke-ScriptAnalyzer -Path setup-pc.ps1 -Severity Error,Warning -ExcludeRule PSAvoidUsingWriteHost
           if ($results) {
             $results | Format-Table -AutoSize | Out-String | Write-Host
             $errs = @($results | Where-Object { $_.Severity -eq 'Error' })
