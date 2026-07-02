@@ -18,17 +18,26 @@ riavvio**.
 
 ---
 
-## 1. Scarica lo script
+## 1. Scarica il launcher
 
-Ti servono **due file**, nella **stessa cartella** (Desktop o chiavetta USB):
+Ti basta **UN file**: `Avvia.bat`.
 
 ```
-https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/setup-pc.ps1
 https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/Avvia.bat
 ```
 
-Tasto destro → **Salva con nome** su ciascuno. Salva `setup-pc.ps1` e `Avvia.bat`.
-⚠️ Verifica che i nomi finiscano in `.ps1` / `.bat` e **non** `.txt`.
+Tasto destro → **Salva con nome** → `Avvia.bat`.
+⚠️ Verifica che finisca in `.bat` e **non** `.bat.txt`.
+
+`Avvia.bat` da solo scarica ed esegue l'ultima versione dello script da GitHub
+(serve Internet — sui PC da configurare c'è, serve anche per winget).
+
+**Uso OFFLINE (opzionale):** se vuoi lavorare senza Internet, scarica anche
+`setup-pc.ps1` e mettilo **nella stessa cartella** di `Avvia.bat`. Il launcher, se
+lo trova accanto, usa quello invece di scaricarlo.
+```
+https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/setup-pc.ps1
+```
 
 ---
 
@@ -36,9 +45,10 @@ Tasto destro → **Salva con nome** su ciascuno. Salva `setup-pc.ps1` e `Avvia.b
 
 **Doppio click su `Avvia.bat`.** Fa tutto da solo:
 - chiede i privilegi di amministratore (UAC → *Sì*)
-- lancia `setup-pc.ps1` con ExecutionPolicy Bypass
+- usa `setup-pc.ps1` accanto se c'è, altrimenti scarica l'ultima versione
+- avvia con ExecutionPolicy Bypass
 
-Niente comandi da digitare. `Avvia.bat` e `setup-pc.ps1` devono stare nella stessa cartella.
+Niente comandi da digitare.
 
 > Se Windows/SmartScreen avvisa sul `.bat`: *Ulteriori info → Esegui comunque*.
 > Se **Smart App Control** blocca tutto → vedi punto 3.
