@@ -484,12 +484,12 @@ function Installa-Antivirus {
     Write-OK "Browser aperto su: $UrlRiscatto"
     Write-Host ""
     Write-Host "Completa registrazione e attivazione nel browser." -ForegroundColor White
-    Write-Host "Al termine il sito scarica l'installer nella cartella Download." -ForegroundColor White
+    Write-Host "Al termine il sito scarica l'installer (di solito nella cartella Download)." -ForegroundColor White
     Read-Host "Premi INVIO QUANDO IL DOWNLOAD E' FINITO"
 
-    # L'installer ha nome variabile: prendo l'.exe piu' recente in Download
-    $downloadDir = Join-Path $env:USERPROFILE "Downloads"
-    $recente = Get-ChildItem -Path $downloadDir -Filter "*.exe" -ErrorAction SilentlyContinue |
+    # L'installer ha nome variabile: cerco l'.exe piu' recente in Download e Desktop
+    $cartelle = @((Join-Path $env:USERPROFILE "Downloads"), (Get-DesktopDir)) | Select-Object -Unique
+    $recente = Get-ChildItem -Path $cartelle -Filter "*.exe" -ErrorAction SilentlyContinue |
         Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-20) } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
@@ -506,7 +506,7 @@ function Installa-Antivirus {
             Add-Report "$Nome (antivirus)" "SALTATO"
         }
     } else {
-        Write-Info "Nessun .exe recente (ultimi 20 min) in $downloadDir."
+        Write-Info "Nessun .exe recente (ultimi 20 min) in Download o Desktop."
         Write-Info "Avvia l'installer $Nome manualmente."
         Add-Report "$Nome (antivirus)" "ERRORE"
     }
