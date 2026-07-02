@@ -350,6 +350,67 @@ switch ($sceltaOffice) {
     }
 }
 
+# --- Attivazione licenza Office PERPETUA (product key) ---
+Write-Host ""
+Write-Host "Se hai installato Office PERPETUO (2021/2024), attivalo ora col product key." -ForegroundColor White
+Write-Host "Per Microsoft 365 (abbonamento) rispondi N: si attiva dal login su setup.office.com." -ForegroundColor White
+Write-Host ""
+
+function Get-OsppPath {
+    $percorsi = @(
+        "$env:ProgramFiles\Microsoft Office\Office16\ospp.vbs",
+        "${env:ProgramFiles(x86)}\Microsoft Office\Office16\ospp.vbs"
+    )
+    foreach ($p in $percorsi) { if (Test-Path $p) { return $p } }
+    return $null
+}
+
+while ($true) {
+    $rispostaChiave = Read-Host "Attivare una licenza Office perpetua con product key? (S/N)"
+
+    if ($rispostaChiave -match "^[Ss]$") {
+        $osppPath = Get-OsppPath
+        if (-not $osppPath) {
+            Write-Errore "ospp.vbs non trovato. Office non installato o percorso diverso."
+            Write-Info "Installa Office (sopra) prima di attivare."
+            Add-Report "Attivazione Office perpetuo" "ERRORE"
+            break
+        }
+        $chiaveLicenza = (Read-Host "Inserisci il product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)").Trim().ToUpper()
+        if ($chiaveLicenza -notmatch "^([A-Z0-9]{5}-){4}[A-Z0-9]{5}$") {
+            Write-Errore "Formato non valido: 5 gruppi da 5 caratteri separati da trattino."
+            continue
+        }
+        Write-Info "Inserimento product key..."
+        cscript //nologo $osppPath /inpkey:$chiaveLicenza
+        if ($LASTEXITCODE -ne 0) {
+            Write-Errore "Inserimento chiave fallito (codice $LASTEXITCODE)."
+            Add-Report "Attivazione Office perpetuo" "ERRORE"
+            break
+        }
+        Write-Info "Attivazione in corso..."
+        cscript //nologo $osppPath /act
+        if ($LASTEXITCODE -eq 0) {
+            Write-OK "Office attivato con successo."
+            Add-Report "Attivazione Office perpetuo" "OK"
+        } else {
+            Write-Errore "Attivazione fallita (codice $LASTEXITCODE). Verifica chiave e connessione."
+            Add-Report "Attivazione Office perpetuo" "ERRORE"
+        }
+        break
+    } elseif ($rispostaChiave -match "^[Nn]$") {
+        Write-Info "Attivazione perpetua saltata."
+        Add-Report "Attivazione Office perpetuo" "SALTATO"
+        break
+    } elseif ($rispostaChiave -eq "") {
+        Write-Info "Nessun input (fine stdin). Passaggio saltato."
+        Add-Report "Attivazione Office perpetuo" "SALTATO"
+        break
+    } else {
+        Write-Errore "Input non valido. Rispondi con S o N."
+    }
+}
+
 Pausa
 
 # =============================================================================
@@ -358,14 +419,13 @@ Pausa
 
 Write-Titolo "STEP 4 - Antivirus"
 
-Write-Host "Scegli l'antivirus/protezione da attivare:" -ForegroundColor White
+Write-Host "Scegli l'antivirus da installare:" -ForegroundColor White
 Write-Host "  1) McAfee"
 Write-Host "  2) Norton"
-Write-Host "  3) Unieuro Cyber Protection (solo sito + credenziali app)"
-Write-Host "  4) Salta"
+Write-Host "  3) Salta"
 Write-Host ""
 
-$sceltaAV = Read-Host "Scelta (1-4)"
+$sceltaAV = Read-Host "Scelta (1-3)"
 
 function Installa-Antivirus {
     param(
@@ -438,9 +498,6 @@ switch ($sceltaAV) {
         Installa-Antivirus -Nome "Norton" -UrlRiscatto "https://www.norton.com/setup"
     }
     "3" {
-        Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it"
-    }
-    "4" {
         Write-Info "Antivirus saltato."
         Add-Report "Antivirus" "SALTATO"
     }
@@ -453,68 +510,20 @@ switch ($sceltaAV) {
 Pausa
 
 # =============================================================================
-# STEP 4b - ATTIVAZIONE OFFICE PERPETUO (Product Key)
+# STEP 4c - UNIEURO CYBER PROTECTION (opzionale)
 # =============================================================================
 
-Write-Titolo "STEP 4b - Attivazione Office Perpetuo"
+Write-Titolo "STEP 4c - Unieuro Cyber Protection"
 
-Write-Host "Solo per licenze Office PERPETUE (2021/2024 - product key su cartoncino)." -ForegroundColor White
-Write-Host "Per Microsoft 365 (abbonamento) salta: si attiva dal login su setup.office.com." -ForegroundColor White
+Write-Host "Servizio venduto solo su richiesta: salta se il cliente non l'ha acquistato." -ForegroundColor White
 Write-Host ""
 
-function Get-OsppPath {
-    $percorsi = @(
-        "$env:ProgramFiles\Microsoft Office\Office16\ospp.vbs",
-        "${env:ProgramFiles(x86)}\Microsoft Office\Office16\ospp.vbs"
-    )
-    foreach ($p in $percorsi) { if (Test-Path $p) { return $p } }
-    return $null
-}
-
-while ($true) {
-    $rispostaChiave = Read-Host "Attivare una licenza Office perpetua con product key? (S/N)"
-
-    if ($rispostaChiave -match "^[Ss]$") {
-        $osppPath = Get-OsppPath
-        if (-not $osppPath) {
-            Write-Errore "ospp.vbs non trovato. Office non installato o percorso diverso."
-            Write-Info "Installa Office (STEP 3) prima di attivare, poi rilancia."
-            Add-Report "Attivazione Office perpetuo" "ERRORE"
-            break
-        }
-        $chiaveLicenza = (Read-Host "Inserisci il product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)").Trim().ToUpper()
-        if ($chiaveLicenza -notmatch "^([A-Z0-9]{5}-){4}[A-Z0-9]{5}$") {
-            Write-Errore "Formato non valido: 5 gruppi da 5 caratteri separati da trattino."
-            continue
-        }
-        Write-Info "Inserimento product key..."
-        cscript //nologo $osppPath /inpkey:$chiaveLicenza
-        if ($LASTEXITCODE -ne 0) {
-            Write-Errore "Inserimento chiave fallito (codice $LASTEXITCODE)."
-            Add-Report "Attivazione Office perpetuo" "ERRORE"
-            break
-        }
-        Write-Info "Attivazione in corso..."
-        cscript //nologo $osppPath /act
-        if ($LASTEXITCODE -eq 0) {
-            Write-OK "Office attivato con successo."
-            Add-Report "Attivazione Office perpetuo" "OK"
-        } else {
-            Write-Errore "Attivazione fallita (codice $LASTEXITCODE). Verifica chiave e connessione."
-            Add-Report "Attivazione Office perpetuo" "ERRORE"
-        }
-        break
-    } elseif ($rispostaChiave -match "^[Nn]$") {
-        Write-Info "Attivazione perpetua saltata."
-        Add-Report "Attivazione Office perpetuo" "SALTATO"
-        break
-    } elseif ($rispostaChiave -eq "") {
-        Write-Info "Nessun input (fine stdin). Passaggio saltato."
-        Add-Report "Attivazione Office perpetuo" "SALTATO"
-        break
-    } else {
-        Write-Errore "Input non valido. Rispondi con S o N."
-    }
+$vuoiUnieuro = Read-Host "Attivare Unieuro Cyber Protection? (S/N)"
+if ($vuoiUnieuro -match "^[Ss]") {
+    Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it"
+} else {
+    Write-Info "Unieuro Cyber Protection saltato."
+    Add-Report "Unieuro Cyber Protection" "SALTATO"
 }
 
 Pausa

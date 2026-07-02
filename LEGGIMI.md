@@ -90,9 +90,9 @@ Lo script, se riesce a partire, rileva da solo Smart App Control attivo e ti avv
 | 0  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack |
 | 1  | Nome completo del cliente (cambia il "Nome visualizzato" dell'account) |
 | 2  | Riscatto licenza **Office 365 abbonamento** (`setup.office.com`) |
-| 3  | Installazione suite **Office / OpenOffice / LibreOffice** (winget) |
-| 4  | **Antivirus/protezione**: McAfee, Norton, **Unieuro Cyber Protection**, o Salta |
-| 4b | Attivazione **Office perpetuo** con product key (`ospp.vbs`) |
+| 3  | Installazione suite **Office / OpenOffice / LibreOffice** (winget) + subito dopo **attivazione Office perpetuo** con product key (`ospp.vbs`) |
+| 4  | **Antivirus**: McAfee, Norton, o Salta |
+| 4c | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
 | 5  | Browser: Chrome / Firefox |
 | 6  | App base: VLC, Adobe Reader, Spotify, 7-Zip, WhatsApp, Steam, AnyDesk, Discord, Zoom |
 | —  | **Report finale**: esito reale (OK / ERRORE / SALTATO) di ogni operazione |
@@ -108,5 +108,5 @@ credenziali per l'app mobile del cliente (nessun installer PC).
 ## 5. Prima prova sicura (dry-run)
 
 Per vedere il flusso senza installare nulla, rispondi:
-STEP 0 `N` · STEP 2 `N` · STEP 3 `4` · STEP 4 `4` · STEP 4b `N` · Browser `N`/`N` ·
-STEP 6 `S`. Arrivi al report finale senza toccare il PC.
+STEP 0 `N` · STEP 2 `N` · STEP 3 `4` poi attivazione perpetuo `N` · STEP 4 `3` ·
+STEP 4c `N` · Browser `N`/`N` · STEP 6 `S`. Arrivi al report finale senza toccare il PC.
