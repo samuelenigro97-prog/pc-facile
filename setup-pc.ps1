@@ -53,10 +53,19 @@ function Add-Report {
 }
 
 function Test-Rete {
+    # 1) Ping veloce
     try {
         $ping = New-Object System.Net.NetworkInformation.Ping
-        $reply = $ping.Send("8.8.8.8", 2000)
-        return ($reply.Status -eq 'Success')
+        if (($ping.Send("8.8.8.8", 2000)).Status -eq 'Success') { return $true }
+    } catch {}
+    # 2) Fallback: alcuni firewall bloccano il ping (ICMP) ma non il web (TCP 443)
+    try {
+        $tcp = New-Object System.Net.Sockets.TcpClient
+        $async = $tcp.BeginConnect("www.microsoft.com", 443, $null, $null)
+        $ok = $async.AsyncWaitHandle.WaitOne(2500)
+        $connesso = $ok -and $tcp.Connected
+        $tcp.Close()
+        return [bool]$connesso
     } catch {
         return $false
     }
@@ -116,6 +125,29 @@ try {
         Pausa
     }
 } catch {}
+
+# =============================================================================
+# INFO COMPATIBILITA' (Windows e PowerShell)
+# =============================================================================
+
+try {
+    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue
+    if ($os) {
+        Write-Info "Sistema: $($os.Caption) (build $($os.BuildNumber))"
+        $build = 0
+        [void][int]::TryParse($os.BuildNumber, [ref]$build)
+        if ($build -gt 0 -and $build -lt 17763) {
+            Write-Errore "Windows troppo vecchio (build $build): winget richiede 1809 (17763) o superiore."
+            Write-Info "Le installazioni app potrebbero non funzionare su questo sistema."
+        }
+    }
+} catch {}
+
+Write-Info "PowerShell: $($PSVersionTable.PSVersion) ($($PSVersionTable.PSEdition))"
+if ($PSVersionTable.PSEdition -eq 'Core') {
+    Write-Info "Consiglio: usa Windows PowerShell 5.1 (Avvia.bat lo fa gia'). Su PowerShell 7"
+    Write-Info "  l'installazione di riserva di winget (Add-AppxPackage) puo' non funzionare."
+}
 
 # =============================================================================
 # LOG SU FILE (registro per ogni PC)
@@ -315,7 +347,13 @@ Pausa
 
 Write-Titolo "STEP 1 - Nome Completo Cliente"
 
-$nomeAttuale = (Get-LocalUser -Name $env:USERNAME).FullName
+# Get-LocalUser puo' fallire (account Microsoft/dominio, modulo assente): protetto
+$nomeAttuale = $null
+try {
+    $nomeAttuale = (Get-LocalUser -Name $env:USERNAME -ErrorAction Stop).FullName
+} catch {
+    Write-Info "Impossibile leggere il nome attuale (account non locale?): proseguo."
+}
 Write-Info "Utente corrente: $env:USERNAME"
 Write-Info "Nome visualizzato attuale: $(if ($nomeAttuale) { $nomeAttuale } else { '(non impostato)' })"
 Write-Host ""
@@ -324,11 +362,11 @@ $nomeCliente = Read-Host "Inserisci il nome completo del cliente (es. Mario Ross
 
 if ($nomeCliente.Trim() -ne "") {
     try {
-        Set-LocalUser -Name $env:USERNAME -FullName $nomeCliente.Trim()
+        Set-LocalUser -Name $env:USERNAME -FullName $nomeCliente.Trim() -ErrorAction Stop
         Write-OK "Nome utente aggiornato a: $($nomeCliente.Trim())"
         Add-Report "Nome cliente" "OK"
     } catch {
-        Write-Errore "Impossibile aggiornare il nome: $_"
+        Write-Errore "Impossibile aggiornare il nome (account Microsoft/dominio?): $_"
         Add-Report "Nome cliente" "ERRORE"
     }
 } else {
