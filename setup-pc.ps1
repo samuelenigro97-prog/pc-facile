@@ -1,0 +1,387 @@
+# =============================================================================
+# setup-pc.ps1 - Automazione Configurazione PC
+# =============================================================================
+
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# =============================================================================
+# FUNZIONI UTILITY
+# =============================================================================
+
+function Write-Titolo {
+    param([string]$Testo)
+    Write-Host ""
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "  $Testo" -ForegroundColor Cyan
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host ""
+}
+
+function Write-OK {
+    param([string]$Testo)
+    Write-Host "[OK] $Testo" -ForegroundColor Green
+}
+
+function Write-Info {
+    param([string]$Testo)
+    Write-Host "[INFO] $Testo" -ForegroundColor Yellow
+}
+
+function Write-Errore {
+    param([string]$Testo)
+    Write-Host "[ERRORE] $Testo" -ForegroundColor Red
+}
+
+function Pausa {
+    Write-Host ""
+    Read-Host "Premi INVIO per continuare"
+}
+
+# =============================================================================
+# VERIFICA PRIVILEGI AMMINISTRATORE
+# =============================================================================
+
+$currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Errore "Questo script richiede privilegi di amministratore."
+    Write-Info "Riavvia PowerShell come amministratore e riprova."
+    Pausa
+    exit 1
+}
+
+# =============================================================================
+# FUNZIONE: VERIFICA E INSTALLA WINGET
+# =============================================================================
+
+function Confirm-Winget {
+    Write-Info "Verifica presenza di Winget..."
+
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-OK "Winget trovato."
+        return $true
+    }
+
+    Write-Info "Winget non trovato. Tentativo di installazione..."
+
+    try {
+        $releases = Invoke-RestMethod -Uri "https://api.github.com/repos/microsoft/winget-cli/releases/latest"
+        $msixBundle = $releases.assets | Where-Object { $_.name -like "*.msixbundle" } | Select-Object -First 1
+
+        if (-not $msixBundle) {
+            Write-Errore "Impossibile trovare il pacchetto Winget su GitHub."
+            return $false
+        }
+
+        $tempPath = "$env:TEMP\AppInstaller.msixbundle"
+        Write-Info "Download in corso: $($msixBundle.name)"
+        Invoke-WebRequest -Uri $msixBundle.browser_download_url -OutFile $tempPath -UseBasicParsing
+
+        Add-AppxPackage -Path $tempPath -ErrorAction Stop
+        Remove-Item $tempPath -Force
+
+        if (Get-Command winget -ErrorAction SilentlyContinue) {
+            Write-OK "Winget installato con successo."
+            return $true
+        } else {
+            Write-Errore "Installazione Winget fallita."
+            return $false
+        }
+    } catch {
+        Write-Errore "Errore durante installazione Winget: $_"
+        return $false
+    }
+}
+
+function Installa-Pacchetto {
+    param(
+        [string]$Nome,
+        [string]$WingetId
+    )
+    Write-Info "Installazione $Nome in corso..."
+    winget install --id $WingetId --silent --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -eq 0) {
+        Write-OK "$Nome installato."
+    } else {
+        Write-Errore "Installazione $Nome fallita (codice: $LASTEXITCODE)."
+    }
+}
+
+# =============================================================================
+# BENVENUTO
+# =============================================================================
+
+Clear-Host
+Write-Titolo "AUTOMAZIONE CONFIGURAZIONE PC - Avvio"
+Write-Host "Questo script guida la configurazione del PC del cliente passo per passo." -ForegroundColor White
+Write-Host "Segui le istruzioni a schermo e premi INVIO quando indicato." -ForegroundColor White
+Pausa
+
+# =============================================================================
+# STEP 1 - NOME CLIENTE
+# =============================================================================
+
+Write-Titolo "STEP 1 - Nome Completo Cliente"
+
+$nomeAttuale = (Get-LocalUser -Name $env:USERNAME).FullName
+Write-Info "Utente corrente: $env:USERNAME"
+Write-Info "Nome visualizzato attuale: $(if ($nomeAttuale) { $nomeAttuale } else { '(non impostato)' })"
+Write-Host ""
+
+$nomeCliente = Read-Host "Inserisci il nome completo del cliente (es. Mario Rossi)"
+
+if ($nomeCliente.Trim() -ne "") {
+    try {
+        Set-LocalUser -Name $env:USERNAME -FullName $nomeCliente.Trim()
+        Write-OK "Nome utente aggiornato a: $($nomeCliente.Trim())"
+    } catch {
+        Write-Errore "Impossibile aggiornare il nome: $_"
+    }
+} else {
+    Write-Info "Nome non modificato."
+}
+
+Pausa
+
+# =============================================================================
+# STEP 2 - RISCATTO LICENZA OFFICE
+# =============================================================================
+
+Write-Titolo "STEP 2 - Riscatto Licenza Microsoft Office"
+
+Write-Host "Verrà aperto il browser su setup.office.com" -ForegroundColor White
+Write-Host "Il cliente deve accedere con il proprio account Microsoft per riscattare la licenza." -ForegroundColor White
+Write-Host ""
+
+$risposta = Read-Host "Aprire setup.office.com ora? (S/N)"
+if ($risposta -match "^[Ss]") {
+    Start-Process "https://setup.office.com"
+    Write-OK "Browser aperto su setup.office.com"
+    Write-Info "Attendi che il cliente completi il riscatto licenza prima di procedere."
+} else {
+    Write-Info "Passaggio saltato."
+}
+
+Pausa
+
+# =============================================================================
+# STEP 3 - INSTALLAZIONE OFFICE
+# =============================================================================
+
+Write-Titolo "STEP 3 - Installazione Suite Office"
+
+Write-Host "Scegli la suite da installare:" -ForegroundColor White
+Write-Host "  1) Microsoft 365 (richiede licenza attiva)"
+Write-Host "  2) OpenOffice"
+Write-Host "  3) LibreOffice"
+Write-Host "  4) Salta"
+Write-Host ""
+
+$sceltaOffice = Read-Host "Scelta (1-4)"
+
+switch ($sceltaOffice) {
+    "1" {
+        Write-Info "Verifica Winget..."
+        if (Confirm-Winget) {
+            Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
+        } else {
+            Write-Errore "Winget non disponibile. Installa Microsoft 365 manualmente."
+        }
+    }
+    "2" {
+        if (Confirm-Winget) {
+            Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice"
+        } else {
+            Write-Errore "Winget non disponibile."
+        }
+    }
+    "3" {
+        if (Confirm-Winget) {
+            Installa-Pacchetto -Nome "LibreOffice" -WingetId "TheDocumentFoundation.LibreOffice"
+        } else {
+            Write-Errore "Winget non disponibile."
+        }
+    }
+    "4" {
+        Write-Info "Installazione Office saltata."
+    }
+    default {
+        Write-Errore "Scelta non valida. Passaggio saltato."
+    }
+}
+
+Pausa
+
+# =============================================================================
+# STEP 4 - ANTIVIRUS
+# =============================================================================
+
+Write-Titolo "STEP 4 - Antivirus"
+
+Write-Host "Scegli l'antivirus da installare:" -ForegroundColor White
+Write-Host "  1) McAfee"
+Write-Host "  2) Norton"
+Write-Host "  3) Salta"
+Write-Host ""
+
+$sceltaAV = Read-Host "Scelta (1-3)"
+
+function Installa-Antivirus {
+    param(
+        [string]$Nome,
+        [string]$UrlRiscatto,
+        [string]$NomeFileUSB
+    )
+
+    Write-Info "Apertura pagina riscatto licenza $Nome..."
+    Start-Process $UrlRiscatto
+    Write-OK "Browser aperto su: $UrlRiscatto"
+    Write-Host ""
+
+    $installerUSB = Get-ChildItem -Path $ScriptDir -Filter $NomeFileUSB -ErrorAction SilentlyContinue | Select-Object -First 1
+
+    if ($installerUSB) {
+        Write-OK "Installer trovato sulla USB: $($installerUSB.Name)"
+        $avviaInstaller = Read-Host "Avviare l'installer locale? (S/N)"
+        if ($avviaInstaller -match "^[Ss]") {
+            Start-Process -FilePath $installerUSB.FullName
+            Write-OK "Installer $Nome avviato."
+        }
+    } else {
+        Write-Info "Nessun installer locale trovato nella cartella dello script ($ScriptDir)."
+        Write-Info "Installa $Nome manualmente dopo il riscatto licenza."
+    }
+}
+
+switch ($sceltaAV) {
+    "1" {
+        Installa-Antivirus -Nome "McAfee" -UrlRiscatto "https://home.mcafee.com/activate" -NomeFileUSB "*mcafee*.exe"
+    }
+    "2" {
+        Installa-Antivirus -Nome "Norton" -UrlRiscatto "https://norton.com/setup" -NomeFileUSB "*norton*.exe"
+    }
+    "3" {
+        Write-Info "Antivirus saltato."
+    }
+    default {
+        Write-Errore "Scelta non valida. Passaggio saltato."
+    }
+}
+
+Pausa
+
+# =============================================================================
+# STEP 5 - BROWSER
+# =============================================================================
+
+Write-Titolo "STEP 5 - Browser"
+
+$wingetOk = Confirm-Winget
+
+$installaChrome = Read-Host "Installare Google Chrome? (S/N)"
+if ($installaChrome -match "^[Ss]") {
+    if ($wingetOk) {
+        Installa-Pacchetto -Nome "Google Chrome" -WingetId "Google.Chrome"
+    } else {
+        Write-Errore "Winget non disponibile. Installa Chrome manualmente."
+    }
+} else {
+    Write-Info "Chrome saltato."
+}
+
+Write-Host ""
+
+$installaFirefox = Read-Host "Installare Mozilla Firefox? (S/N)"
+if ($installaFirefox -match "^[Ss]") {
+    if ($wingetOk) {
+        Installa-Pacchetto -Nome "Mozilla Firefox" -WingetId "Mozilla.Firefox"
+    } else {
+        Write-Errore "Winget non disponibile. Installa Firefox manualmente."
+    }
+} else {
+    Write-Info "Firefox saltato."
+}
+
+Pausa
+
+# =============================================================================
+# STEP 6 - APPLICAZIONI BASE
+# =============================================================================
+
+Write-Titolo "STEP 6 - Applicazioni Base"
+
+$appsDisponibili = @(
+    @{ Nome = "VLC Media Player";   Id = "VideoLAN.VLC" },
+    @{ Nome = "Adobe Acrobat Reader"; Id = "Adobe.Acrobat.Reader.64-bit" },
+    @{ Nome = "Spotify";            Id = "Spotify.Spotify" },
+    @{ Nome = "7-Zip";              Id = "7zip.7zip" },
+    @{ Nome = "WhatsApp";           Id = "9NKSQGP7F2NH" },
+    @{ Nome = "Steam";              Id = "Valve.Steam" },
+    @{ Nome = "AnyDesk";            Id = "AnyDeskSoftwareGmbH.AnyDesk" },
+    @{ Nome = "Discord";            Id = "Discord.Discord" }
+)
+
+Write-Host "Applicazioni disponibili:" -ForegroundColor White
+for ($i = 0; $i -lt $appsDisponibili.Count; $i++) {
+    Write-Host "  $($i + 1)) $($appsDisponibili[$i].Nome)"
+}
+Write-Host ""
+Write-Host "  T) Installa tutte"
+Write-Host "  S) Salta"
+Write-Host ""
+
+$sceltaApps = Read-Host "Scelta (es: 1,3,5 oppure T per tutte oppure S per saltare)"
+
+if ($sceltaApps -match "^[Ss]$") {
+    Write-Info "Applicazioni base saltate."
+} elseif ($sceltaApps -match "^[Tt]$") {
+    if (Confirm-Winget) {
+        foreach ($app in $appsDisponibili) {
+            Installa-Pacchetto -Nome $app.Nome -WingetId $app.Id
+        }
+    } else {
+        Write-Errore "Winget non disponibile."
+    }
+} else {
+    $indici = $sceltaApps -split "," | ForEach-Object { $_.Trim() }
+    if (Confirm-Winget) {
+        foreach ($indice in $indici) {
+            if ($indice -match "^\d+$") {
+                $idx = [int]$indice - 1
+                if ($idx -ge 0 -and $idx -lt $appsDisponibili.Count) {
+                    Installa-Pacchetto -Nome $appsDisponibili[$idx].Nome -WingetId $appsDisponibili[$idx].Id
+                } else {
+                    Write-Errore "Numero non valido: $indice"
+                }
+            } else {
+                Write-Errore "Valore non riconosciuto: $indice"
+            }
+        }
+    } else {
+        Write-Errore "Winget non disponibile."
+    }
+}
+
+Pausa
+
+# =============================================================================
+# FINE
+# =============================================================================
+
+Write-Titolo "CONFIGURAZIONE COMPLETATA"
+Write-Host "Tutti i passaggi sono stati completati." -ForegroundColor Green
+Write-Host ""
+Write-Host "Riepilogo operazioni eseguite:" -ForegroundColor White
+Write-Host "  - Nome cliente impostato" -ForegroundColor White
+Write-Host "  - Licenza Office aperta per il riscatto" -ForegroundColor White
+Write-Host "  - Suite Office gestita" -ForegroundColor White
+Write-Host "  - Antivirus gestito" -ForegroundColor White
+Write-Host "  - Browser installati" -ForegroundColor White
+Write-Host "  - Applicazioni base installate" -ForegroundColor White
+Write-Host ""
+Write-Host "Buon lavoro!" -ForegroundColor Cyan
+Write-Host ""
+Pausa
