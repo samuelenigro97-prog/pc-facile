@@ -274,22 +274,55 @@ switch ($sceltaAV) {
 Pausa
 
 # =============================================================================
-# STEP 4b - INSERIMENTO CHIAVE DI LICENZA
+# STEP 4b - ATTIVAZIONE OFFICE PERPETUO (Product Key)
 # =============================================================================
 
-Write-Titolo "STEP 4b - Chiave di Licenza"
+Write-Titolo "STEP 4b - Attivazione Office Perpetuo"
 
-$chiaveLicenza = $null
+Write-Host "Solo per licenze Office PERPETUE (2021/2024 - product key su cartoncino)." -ForegroundColor White
+Write-Host "Per Microsoft 365 (abbonamento) salta: si attiva dal login su setup.office.com." -ForegroundColor White
+Write-Host ""
+
+function Get-OsppPath {
+    $percorsi = @(
+        "$env:ProgramFiles\Microsoft Office\Office16\ospp.vbs",
+        "${env:ProgramFiles(x86)}\Microsoft Office\Office16\ospp.vbs"
+    )
+    foreach ($p in $percorsi) { if (Test-Path $p) { return $p } }
+    return $null
+}
 
 while ($true) {
-    $rispostaChiave = Read-Host "Vuoi inserire una chiave di licenza? (S/N)"
+    $rispostaChiave = Read-Host "Attivare una licenza Office perpetua con product key? (S/N)"
 
     if ($rispostaChiave -match "^[Ss]$") {
-        $chiaveLicenza = Read-Host "Inserisci la chiave di licenza"
-        Write-OK "Chiave registrata: $chiaveLicenza"
+        $osppPath = Get-OsppPath
+        if (-not $osppPath) {
+            Write-Errore "ospp.vbs non trovato. Office non installato o percorso diverso."
+            Write-Info "Installa Office (STEP 3) prima di attivare, poi rilancia."
+            break
+        }
+        $chiaveLicenza = (Read-Host "Inserisci il product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)").Trim().ToUpper()
+        if ($chiaveLicenza -notmatch "^([A-Z0-9]{5}-){4}[A-Z0-9]{5}$") {
+            Write-Errore "Formato non valido: 5 gruppi da 5 caratteri separati da trattino."
+            continue
+        }
+        Write-Info "Inserimento product key..."
+        cscript //nologo $osppPath /inpkey:$chiaveLicenza
+        if ($LASTEXITCODE -ne 0) { Write-Errore "Inserimento chiave fallito (codice $LASTEXITCODE)."; break }
+        Write-Info "Attivazione in corso..."
+        cscript //nologo $osppPath /act
+        if ($LASTEXITCODE -eq 0) {
+            Write-OK "Office attivato con successo."
+        } else {
+            Write-Errore "Attivazione fallita (codice $LASTEXITCODE). Verifica chiave e connessione."
+        }
         break
     } elseif ($rispostaChiave -match "^[Nn]$") {
-        Write-Info "Nessuna chiave inserita. Passaggio saltato."
+        Write-Info "Attivazione perpetua saltata."
+        break
+    } elseif ($rispostaChiave -eq "") {
+        Write-Info "Nessun input (fine stdin). Passaggio saltato."
         break
     } else {
         Write-Errore "Input non valido. Rispondi con S o N."
