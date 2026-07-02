@@ -137,6 +137,30 @@ try {
 } catch {}
 
 # =============================================================================
+# ACCORTEZZE PC NUOVO (orologio + anti-sospensione)
+# =============================================================================
+
+# Data/ora sbagliata su un PC nuovo -> errori HTTPS su winget e download.
+# Sincronizzo l'orologio con il time server di Windows.
+try {
+    Set-Service -Name w32time -StartupType Manual -ErrorAction SilentlyContinue
+    Start-Service -Name w32time -ErrorAction SilentlyContinue
+    & w32tm /resync /force 2>$null | Out-Null
+} catch {}
+
+# Tiene sveglio il PC mentre lo script gira (installazioni lunghe su laptop).
+# Usa lo stato di esecuzione del thread: si annulla da solo alla chiusura,
+# nessuna modifica permanente allo schema energetico.
+try {
+    Add-Type -Name Power -Namespace Win32Setup -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll")]
+public static extern uint SetThreadExecutionState(uint esFlags);
+'@ -ErrorAction SilentlyContinue
+    # ES_CONTINUOUS (0x80000000) | ES_SYSTEM_REQUIRED (0x1) | ES_DISPLAY_REQUIRED (0x2)
+    [void][Win32Setup.Power]::SetThreadExecutionState([uint32]"0x80000003")
+} catch {}
+
+# =============================================================================
 # INFO COMPATIBILITA' (Windows e PowerShell)
 # =============================================================================
 
