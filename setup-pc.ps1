@@ -346,7 +346,8 @@ $appsDisponibili = @(
     @{ Nome = "WhatsApp";           Id = "9NKSQGP7F2NH" },
     @{ Nome = "Steam";              Id = "Valve.Steam" },
     @{ Nome = "AnyDesk";            Id = "AnyDeskSoftwareGmbH.AnyDesk" },
-    @{ Nome = "Discord";            Id = "Discord.Discord" }
+    @{ Nome = "Discord";            Id = "Discord.Discord" },
+    @{ Nome = "Zoom";               Id = "Zoom.Zoom" }
 )
 
 Write-Host "Applicazioni disponibili:" -ForegroundColor White
