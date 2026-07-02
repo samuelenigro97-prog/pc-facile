@@ -98,14 +98,44 @@ Lo script, se riesce a partire, rileva da solo Smart App Control attivo e ti avv
 | —  | **Report finale**: esito reale (OK / ERRORE / SALTATO) di ogni operazione |
 
 Antivirus **Norton/McAfee**: lo script apre il sito, tu registri e scarichi
-l'installer (nome variabile) → lo script trova l'`.exe` più recente in Download e
-lo avvia.
+l'installer (nome variabile) → lo script trova l'`.exe` più recente in **Download o
+Desktop** e lo avvia.
 **Unieuro Cyber Protection**: solo apertura sito + promemoria di annotare le
 credenziali per l'app mobile del cliente (nessun installer PC).
 
+Alla fine, se hai cambiato la lingua, lo script **propone il riavvio** (serve per
+applicare display language e schermata di login).
+
 ---
 
-## 5. Prima prova sicura (dry-run)
+## 5. File generati (log e report)
+
+Al termine, sul **Desktop** trovi due file datati:
+
+- `setup-pc_log_<data>.txt` — log completo di tutta la sessione (prova di cosa è
+  stato fatto su quel PC).
+- `setup-pc_report_<data>.txt` — riepilogo pulito degli esiti (OK / ERRORE / SALTATO).
+
+Utili da archiviare o allegare alla scheda cliente.
+
+---
+
+## 6. Compatibilità Windows 10 / 11
+
+| | Windows 11 | Windows 10 |
+|---|---|---|
+| Lingua base (tastiera, formati, regione) | ✅ | ✅ |
+| Language pack automatico (`Install-Language`) | ✅ | ❌ solo Win11 — su Win10 aggiungi il pacchetto ITA a mano |
+| Lingua di sistema/login/nuovi utenti (`Copy-UserInternationalSettingsToSystem`) | ✅ | ❌ solo Win11 |
+| Rilevamento Smart App Control | ✅ | non presente (ignorato) |
+| Office, antivirus, browser, app (winget) | ✅ | ✅ (serve "App Installer" dallo Store) |
+
+Le parti solo-Win11 sono protette da controllo: su Windows 10 vengono **saltate senza
+errori**, il resto funziona.
+
+---
+
+## 7. Prima prova sicura (dry-run)
 
 Per vedere il flusso senza installare nulla, rispondi:
 STEP 0 `N` · STEP 2 `N` · STEP 3 `4` poi attivazione perpetuo `N` · STEP 4 `3` ·
