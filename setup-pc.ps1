@@ -373,6 +373,37 @@ Write-Host "Segui le istruzioni a schermo e premi INVIO quando indicato." -Foreg
 Pausa
 
 # =============================================================================
+# PUNTO DI RIPRISTINO (rete di sicurezza prima delle modifiche)
+# =============================================================================
+
+Write-Titolo "Punto di Ripristino"
+
+Write-Host "Crea un punto di ripristino: se qualcosa va storto puoi tornare indietro." -ForegroundColor White
+Write-Host ""
+
+$vuoiRestore = Read-Host "Creare un punto di ripristino ora? (consigliato) (S/N)"
+if ($vuoiRestore -match "^[Ss]") {
+    try {
+        Enable-ComputerRestore -Drive "$env:SystemDrive\" -ErrorAction SilentlyContinue
+        # Rimuove il limite di 1 punto ogni 24h, solo per crearne uno adesso
+        New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" `
+            -Name "SystemRestorePointCreationFrequency" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
+        Write-Info "Creazione punto di ripristino (puo' richiedere un minuto)..."
+        Checkpoint-Computer -Description "Prima di setup-pc" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
+        Write-OK "Punto di ripristino creato."
+        Add-Report "Punto di ripristino" "OK"
+    } catch {
+        Write-Info "Impossibile creare il punto di ripristino (protezione sistema disattivata?): $_"
+        Add-Report "Punto di ripristino" "ERRORE"
+    }
+} else {
+    Write-Info "Punto di ripristino saltato."
+    Add-Report "Punto di ripristino" "SALTATO"
+}
+
+Pausa
+
+# =============================================================================
 # STEP 0 - LINGUA E REGIONE (ITALIANO)
 # =============================================================================
 
