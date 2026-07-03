@@ -207,6 +207,15 @@ if ($PSVersionTable.PSEdition -eq 'Core') {
     Write-Info "  l'installazione di riserva di winget (Add-AppxPackage) puo' non funzionare."
 }
 
+# PowerShell a 32-bit (x86) su Windows a 64-bit: winget spesso da errori
+# (sorgenti/certificati). Va usata la versione a 64-bit.
+if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) {
+    Write-Errore "Stai usando PowerShell a 32-bit (x86) su Windows a 64-bit."
+    Write-Info "winget puo' fallire. Chiudi e apri 'Windows PowerShell' NORMALE (64-bit),"
+    Write-Info "  NON la voce con '(x86)'. Oppure usa Avvia.bat (parte a 64-bit)."
+    Pausa
+}
+
 # =============================================================================
 # CONTROLLI PRE-INSTALLAZIONE (riavvio in sospeso + spazio disco)
 # =============================================================================
@@ -288,6 +297,23 @@ try {
 # FUNZIONE: VERIFICA E INSTALLA WINGET
 # =============================================================================
 
+# Ripara le sorgenti winget (una volta per sessione, o forzato su errore).
+# Risolve gli errori di integrita' sorgente/certificato (es. 0x8A15005E) su
+# sorgenti corrotte o non aggiornate, tipici su PC nuovi.
+function Repair-WingetSources {
+    param([switch]$Forza)
+    if ($Global:WingetRiparato -and -not $Forza) { return }
+    $Global:WingetRiparato = $true
+    Write-Info "Riparazione sorgenti winget (reset + update)..."
+    try {
+        winget source reset --force 2>&1 | Out-Null
+        winget source update 2>&1 | Out-Null
+        Write-OK "Sorgenti winget ripristinate."
+    } catch {
+        Write-Info "Riparazione sorgenti non riuscita: $_"
+    }
+}
+
 function Confirm-Winget {
     # Risultato calcolato una sola volta per sessione (evita ricontrolli/reinstalli)
     if ($null -ne $Global:WingetOk) { return $Global:WingetOk }
@@ -297,6 +323,7 @@ function Confirm-Winget {
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         Write-OK "Winget trovato."
         $Global:WingetOk = $true
+        Repair-WingetSources
         return $true
     }
 
@@ -322,6 +349,7 @@ function Confirm-Winget {
         if (Get-Command winget -ErrorAction SilentlyContinue) {
             Write-OK "Winget installato con successo."
             $Global:WingetOk = $true
+            Repair-WingetSources
             return $true
         } else {
             Write-Errore "Installazione Winget fallita."
@@ -356,8 +384,11 @@ function Installa-Pacchetto {
 
     # Codici che indicano successo (0) o successo con riavvio richiesto (3010/1641)
     $successo = @(0, 3010, 1641)
+    # Errori di integrita'/certificato/sorgente: si risolvono riparando le sorgenti
+    $erroriSorgente = @(-1978335138, -1978335215, -1978335216)  # 0x8A15005E e simili
+    $riparatoQui = $false
 
-    $maxTentativi = 2
+    $maxTentativi = 3
     $tentativiFatti = 0
     for ($tentativo = 1; $tentativo -le $maxTentativi; $tentativo++) {
         $tentativiFatti = $tentativo
@@ -374,11 +405,20 @@ function Installa-Pacchetto {
         }
 
         Write-Errore "Installazione $Nome fallita (codice: $LASTEXITCODE)."
+
+        if (($erroriSorgente -contains $LASTEXITCODE) -and -not $riparatoQui) {
+            # Sorgenti corrotte: riparo (reset+update forzato) e ritento
+            Write-Info "Errore di integrita' sorgente: riparo le sorgenti winget e ritento..."
+            Repair-WingetSources -Forza
+            $riparatoQui = $true
+            continue
+        }
+
         if (-not (Test-Rete)) {
             Write-Info "Rete assente. Attendo 10s e riprovo..."
             Start-Sleep -Seconds 10
         } else {
-            break  # errore non dovuto alla rete, inutile ritentare
+            break  # errore non dovuto alla rete/sorgente, inutile ritentare
         }
     }
 
@@ -968,34 +1008,44 @@ Pausa
 
 Write-Titolo "STEP 7 - Rimozione App Superflue (Bloatware)"
 
-Write-Host "Rimuove app preinstallate raramente usate (giochi, Bing, Skype, ecc.)." -ForegroundColor White
-Write-Host "NON tocca: Store, Foto, Calcolatrice, Media Player, Xbox, browser, Office." -ForegroundColor White
+Write-Host "Rimuove: bloatware del produttore (HP/Lenovo/Dell/Asus/Acer), app consumer" -ForegroundColor White
+Write-Host "Microsoft (Bing, giochi, Clipchamp...), trial antivirus preinstallati, toolbar." -ForegroundColor White
+Write-Host "NON tocca: Xbox, Spotify, Store, Foto, ne' i programmi installati in questo setup." -ForegroundColor White
 Write-Host ""
 
-# Lista conservativa di app comunemente considerate superflue (con wildcard sul nome)
-$bloatware = @(
-    "Microsoft.BingNews",
-    "Microsoft.BingWeather",
-    "Microsoft.GetHelp",
-    "Microsoft.Getstarted",
-    "Microsoft.Microsoft3DViewer",
-    "Microsoft.MicrosoftSolitaireCollection",
-    "Microsoft.MixedReality.Portal",
-    "Microsoft.People",
-    "Microsoft.SkypeApp",
-    "Microsoft.WindowsFeedbackHub",
-    "Microsoft.ZuneMusic",
-    "Microsoft.ZuneVideo",
-    "Microsoft.Windows.DevHome",
-    "Clipchamp.Clipchamp",
-    "king.com.CandyCrushSaga",
-    "king.com.CandyCrushSodaSaga"
+# App Store (Appx) superflue. Wildcard sul nome. NON include Xbox ne' Spotify,
+# ne' driver/stampante (uso pattern mirati sul bloatware, non l'intero publisher).
+$bloatwareAppx = @(
+    # --- Microsoft consumer / giochi ---
+    "Microsoft.BingNews", "Microsoft.BingWeather", "Microsoft.BingSearch",
+    "Microsoft.GetHelp", "Microsoft.Getstarted", "Microsoft.Microsoft3DViewer",
+    "Microsoft.MicrosoftSolitaireCollection", "Microsoft.MixedReality.Portal",
+    "Microsoft.People", "Microsoft.SkypeApp", "Microsoft.WindowsFeedbackHub",
+    "Microsoft.ZuneMusic", "Microsoft.ZuneVideo", "Microsoft.Windows.DevHome",
+    "Microsoft.Todos", "MicrosoftCorporationII.QuickAssist", "Clipchamp.Clipchamp",
+    "king.com.*", "*.CandyCrush*",
+    # --- Social/streaming preinstallati (terze parti) ---
+    "*.Facebook", "*.Instagram", "*.TikTok", "*.Netflix", "*.DisneyPlus",
+    "*.AmazonPrimeVideo", "*Booking*", "*.Twitter", "*ExpressVPN*",
+    # --- HP ---
+    "*SupportAssistant*", "*myHP*", "AD2F1837.HPPrivacySettings", "*HPJumpStart*",
+    "*HPPCHardwareDiagnostics*", "*HPPowerManager*", "*HPQuickDrop*", "*HPSystemInformation*",
+    "*HPWorkWell*", "*HPProgrammableKey*", "*HPDesktopSupportUtilities*",
+    # --- Lenovo ---
+    "*LenovoVantage*", "*LenovoCompanion*", "*LenovoUtility*", "*LenovoWelcome*",
+    "*LenovoQuickClean*", "*LenovoNow*", "*LenovoSmartCommunication*",
+    # --- Dell ---
+    "*DellSupportAssist*", "*DellCustomerConnect*", "*DellDigitalDelivery*",
+    "*DellUpdate*", "*DellOptimizer*", "*PartnerPromo*", "*DellPowerManager*",
+    # --- Asus / Acer ---
+    "*MyASUS*", "*ASUSPCAssistant*", "*ASUSGiftBox*", "*GlideX*", "*ASUSSplendid*",
+    "*AcerCollection*", "*AcerRegistration*", "*AcerJumpstart*", "*AcerCareCenter*"
 )
 
-$vuoiDebloat = Read-Host "Rimuovere le app superflue elencate? (S/N)"
+$vuoiDebloat = Read-Host "Rimuovere il bloatware elencato? (S/N)"
 if ($vuoiDebloat -match "^[Ss]") {
     $rimosse = 0
-    foreach ($pkg in $bloatware) {
+    foreach ($pkg in $bloatwareAppx) {
         try {
             $trovati = Get-AppxPackage -AllUsers -Name $pkg -ErrorAction SilentlyContinue
             foreach ($t in $trovati) {
@@ -1008,8 +1058,34 @@ if ($vuoiDebloat -match "^[Ss]") {
                 ForEach-Object { Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction SilentlyContinue | Out-Null }
         } catch {}
     }
-    Write-OK "Rimozione completata ($rimosse pacchetti rimossi)."
-    Add-Report "Rimozione bloatware ($rimosse rimossi)" "OK"
+
+    # Trial antivirus + utility Win32 via winget.
+    # GUARDIA: NON rimuovo l'antivirus che ho appena installato in questa sessione.
+    $mcafeeNostro = @($Report | Where-Object { $_.Voce -like "McAfee*" -and $_.Esito -eq "OK" }).Count -gt 0
+    $nortonNostro = @($Report | Where-Object { $_.Voce -like "Norton*" -and $_.Esito -eq "OK" }).Count -gt 0
+
+    $trialWin32 = @("HP Support Assistant", "HP Documentation", "HP Sure Recover",
+                    "WildTangent Games", "ExpressVPN", "Dropbox Promotion")
+    if (-not $mcafeeNostro) {
+        $trialWin32 += @("McAfee LiveSafe", "McAfee Total Protection", "McAfee Personal Security", "McAfee WebAdvisor", "McAfee Security")
+    }
+    if (-not $nortonNostro) {
+        $trialWin32 += @("Norton 360", "Norton Security", "Norton")
+    }
+
+    if (Confirm-Winget) {
+        foreach ($nome in $trialWin32) {
+            try {
+                winget uninstall --name $nome --silent --accept-source-agreements --disable-interactivity 2>$null | Out-Null
+            } catch {}
+        }
+    }
+
+    Write-OK "Rimozione bloatware completata ($rimosse app Store + trial/utility Win32 via winget)."
+    if ($mcafeeNostro -or $nortonNostro) {
+        Write-Info "Antivirus installato in questa sessione mantenuto (non rimosso)."
+    }
+    Add-Report "Rimozione bloatware ($rimosse Store)" "OK"
 } else {
     Write-Info "Rimozione bloatware saltata."
     Add-Report "Rimozione bloatware" "SALTATO"
