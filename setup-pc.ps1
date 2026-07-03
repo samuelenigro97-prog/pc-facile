@@ -67,7 +67,7 @@ if (-not $Test -and -not $Diagnostica) {
     Write-Host "  LEGENDA TASTI:" -ForegroundColor White
     Write-Host "    Nei menu    : premi la LETTERA o il NUMERO indicato" -ForegroundColor DarkGray
     Write-Host "    Nelle domande: S = si, N = no" -ForegroundColor DarkGray
-    Write-Host "    A fine passo : INVIO = avanti, B = torna al passo precedente" -ForegroundColor DarkGray
+    Write-Host "    A fine passo : INVIO = avanti, B o CANC = torna indietro" -ForegroundColor DarkGray
     Write-Host "    Per uscire   : chiudi la finestra" -ForegroundColor DarkGray
 
     $tasto = ""
@@ -106,10 +106,12 @@ $RunReale = (-not $Test -and -not $Diagnostica)
 function Continua {
     if ($Test) { return $false }   # in Test avanza sempre, niente attesa
     Write-Host ""
-    Write-Host "  [INVIO] continua     [B] torna al passo precedente" -ForegroundColor DarkGray
+    Write-Host "  [INVIO] continua     [B] o [CANC] torna al passo precedente" -ForegroundColor DarkGray
     try {
         $k = [Console]::ReadKey($true)
-        return ("$($k.KeyChar)".ToUpper() -eq 'B')
+        if ("$($k.KeyChar)".ToUpper() -eq 'B') { return $true }
+        if ($k.Key -eq [ConsoleKey]::Delete -or $k.Key -eq [ConsoleKey]::Backspace) { return $true }
+        return $false
     } catch {
         return $false   # host senza console: come INVIO
     }
