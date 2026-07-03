@@ -63,6 +63,12 @@ if (-not $Test -and -not $Diagnostica) {
     Write-Host "    [T] Test a vuoto      (percorre tutto, NON installa)"
     Write-Host ""
     Write-Host "  (C oppure INVIO = Configura)" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  LEGENDA TASTI:" -ForegroundColor White
+    Write-Host "    Nei menu    : premi la LETTERA o il NUMERO indicato" -ForegroundColor DarkGray
+    Write-Host "    Nelle domande: S = si, N = no" -ForegroundColor DarkGray
+    Write-Host "    A fine passo : INVIO = avanti, B = torna al passo precedente" -ForegroundColor DarkGray
+    Write-Host "    Per uscire   : chiudi la finestra" -ForegroundColor DarkGray
 
     $tasto = ""
     try {
