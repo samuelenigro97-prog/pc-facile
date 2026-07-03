@@ -231,16 +231,12 @@ try {
     & w32tm /resync /force 2>$null | Out-Null
 } catch {}
 
-# Tiene sveglio il PC mentre lo script gira (installazioni lunghe su laptop).
-# Usa lo stato di esecuzione del thread: si annulla da solo alla chiusura,
-# nessuna modifica permanente allo schema energetico.
+# Evita la sospensione durante le installazioni (solo con alimentatore collegato).
+# Uso powercfg (strumento standard) invece di P/Invoke a kernel32, che gli
+# antivirus segnalano come falso positivo (ScriptContainsMaliciousContent).
 try {
-    Add-Type -Name Power -Namespace Win32Setup -MemberDefinition @'
-[System.Runtime.InteropServices.DllImport("kernel32.dll")]
-public static extern uint SetThreadExecutionState(uint esFlags);
-'@ -ErrorAction SilentlyContinue
-    # ES_CONTINUOUS (0x80000000) | ES_SYSTEM_REQUIRED (0x1) | ES_DISPLAY_REQUIRED (0x2)
-    [void][Win32Setup.Power]::SetThreadExecutionState([uint32]"0x80000003")
+    & powercfg /change standby-timeout-ac 0 2>$null | Out-Null
+    & powercfg /change monitor-timeout-ac 0 2>$null | Out-Null
 } catch {}
 
 # =============================================================================
