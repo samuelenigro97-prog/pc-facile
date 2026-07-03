@@ -5,7 +5,10 @@
 param(
     # Modalita' non interattiva: risponde in automatico e NON installa/modifica nulla.
     # Uso: powershell -ExecutionPolicy Bypass -File setup-pc.ps1 -Test
-    [switch]$Test
+    [switch]$Test,
+    # Diagnostica: controlla ambiente e valida gli ID pacchetti (winget show),
+    # senza installare nulla, e mostra cosa e' OK/KO. -File setup-pc.ps1 -Diagnostica
+    [switch]$Diagnostica
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -47,12 +50,12 @@ function Pausa {
 # Modalita' TEST (-Test): rende lo script non interattivo e non distruttivo.
 # Sovrascrive Read-Host (risponde N ai S/N, vuoto ai menu -> tutto saltato) e
 # Pausa (nessuna attesa). Cosi' si verifica l'intero flusso in automatico.
-if ($Test) {
-    Write-Host "*** MODALITA' TEST: nessuna modifica reale, risposte automatiche ***" -ForegroundColor Magenta
+if ($Test -or $Diagnostica) {
+    if ($Test) { Write-Host "*** MODALITA' TEST: nessuna modifica reale, risposte automatiche ***" -ForegroundColor Magenta }
     function Read-Host {
         param([Parameter(Position = 0)][string]$Prompt)
         $risposta = if ($Prompt -match 'S/N') { "N" } else { "" }
-        Write-Host "$Prompt [TEST => '$risposta']" -ForegroundColor DarkGray
+        Write-Host "$Prompt [AUTO => '$risposta']" -ForegroundColor DarkGray
         return $risposta
     }
     function Pausa { }
@@ -424,6 +427,77 @@ function Installa-Pacchetto {
 
     Write-Errore "$Nome NON installato (tentativi: $tentativiFatti)."
     Add-Report "$Nome (installazione)" "ERRORE"
+}
+
+# =============================================================================
+# DIAGNOSTICA (-Diagnostica): controlla senza modificare nulla, poi esce
+# =============================================================================
+
+if ($Diagnostica) {
+    Write-Titolo "DIAGNOSTICA - Nessuna modifica al sistema"
+
+    # Ambiente
+    if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) {
+        Write-Errore "PowerShell a 32-bit (x86): winget e LocalAccounts a rischio. Usa 64-bit."
+    } else {
+        Write-OK "PowerShell a 64-bit."
+    }
+
+    # winget + riparazione sorgenti
+    if (Confirm-Winget) {
+        Write-OK "winget disponibile (sorgenti riparate)."
+
+        # Tutti gli ID pacchetti usati dallo script
+        $tuttiId = @(
+            @{ N = "Microsoft 365";        Id = "Microsoft.Office" },
+            @{ N = "OpenOffice";           Id = "Apache.OpenOffice" },
+            @{ N = "LibreOffice";          Id = "TheDocumentFoundation.LibreOffice" },
+            @{ N = "Google Chrome";        Id = "Google.Chrome" },
+            @{ N = "Mozilla Firefox";      Id = "Mozilla.Firefox" },
+            @{ N = "Microsoft Edge";       Id = "Microsoft.Edge" },
+            @{ N = "Brave";                Id = "Brave.Brave" },
+            @{ N = "Opera";                Id = "Opera.Opera" },
+            @{ N = "Opera GX";             Id = "Opera.OperaGX" },
+            @{ N = "Vivaldi";              Id = "Vivaldi.Vivaldi" },
+            @{ N = "VLC Media Player";     Id = "VideoLAN.VLC" },
+            @{ N = "Adobe Acrobat Reader"; Id = "Adobe.Acrobat.Reader.64-bit" },
+            @{ N = "Spotify";              Id = "Spotify.Spotify" },
+            @{ N = "7-Zip";                Id = "7zip.7zip" },
+            @{ N = "WhatsApp";             Id = "9NKSQGP7F2NH" },
+            @{ N = "Steam";                Id = "Valve.Steam" },
+            @{ N = "AnyDesk";              Id = "AnyDeskSoftwareGmbH.AnyDesk" },
+            @{ N = "Discord";              Id = "Discord.Discord" },
+            @{ N = "Zoom";                 Id = "Zoom.Zoom" }
+        )
+
+        Write-Host ""
+        Write-Info "Verifica ID pacchetti con 'winget show' (nessuna installazione)..."
+        $ko = 0
+        foreach ($p in $tuttiId) {
+            $src = @()
+            if ($p.Id -match '^[A-Z0-9]{12}$') { $src = @('--source', 'msstore') }
+            winget show --exact --id $p.Id @src --accept-source-agreements 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-OK "OK   $($p.N)  [$($p.Id)]"
+            } else {
+                Write-Errore "KO   $($p.N)  [$($p.Id)]  (codice $LASTEXITCODE)"
+                $ko++
+            }
+        }
+        Write-Host ""
+        if ($ko -eq 0) {
+            Write-OK "Tutti gli ID pacchetti sono validi."
+        } else {
+            Write-Errore "$ko ID pacchetto/i non risolti: da correggere nello script."
+        }
+    } else {
+        Write-Errore "winget NON disponibile: impossibile validare i pacchetti."
+    }
+
+    Write-Host ""
+    Write-Info "Diagnostica completata. Nessuna modifica effettuata al sistema."
+    try { Stop-Transcript -ErrorAction SilentlyContinue | Out-Null } catch {}
+    exit 0
 }
 
 # =============================================================================
