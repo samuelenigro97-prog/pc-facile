@@ -770,45 +770,79 @@ $appsDisponibili = @(
     @{ Nome = "Zoom";               Id = "Zoom.Zoom" }
 )
 
-Write-Host "Applicazioni disponibili:" -ForegroundColor White
-for ($i = 0; $i -lt $appsDisponibili.Count; $i++) {
-    Write-Host "  $($i + 1)) $($appsDisponibili[$i].Nome)"
+# Preset profili: sottoinsiemi della lista sopra (per winget Id).
+# I browser (Chrome/Firefox) restano nello STEP 5, qui non inclusi.
+$profili = [ordered]@{
+    "BASE"    = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDeskSoftwareGmbH.AnyDesk")
+    "UFFICIO" = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDeskSoftwareGmbH.AnyDesk","Zoom.Zoom","Spotify.Spotify")
+    "GAMING"  = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDeskSoftwareGmbH.AnyDesk","Valve.Steam","Discord.Discord")
 }
-Write-Host ""
-Write-Host "  T) Installa tutte"
+
+# Installa gli app della lista il cui Id e' nel set passato
+function Installa-Set {
+    param([string[]]$Ids)
+    if (-not (Confirm-Winget)) { Write-Errore "Winget non disponibile."; return }
+    foreach ($app in $appsDisponibili) {
+        if ($Ids -contains $app.Id) {
+            Installa-Pacchetto -Nome $app.Nome -WingetId $app.Id
+        }
+    }
+}
+
+Write-Host "Scegli come installare le applicazioni:" -ForegroundColor White
+Write-Host "  1) PROFILO BASE     (VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk)"
+Write-Host "  2) PROFILO UFFICIO  (BASE + Zoom, Spotify)"
+Write-Host "  3) PROFILO GAMING   (BASE + Steam, Discord)"
+Write-Host "  4) COMPLETO         (tutte le app in lista)"
+Write-Host "  5) MANUALE          (scelgo io i singoli numeri)"
 Write-Host "  S) Salta"
 Write-Host ""
 
-$sceltaApps = Read-Host "Scelta (es: 1,3,5 oppure T per tutte oppure S per saltare)"
+$sceltaApps = Read-Host "Scelta (1-5 oppure S)"
 
-if ($sceltaApps -match "^[Ss]$") {
-    Write-Info "Applicazioni base saltate."
-} elseif ($sceltaApps -match "^[Tt]$") {
-    if (Confirm-Winget) {
-        foreach ($app in $appsDisponibili) {
-            Installa-Pacchetto -Nome $app.Nome -WingetId $app.Id
+switch ($sceltaApps) {
+    "1" { Installa-Set -Ids $profili["BASE"] }
+    "2" { Installa-Set -Ids $profili["UFFICIO"] }
+    "3" { Installa-Set -Ids $profili["GAMING"] }
+    "4" {
+        if (Confirm-Winget) {
+            foreach ($app in $appsDisponibili) { Installa-Pacchetto -Nome $app.Nome -WingetId $app.Id }
+        } else {
+            Write-Errore "Winget non disponibile."
         }
-    } else {
-        Write-Errore "Winget non disponibile."
     }
-} else {
-    $indici = $sceltaApps -split "," | ForEach-Object { $_.Trim() }
-    if (Confirm-Winget) {
-        foreach ($indice in $indici) {
-            $num = 0
-            if ($indice -match "^\d+$" -and [int]::TryParse($indice, [ref]$num)) {
-                $idx = $num - 1
-                if ($idx -ge 0 -and $idx -lt $appsDisponibili.Count) {
-                    Installa-Pacchetto -Nome $appsDisponibili[$idx].Nome -WingetId $appsDisponibili[$idx].Id
-                } else {
-                    Write-Errore "Numero non valido: $indice"
-                }
-            } elseif ($indice -ne "") {
-                Write-Errore "Valore non riconosciuto: $indice"
-            }
+    "5" {
+        Write-Host ""
+        Write-Host "App disponibili:" -ForegroundColor White
+        for ($i = 0; $i -lt $appsDisponibili.Count; $i++) {
+            Write-Host "  $($i + 1)) $($appsDisponibili[$i].Nome)"
         }
-    } else {
-        Write-Errore "Winget non disponibile."
+        $sceltaManuale = Read-Host "Numeri separati da virgola (es: 1,3,5)"
+        $indici = $sceltaManuale -split "," | ForEach-Object { $_.Trim() }
+        if (Confirm-Winget) {
+            foreach ($indice in $indici) {
+                $num = 0
+                if ($indice -match "^\d+$" -and [int]::TryParse($indice, [ref]$num)) {
+                    $idx = $num - 1
+                    if ($idx -ge 0 -and $idx -lt $appsDisponibili.Count) {
+                        Installa-Pacchetto -Nome $appsDisponibili[$idx].Nome -WingetId $appsDisponibili[$idx].Id
+                    } else {
+                        Write-Errore "Numero non valido: $indice"
+                    }
+                } elseif ($indice -ne "") {
+                    Write-Errore "Valore non riconosciuto: $indice"
+                }
+            }
+        } else {
+            Write-Errore "Winget non disponibile."
+        }
+    }
+    default {
+        if ($sceltaApps -match "^[Ss]$") {
+            Write-Info "Applicazioni saltate."
+        } else {
+            Write-Info "Scelta non valida: applicazioni saltate."
+        }
     }
 }
 
