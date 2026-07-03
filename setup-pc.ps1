@@ -48,19 +48,29 @@ function Pausa {
 }
 
 # Menu iniziale: se non e' stata scelta una modalita' via parametro, la chiedo.
-# Cosi' basta avviare lo script e scegliere 1/2/3 dalla prima schermata.
+# Un solo tasto, senza INVIO: D=diagnostica, T=test, C/INVIO/altro=configura.
 if (-not $Test -and -not $Diagnostica) {
     try { Clear-Host } catch {}
     Write-Titolo "AVVIO PC PRO"
-    Write-Host "  Cosa vuoi fare?" -ForegroundColor White
+    Write-Host "  Premi un tasto:" -ForegroundColor White
     Write-Host ""
-    Write-Host "    1) Configura il PC   (installa e imposta)"
-    Write-Host "    2) Diagnostica       (controlla, NON installa)"
-    Write-Host "    3) Test a vuoto      (percorre tutto, NON installa)"
+    Write-Host "    [C] Configura il PC   (installa e imposta)"
+    Write-Host "    [D] Diagnostica       (controlla, NON installa)"
+    Write-Host "    [T] Test a vuoto      (percorre tutto, NON installa)"
     Write-Host ""
-    $sceltaModo = Read-Host "Scelta (1/2/3, INVIO = 1)"
-    if ($sceltaModo -eq "2") { $Diagnostica = $true }
-    elseif ($sceltaModo -eq "3") { $Test = $true }
+    Write-Host "  (C oppure INVIO = Configura)" -ForegroundColor DarkGray
+
+    $tasto = ""
+    try {
+        $k = [Console]::ReadKey($true)     # legge UN tasto, senza bisogno di INVIO
+        $tasto = "$($k.KeyChar)".ToUpper()
+    } catch {
+        $tasto = (Read-Host "Scelta (C/D/T)").ToUpper()   # fallback se ReadKey non disponibile
+    }
+    if ($tasto -eq "D" -or $tasto -eq "2") { $Diagnostica = $true; Write-Host "  -> Diagnostica" -ForegroundColor Cyan }
+    elseif ($tasto -eq "T" -or $tasto -eq "3") { $Test = $true; Write-Host "  -> Test a vuoto" -ForegroundColor Cyan }
+    else { Write-Host "  -> Configura il PC" -ForegroundColor Cyan }
+    Write-Host ""
 }
 
 # Modalita' TEST (-Test): rende lo script non interattivo e non distruttivo.
