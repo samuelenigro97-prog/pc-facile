@@ -2,6 +2,12 @@
 # setup-pc.ps1 - Automazione Configurazione PC
 # =============================================================================
 
+param(
+    # Modalita' non interattiva: risponde in automatico e NON installa/modifica nulla.
+    # Uso: powershell -ExecutionPolicy Bypass -File setup-pc.ps1 -Test
+    [switch]$Test
+)
+
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -36,6 +42,20 @@ function Write-Errore {
 function Pausa {
     Write-Host ""
     Read-Host "Premi INVIO per continuare"
+}
+
+# Modalita' TEST (-Test): rende lo script non interattivo e non distruttivo.
+# Sovrascrive Read-Host (risponde N ai S/N, vuoto ai menu -> tutto saltato) e
+# Pausa (nessuna attesa). Cosi' si verifica l'intero flusso in automatico.
+if ($Test) {
+    Write-Host "*** MODALITA' TEST: nessuna modifica reale, risposte automatiche ***" -ForegroundColor Magenta
+    function Read-Host {
+        param([Parameter(Position = 0)][string]$Prompt)
+        $risposta = if ($Prompt -match 'S/N') { "N" } else { "" }
+        Write-Host "$Prompt [TEST => '$risposta']" -ForegroundColor DarkGray
+        return $risposta
+    }
+    function Pausa { }
 }
 
 # =============================================================================
