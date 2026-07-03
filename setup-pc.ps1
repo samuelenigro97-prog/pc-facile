@@ -652,6 +652,29 @@ if ($vuoiRestore -match "^[Ss]") {
 Pausa
 
 # =============================================================================
+# ACCOUNT MICROSOFT (accedi/crea presto: velocizza Office e antivirus dopo)
+# =============================================================================
+
+Write-Titolo "Account Microsoft"
+
+Write-Host "Accedi (o crea) l'account Microsoft ORA: la sessione resta attiva nel" -ForegroundColor White
+Write-Host "browser, cosi' dopo su Office e antivirus fai 'Accedi con Microsoft' al volo." -ForegroundColor White
+Write-Host ""
+
+$vuoiMs = Read-Host "Aprire il login account Microsoft ora? (S/N)"
+if ($vuoiMs -match "^[Ss]") {
+    Start-Process "https://account.microsoft.com"
+    Write-OK "Aperto account.microsoft.com nel browser."
+    Write-Info "Accedi o crea l'account, poi torna qui. Usa lo stesso browser per i login dopo."
+    Add-Report "Account Microsoft" "OK"
+} else {
+    Write-Info "Account Microsoft saltato."
+    Add-Report "Account Microsoft" "SALTATO"
+}
+
+Pausa
+
+# =============================================================================
 # PASSI DI CONFIGURAZIONE (tasto B a fine passo = torna indietro)
 # =============================================================================
 
