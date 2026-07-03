@@ -671,6 +671,54 @@ if ($vuoiMs -match "^[Ss]") {
 Pausa
 
 # =============================================================================
+# RIMOZIONE ANTIVIRUS DI PROVA (all'inizio: evita conflitti e blocchi)
+# =============================================================================
+
+Write-Titolo "Rimozione Antivirus di Prova"
+
+Write-Host "I PC nuovi hanno spesso McAfee/Norton/Avast di PROVA preinstallati." -ForegroundColor White
+Write-Host "Meglio rimuoverli ORA: scadono, disturbano, vanno in conflitto con quello" -ForegroundColor White
+Write-Host "che installi, e a volte bloccano lo script stesso." -ForegroundColor White
+Write-Host ""
+
+$vuoiRimAV = Read-Host "Cercare e rimuovere gli antivirus di prova preinstallati? (consigliato) (S/N)"
+if ($vuoiRimAV -match "^[Ss]") {
+    if (Confirm-Winget) {
+        $avTrial = @(
+            "McAfee LiveSafe", "McAfee Total Protection", "McAfee Personal Security",
+            "McAfee Security", "McAfee WebAdvisor", "McAfee Safe Connect", "McAfee",
+            "Norton 360", "Norton Security", "Norton AntiVirus", "Norton",
+            "Avast Free Antivirus", "AVG Antivirus"
+        )
+        $tolti = 0
+        foreach ($n in $avTrial) {
+            winget list --name $n --accept-source-agreements 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Info "Rimozione $n..."
+                winget uninstall --name $n --silent --accept-source-agreements --disable-interactivity 2>$null | Out-Null
+                $tolti++
+            }
+        }
+        if ($tolti -gt 0) {
+            Write-OK "Rimossi/avviata rimozione di $tolti antivirus di prova."
+            Write-Info "McAfee a volte richiede un riavvio per sparire del tutto."
+            Add-Report "Antivirus di prova rimossi ($tolti)" "OK"
+        } else {
+            Write-Info "Nessun antivirus di prova trovato."
+            Add-Report "Antivirus di prova" "SALTATO"
+        }
+    } else {
+        Write-Errore "winget non disponibile: rimuovi gli AV di prova a mano da Impostazioni > App."
+        Add-Report "Antivirus di prova" "ERRORE"
+    }
+} else {
+    Write-Info "Rimozione antivirus di prova saltata."
+    Add-Report "Antivirus di prova" "SALTATO"
+}
+
+Pausa
+
+# =============================================================================
 # PASSI DI CONFIGURAZIONE (tasto B a fine passo = torna indietro)
 # =============================================================================
 
