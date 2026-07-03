@@ -283,8 +283,13 @@ function Installa-Pacchetto {
         [string]$WingetId
     )
 
+    # Gli ID Microsoft Store sono 12 caratteri maiuscoli/numeri (es. WhatsApp):
+    # senza --source msstore winget puo' non trovarli/installarli.
+    $sorgente = @()
+    if ($WingetId -match '^[A-Z0-9]{12}$') { $sorgente = @('--source', 'msstore') }
+
     # Gia' installato? (--exact: evita falsi positivi da match parziale dell'ID)
-    winget list --exact --id $WingetId --accept-source-agreements 2>$null | Out-Null
+    winget list --exact --id $WingetId @sorgente --accept-source-agreements 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) {
         Write-OK "$Nome gia' installato. Salto."
         Add-Report "$Nome (installazione)" "OK"
@@ -295,9 +300,11 @@ function Installa-Pacchetto {
     $successo = @(0, 3010, 1641)
 
     $maxTentativi = 2
+    $tentativiFatti = 0
     for ($tentativo = 1; $tentativo -le $maxTentativi; $tentativo++) {
+        $tentativiFatti = $tentativo
         Write-Info "Installazione $Nome in corso (tentativo $tentativo/$maxTentativi)..."
-        winget install --exact --id $WingetId --silent --accept-package-agreements --accept-source-agreements
+        winget install --exact --id $WingetId @sorgente --silent --accept-package-agreements --accept-source-agreements
         if ($successo -contains $LASTEXITCODE) {
             if ($LASTEXITCODE -eq 0) {
                 Write-OK "$Nome installato."
@@ -317,7 +324,7 @@ function Installa-Pacchetto {
         }
     }
 
-    Write-Errore "$Nome NON installato dopo $maxTentativi tentativi."
+    Write-Errore "$Nome NON installato (tentativi: $tentativiFatti)."
     Add-Report "$Nome (installazione)" "ERRORE"
 }
 
