@@ -107,17 +107,29 @@ Lo script, se riesce a partire, rileva da solo Smart App Control attivo e ti avv
 
 ## 4. Cosa fa lo script (in ordine)
 
+All'avvio lo script esegue alcuni **controlli**: privilegi admin, blocchi Windows
+(Smart App Control/ExecutionPolicy), versione Windows/PowerShell, **riavvio in
+sospeso**, **spazio disco**, **preflight di rete** (GitHub/Microsoft/CDN winget),
+sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
+
 | Step | Azione |
 |------|--------|
-| 0  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack |
+| —  | **Punto di ripristino** (opzionale, consigliato): rete di sicurezza prima delle modifiche |
+| 0  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
 | 1  | Nome completo del cliente (cambia il "Nome visualizzato" dell'account) |
 | 2  | Riscatto licenza **Office 365 abbonamento** (`setup.office.com`) |
 | 3  | Installazione suite **Office / OpenOffice / LibreOffice** (winget) + subito dopo **attivazione Office perpetuo** con product key (`ospp.vbs`) |
 | 4  | **Antivirus**: McAfee, Norton, o Salta |
 | 4c | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
 | 5  | Browser: Chrome / Firefox |
-| 6  | App base: VLC, Adobe Reader, Spotify, 7-Zip, WhatsApp, Steam, AnyDesk, Discord, Zoom |
-| —  | **Report finale**: esito reale (OK / ERRORE / SALTATO) di ogni operazione |
+| 6  | App: **profili** BASE / UFFICIO / GAMING / COMPLETO, oppure MANUALE (VLC, Adobe Reader, Spotify, 7-Zip, WhatsApp, Steam, AnyDesk, Discord, Zoom) |
+| —  | **Report finale**: esito reale (OK / ERRORE / SALTATO / AVVISO) di ogni operazione + riavvio |
+
+**Profili app (STEP 6):**
+- **BASE** — VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk
+- **UFFICIO** — BASE + Zoom, Spotify
+- **GAMING** — BASE + Steam, Discord
+- **COMPLETO** — tutte · **MANUALE** — scegli i singoli numeri
 
 Antivirus **Norton/McAfee**: lo script apre il sito, tu registri e scarichi
 l'installer (nome variabile) → lo script trova l'`.exe` più recente in **Download o
@@ -182,5 +194,6 @@ errori**, il resto funziona.
 ## 7. Prima prova sicura (dry-run)
 
 Per vedere il flusso senza installare nulla, rispondi:
-STEP 0 `N` · STEP 2 `N` · STEP 3 `4` poi attivazione perpetuo `N` · STEP 4 `3` ·
-STEP 4c `N` · Browser `N`/`N` · STEP 6 `S`. Arrivi al report finale senza toccare il PC.
+Punto di ripristino `N` · STEP 0 `N` · STEP 2 `N` · STEP 3 `4` poi attivazione
+perpetuo `N` · STEP 4 `3` · STEP 4c `N` · Browser `N`/`N` · STEP 6 `S`.
+Arrivi al report finale senza toccare il PC.
