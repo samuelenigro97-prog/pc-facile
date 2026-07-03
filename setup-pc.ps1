@@ -814,30 +814,54 @@ Pausa
 
 Write-Titolo "STEP 5 - Browser"
 
-$wingetOk = Confirm-Winget
+$browserDisponibili = @(
+    @{ Nome = "Google Chrome";   Id = "Google.Chrome" },
+    @{ Nome = "Mozilla Firefox"; Id = "Mozilla.Firefox" },
+    @{ Nome = "Microsoft Edge";  Id = "Microsoft.Edge" },
+    @{ Nome = "Brave";           Id = "Brave.Brave" },
+    @{ Nome = "Opera";           Id = "Opera.Opera" },
+    @{ Nome = "Opera GX";        Id = "Opera.OperaGX" },
+    @{ Nome = "Vivaldi";         Id = "Vivaldi.Vivaldi" }
+)
 
-$installaChrome = Read-Host "Installare Google Chrome? (S/N)"
-if ($installaChrome -match "^[Ss]") {
-    if ($wingetOk) {
-        Installa-Pacchetto -Nome "Google Chrome" -WingetId "Google.Chrome"
-    } else {
-        Write-Errore "Winget non disponibile. Installa Chrome manualmente."
-    }
-} else {
-    Write-Info "Chrome saltato."
+Write-Host "Browser disponibili:" -ForegroundColor White
+for ($i = 0; $i -lt $browserDisponibili.Count; $i++) {
+    Write-Host "  $($i + 1)) $($browserDisponibili[$i].Nome)"
 }
-
+Write-Host ""
+Write-Host "  T) Installa tutti"
+Write-Host "  S) Salta"
 Write-Host ""
 
-$installaFirefox = Read-Host "Installare Mozilla Firefox? (S/N)"
-if ($installaFirefox -match "^[Ss]") {
-    if ($wingetOk) {
-        Installa-Pacchetto -Nome "Mozilla Firefox" -WingetId "Mozilla.Firefox"
+$sceltaBrowser = Read-Host "Scelta (es: 1,2 oppure T per tutti oppure S per saltare)"
+
+if ($sceltaBrowser -match "^[Ss]$") {
+    Write-Info "Browser saltati."
+} elseif ($sceltaBrowser -match "^[Tt]$") {
+    if (Confirm-Winget) {
+        foreach ($b in $browserDisponibili) { Installa-Pacchetto -Nome $b.Nome -WingetId $b.Id }
     } else {
-        Write-Errore "Winget non disponibile. Installa Firefox manualmente."
+        Write-Errore "Winget non disponibile."
     }
 } else {
-    Write-Info "Firefox saltato."
+    $indici = $sceltaBrowser -split "," | ForEach-Object { $_.Trim() }
+    if (Confirm-Winget) {
+        foreach ($indice in $indici) {
+            $num = 0
+            if ($indice -match "^\d+$" -and [int]::TryParse($indice, [ref]$num)) {
+                $idx = $num - 1
+                if ($idx -ge 0 -and $idx -lt $browserDisponibili.Count) {
+                    Installa-Pacchetto -Nome $browserDisponibili[$idx].Nome -WingetId $browserDisponibili[$idx].Id
+                } else {
+                    Write-Errore "Numero non valido: $indice"
+                }
+            } elseif ($indice -ne "") {
+                Write-Errore "Valore non riconosciuto: $indice"
+            }
+        }
+    } else {
+        Write-Errore "Winget non disponibile."
+    }
 }
 
 Pausa
