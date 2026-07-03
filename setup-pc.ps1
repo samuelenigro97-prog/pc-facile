@@ -311,16 +311,10 @@ try {
     }
 } catch {}
 
-# Report batteria (solo laptop, solo run reale): salva un HTML sulla batteria
+# Presenza batteria (per laptop): lo stato dettagliato finisce nel file riepilogo
 try {
-    if ($RunReale -and (Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue)) {
-        $battFile = Join-Path (Get-DesktopDir) ("battery-report_{0}.html" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
-        & powercfg /batteryreport /output "$battFile" 2>$null | Out-Null
-        if (Test-Path $battFile) {
-            Write-OK "Report batteria salvato: $battFile"
-        }
-    }
-} catch {}
+    $Global:HaBatteria = [bool](Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue)
+} catch { $Global:HaBatteria = $false }
 
 # =============================================================================
 # PREFLIGHT RETE (utile su reti aziendali con firewall/proxy)
@@ -356,17 +350,8 @@ if ($bloccati -gt 0) {
 # LOG SU FILE (registro per ogni PC)
 # =============================================================================
 
-# Registra l'output della sessione in un file sul Desktop, come prova/archivio.
-# Solo in run reale (Configura): Test/Diagnostica non sporcano il Desktop.
+# Nessun log/transcript separato: a fine lavoro si crea UN solo file riepilogo.
 $Global:LogFile = $null
-if ($RunReale) {
-    $Global:LogFile = Join-Path (Get-DesktopDir) ("setup-pc_log_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
-    try {
-        Start-Transcript -Path $Global:LogFile -ErrorAction SilentlyContinue | Out-Null
-    } catch {
-        $Global:LogFile = $null
-    }
-}
 
 # =============================================================================
 # FUNZIONE: VERIFICA E INSTALLA WINGET
@@ -1361,65 +1346,68 @@ if ($Report.Count -eq 0) {
     }
 }
 
-# Salva il report su file - solo run reale (Test/Diagnostica non sporcano il Desktop)
-if ($RunReale) { try {
-    $nomeReport = "setup-pc_report_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss")
-    $reportFile = Join-Path (Get-DesktopDir) $nomeReport
-    $righe = @("REPORT CONFIGURAZIONE PC - $(Get-Date -Format 'dd/MM/yyyy HH:mm')", "PC: $env:COMPUTERNAME", "")
-    foreach ($r in $Report) { $righe += ("[{0,-8}] {1}" -f $r.Esito, $r.Voce) }
-    $righe | Set-Content -Path $reportFile -Encoding UTF8
-    Write-OK "Report salvato in: $reportFile"
+# UN SOLO file riepilogo, ordinato - solo run reale (Configura)
+if ($RunReale) {
+    try {
+        $winOk   = @($Report | Where-Object { $_.Voce -eq 'Windows attivato' -and $_.Esito -eq 'OK' }).Count -gt 0
+        $diskBad = @($Report | Where-Object { $_.Voce -eq 'Salute disco' -and $_.Esito -eq 'ERRORE' }).Count -gt 0
+        $freeTxt = ""
+        try { $freeTxt = "{0} GB liberi" -f [math]::Round((Get-PSDrive ($env:SystemDrive.TrimEnd(':')) -ErrorAction SilentlyContinue).Free / 1GB, 1) } catch {}
 
-    # Copia anche nella cartella dello script (es. chiavetta USB), se nota:
-    # il Desktop resta col cliente, il tecnico tiene la copia sulla USB.
-    $scriptDir = if ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { $null }
-    if ($scriptDir -and (Test-Path $scriptDir) -and ((Resolve-Path $scriptDir).Path -ne (Resolve-Path (Get-DesktopDir)).Path)) {
-        try {
-            Copy-Item -Path $reportFile -Destination (Join-Path $scriptDir $nomeReport) -Force -ErrorAction Stop
-            Write-Info "Copia report anche in: $scriptDir"
-        } catch {}
+        $softwareOk = @($Report | Where-Object { $_.Voce -like '*installazione*' -and $_.Esito -eq 'OK' } |
+                        ForEach-Object { ($_.Voce -replace ' \(installazione\)', '').Trim() })
+        $av = @($Report | Where-Object { ($_.Voce -like '*antivirus*' -or $_.Voce -like '*protezione*') -and $_.Esito -eq 'OK' })
+        $altre = @($Report | Where-Object { $_.Voce -notlike '*installazione*' -and $_.Voce -notlike '*antivirus*' -and $_.Voce -notlike '*protezione*' })
+
+        $sep = "------------------------------------------------------------"
+        $f = @()
+        $f += "============================================================"
+        $f += "   RIEPILOGO CONFIGURAZIONE PC"
+        $f += "============================================================"
+        $f += ""
+        $f += "Data     : $(Get-Date -Format 'dd/MM/yyyy HH:mm')"
+        $f += "Nome PC  : $env:COMPUTERNAME"
+        $f += "Utente   : $env:USERNAME"
+        $f += ""
+        $f += $sep
+        $f += "STATO SISTEMA"
+        $f += $sep
+        $f += "  Windows attivato : $(if ($winOk) { 'SI' } else { 'NO - da verificare' })"
+        if ($freeTxt) { $f += "  Spazio disco C:  : $freeTxt" }
+        $f += "  Salute dischi    : $(if ($diskBad) { 'ATTENZIONE: un disco non Healthy' } else { 'OK' })"
+        if ($Global:HaBatteria) { $f += "  Batteria         : presente (laptop)" }
+        $f += ""
+        $f += $sep
+        $f += "SOFTWARE INSTALLATO"
+        $f += $sep
+        if ($softwareOk.Count -gt 0) { foreach ($sw in $softwareOk) { $f += "  - $sw" } } else { $f += "  (nessuno)" }
+        $f += ""
+        $f += $sep
+        $f += "ANTIVIRUS / PROTEZIONE"
+        $f += $sep
+        if ($av.Count -gt 0) { foreach ($a in $av) { $f += "  - $($a.Voce)" } } else { $f += "  (da verificare)" }
+        $f += ""
+        $f += $sep
+        $f += "ALTRE OPERAZIONI"
+        $f += $sep
+        foreach ($r in $altre) { $f += ("  [{0,-8}] {1}" -f $r.Esito, $r.Voce) }
+        $f += ""
+        $f += $sep
+        $f += "NOTE / CREDENZIALI (da compilare a mano)"
+        $f += $sep
+        $f += "  Account Microsoft : ______________________________"
+        $f += "  App mobile        : ______________________________"
+        $f += "  Altro             : ______________________________"
+        $f += ""
+        $f += "============================================================"
+
+        $riepFile = Join-Path (Get-DesktopDir) ("Riepilogo-PC_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmm"))
+        $f | Set-Content -Path $riepFile -Encoding UTF8
+        Write-OK "Riepilogo salvato sul Desktop: $riepFile"
+    } catch {
+        Write-Info "Impossibile creare il file riepilogo: $_"
     }
-} catch {
-    Write-Info "Impossibile salvare il report su file: $_"
-} }
-
-# Scheda consegna cliente - solo run reale
-if ($RunReale) { try {
-    $softwareOk = @($Report | Where-Object { $_.Voce -like "*installazione*" -and $_.Esito -eq "OK" } |
-                    ForEach-Object { ($_.Voce -replace ' \(installazione\)', '').Trim() })
-    $schedaFile = Join-Path (Get-DesktopDir) ("scheda-consegna_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
-    $s = @()
-    $s += "============================================================"
-    $s += "        SCHEDA CONSEGNA PC"
-    $s += "============================================================"
-    $s += ""
-    $s += "Data configurazione : $(Get-Date -Format 'dd/MM/yyyy HH:mm')"
-    $s += "Nome PC             : $env:COMPUTERNAME"
-    $s += "Utente              : $env:USERNAME"
-    $s += ""
-    $s += "SOFTWARE INSTALLATO:"
-    if ($softwareOk.Count -gt 0) { foreach ($sw in $softwareOk) { $s += "  - $sw" } }
-    else { $s += "  (nessuno)" }
-    $s += ""
-    $s += "ANTIVIRUS / PROTEZIONE:"
-    $av = @($Report | Where-Object { ($_.Voce -like "*antivirus*" -or $_.Voce -like "*protezione*") -and $_.Esito -eq "OK" })
-    if ($av.Count -gt 0) { foreach ($a in $av) { $s += "  - $($a.Voce)" } } else { $s += "  (da verificare)" }
-    $s += ""
-    $s += "NOTE / CREDENZIALI (da compilare a mano):"
-    $s += "  Account Microsoft : ______________________________"
-    $s += "  App mobile        : ______________________________"
-    $s += "  Altro             : ______________________________"
-    $s += ""
-    $s += "Grazie e buon lavoro!"
-    $s | Set-Content -Path $schedaFile -Encoding UTF8
-    Write-OK "Scheda consegna salvata: $schedaFile"
-} catch {
-    Write-Info "Impossibile creare la scheda consegna: $_"
-} }
-
-# Chiudi il log della sessione
-try { Stop-Transcript -ErrorAction SilentlyContinue | Out-Null } catch {}
-if ($Global:LogFile) { Write-Info "Log completo sessione: $Global:LogFile" }
+}
 
 # Offri il riavvio se la lingua e' stata cambiata (serve reboot per applicarsi)
 $linguaCambiata = @($Report | Where-Object { $_.Voce -like "Lingua italiana*" -and $_.Esito -eq "OK" }).Count -gt 0
