@@ -465,7 +465,7 @@ if ($Diagnostica) {
             @{ N = "7-Zip";                Id = "7zip.7zip" },
             @{ N = "WhatsApp";             Id = "9NKSQGP7F2NH" },
             @{ N = "Steam";                Id = "Valve.Steam" },
-            @{ N = "AnyDesk";              Id = "AnyDeskSoftwareGmbH.AnyDesk" },
+            @{ N = "AnyDesk";              Id = "AnyDesk.AnyDesk" },
             @{ N = "Discord";              Id = "Discord.Discord" },
             @{ N = "Zoom";                 Id = "Zoom.Zoom" }
         )
@@ -1021,7 +1021,7 @@ $appsDisponibili = @(
     @{ Nome = "7-Zip";              Id = "7zip.7zip" },
     @{ Nome = "WhatsApp";           Id = "9NKSQGP7F2NH" },
     @{ Nome = "Steam";              Id = "Valve.Steam" },
-    @{ Nome = "AnyDesk";            Id = "AnyDeskSoftwareGmbH.AnyDesk" },
+    @{ Nome = "AnyDesk";            Id = "AnyDesk.AnyDesk" },
     @{ Nome = "Discord";            Id = "Discord.Discord" },
     @{ Nome = "Zoom";               Id = "Zoom.Zoom" }
 )
@@ -1029,9 +1029,9 @@ $appsDisponibili = @(
 # Preset profili: sottoinsiemi della lista sopra (per winget Id).
 # I browser (Chrome/Firefox) restano nello STEP 5, qui non inclusi.
 $profili = [ordered]@{
-    "BASE"    = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDeskSoftwareGmbH.AnyDesk")
-    "UFFICIO" = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDeskSoftwareGmbH.AnyDesk","Zoom.Zoom","Spotify.Spotify")
-    "GAMING"  = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDeskSoftwareGmbH.AnyDesk","Valve.Steam","Discord.Discord")
+    "BASE"    = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk")
+    "UFFICIO" = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","Zoom.Zoom","Spotify.Spotify")
+    "GAMING"  = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","Valve.Steam","Discord.Discord")
 }
 
 # Installa gli app della lista il cui Id e' nel set passato
