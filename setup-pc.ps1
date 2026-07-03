@@ -808,7 +808,7 @@ function Installa-Antivirus {
             Write-Errore "Percorso non valido: $percorso"
             Add-Report "$Nome (antivirus)" "ERRORE"
         } else {
-            Write-Info "$Nome: installer da avviare a mano piu' tardi."
+            Write-Info "${Nome}: installer da avviare a mano piu' tardi."
             Add-Report "$Nome (antivirus)" "AVVISO"
         }
     }
