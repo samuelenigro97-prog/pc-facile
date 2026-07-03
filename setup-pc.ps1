@@ -184,6 +184,40 @@ if ($PSVersionTable.PSEdition -eq 'Core') {
 }
 
 # =============================================================================
+# CONTROLLI PRE-INSTALLAZIONE (riavvio in sospeso + spazio disco)
+# =============================================================================
+
+# Riavvio in sospeso: alcune installazioni falliscono finche' non si riavvia.
+try {
+    $rebootPending = $false
+    $chiaviReboot = @(
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending",
+        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"
+    )
+    foreach ($k in $chiaviReboot) { if (Test-Path $k) { $rebootPending = $true } }
+    $pfro = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager" `
+             -Name PendingFileRenameOperations -ErrorAction SilentlyContinue).PendingFileRenameOperations
+    if ($pfro) { $rebootPending = $true }
+    if ($rebootPending) {
+        Write-Info "C'e' un RIAVVIO in sospeso: alcune installazioni potrebbero fallire."
+        Write-Info "Consiglio: riavvia il PC e rilancia lo script per risultati migliori."
+    }
+} catch {}
+
+# Spazio libero sul disco di sistema
+try {
+    $lettera = $env:SystemDrive.TrimEnd(':')
+    $free = (Get-PSDrive $lettera -ErrorAction SilentlyContinue).Free
+    if ($free) {
+        $freeGB = [math]::Round($free / 1GB, 1)
+        Write-Info "Spazio libero su $($env:SystemDrive) $freeGB GB"
+        if ($freeGB -lt 10) {
+            Write-Errore "Poco spazio libero ($freeGB GB): le installazioni potrebbero fallire."
+        }
+    }
+} catch {}
+
+# =============================================================================
 # PREFLIGHT RETE (utile su reti aziendali con firewall/proxy)
 # =============================================================================
 
