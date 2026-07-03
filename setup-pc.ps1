@@ -120,9 +120,13 @@ $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Errore "Questo script richiede privilegi di amministratore."
-    Write-Info "Riavvia PowerShell come amministratore e riprova."
-    Pausa
-    exit 1
+    if ($Test) {
+        Write-Info "Modalita' TEST: proseguo comunque (nessuna operazione admin verra' eseguita)."
+    } else {
+        Write-Info "Riavvia PowerShell come amministratore e riprova."
+        Pausa
+        exit 1
+    }
 }
 
 # =============================================================================

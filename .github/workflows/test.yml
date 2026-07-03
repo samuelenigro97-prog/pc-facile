@@ -38,6 +38,22 @@ jobs:
             Write-Host "[INFO] winget non disponibile su questo runner" -ForegroundColor Yellow
           }
 
+      # Smoke test end-to-end: -Test rende lo script non interattivo e non
+      # distruttivo (tutto saltato). Cosi' becca gli errori di RUNTIME, non solo
+      # quelli statici, senza installare/modificare nulla sul runner.
+      - name: Smoke test (-Test, non distruttivo)
+        shell: pwsh
+        run: |
+          Write-Host "=== SMOKE TEST (-Test) ===" -ForegroundColor Cyan
+          $ErrorActionPreference = 'Stop'
+          try {
+            & ./setup-pc.ps1 -Test
+            Write-Host "[OK] Flusso completato senza errori di runtime." -ForegroundColor Green
+          } catch {
+            Write-Error "Errore di runtime durante lo smoke test: $_"
+            exit 1
+          }
+
       # Lo script e' interattivo (Read-Host): eseguirlo in CI si blocca sull'input.
       # Al posto del run interattivo usiamo analisi statica: non si blocca e trova bug reali.
       - name: Analisi statica (PSScriptAnalyzer)
