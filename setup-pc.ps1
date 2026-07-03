@@ -87,6 +87,10 @@ if ($Test -or $Diagnostica) {
     function Pausa { }
 }
 
+# Run "reale" = Configura (non Test, non Diagnostica): solo qui si creano i
+# file su Desktop (log/report/scheda/batteria), per non sporcare coi controlli.
+$RunReale = (-not $Test -and -not $Diagnostica)
+
 # =============================================================================
 # REPORT FINALE + CONNETTIVITA'
 # =============================================================================
@@ -307,9 +311,9 @@ try {
     }
 } catch {}
 
-# Report batteria (solo laptop): salva un HTML con la salute della batteria
+# Report batteria (solo laptop, solo run reale): salva un HTML sulla batteria
 try {
-    if (Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue) {
+    if ($RunReale -and (Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue)) {
         $battFile = Join-Path (Get-DesktopDir) ("battery-report_{0}.html" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
         & powercfg /batteryreport /output "$battFile" 2>$null | Out-Null
         if (Test-Path $battFile) {
@@ -352,13 +356,16 @@ if ($bloccati -gt 0) {
 # LOG SU FILE (registro per ogni PC)
 # =============================================================================
 
-# Registra tutto l'output della sessione in un file sul Desktop, utile come
-# prova/archivio della configurazione fatta su quel PC cliente.
-$Global:LogFile = Join-Path (Get-DesktopDir) ("setup-pc_log_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
-try {
-    Start-Transcript -Path $Global:LogFile -ErrorAction SilentlyContinue | Out-Null
-} catch {
-    $Global:LogFile = $null
+# Registra l'output della sessione in un file sul Desktop, come prova/archivio.
+# Solo in run reale (Configura): Test/Diagnostica non sporcano il Desktop.
+$Global:LogFile = $null
+if ($RunReale) {
+    $Global:LogFile = Join-Path (Get-DesktopDir) ("setup-pc_log_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+    try {
+        Start-Transcript -Path $Global:LogFile -ErrorAction SilentlyContinue | Out-Null
+    } catch {
+        $Global:LogFile = $null
+    }
 }
 
 # =============================================================================
@@ -1354,8 +1361,8 @@ if ($Report.Count -eq 0) {
     }
 }
 
-# Salva il report anche su file di testo (riepilogo leggibile da archiviare)
-try {
+# Salva il report su file - solo run reale (Test/Diagnostica non sporcano il Desktop)
+if ($RunReale) { try {
     $nomeReport = "setup-pc_report_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss")
     $reportFile = Join-Path (Get-DesktopDir) $nomeReport
     $righe = @("REPORT CONFIGURAZIONE PC - $(Get-Date -Format 'dd/MM/yyyy HH:mm')", "PC: $env:COMPUTERNAME", "")
@@ -1374,10 +1381,10 @@ try {
     }
 } catch {
     Write-Info "Impossibile salvare il report su file: $_"
-}
+} }
 
-# Scheda consegna cliente: foglio leggibile/stampabile da dare al cliente
-try {
+# Scheda consegna cliente - solo run reale
+if ($RunReale) { try {
     $softwareOk = @($Report | Where-Object { $_.Voce -like "*installazione*" -and $_.Esito -eq "OK" } |
                     ForEach-Object { ($_.Voce -replace ' \(installazione\)', '').Trim() })
     $schedaFile = Join-Path (Get-DesktopDir) ("scheda-consegna_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
@@ -1408,7 +1415,7 @@ try {
     Write-OK "Scheda consegna salvata: $schedaFile"
 } catch {
     Write-Info "Impossibile creare la scheda consegna: $_"
-}
+} }
 
 # Chiudi il log della sessione
 try { Stop-Transcript -ErrorAction SilentlyContinue | Out-Null } catch {}
