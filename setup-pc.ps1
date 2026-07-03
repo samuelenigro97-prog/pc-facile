@@ -755,7 +755,7 @@ switch ($sceltaOffice) {
         Write-Info "Installazione Office saltata."
     }
     default {
-        Write-Errore "Scelta non valida. Passaggio saltato."
+        Write-Info "Nessuna scelta valida: passaggio saltato."
     }
 }
 
@@ -924,7 +924,7 @@ switch ($sceltaAV) {
         Add-Report "Antivirus" "SALTATO"
     }
     default {
-        Write-Errore "Scelta non valida. Passaggio saltato."
+        Write-Info "Nessuna scelta valida: passaggio saltato."
         Add-Report "Antivirus" "SALTATO"
     }
 }
