@@ -95,6 +95,20 @@ if ($Test -or $Diagnostica) {
 # file su Desktop (log/report/scheda/batteria), per non sporcare coi controlli.
 $RunReale = (-not $Test -and -not $Diagnostica)
 
+# Fine passo: INVIO = avanti, B = torna al passo precedente.
+# Ritorna $true se l'utente vuole tornare indietro.
+function Continua {
+    if ($Test) { return $false }   # in Test avanza sempre, niente attesa
+    Write-Host ""
+    Write-Host "  [INVIO] continua     [B] torna al passo precedente" -ForegroundColor DarkGray
+    try {
+        $k = [Console]::ReadKey($true)
+        return ("$($k.KeyChar)".ToUpper() -eq 'B')
+    } catch {
+        return $false   # host senza console: come INVIO
+    }
+}
+
 # =============================================================================
 # REPORT FINALE + CONNETTIVITA'
 # =============================================================================
@@ -610,6 +624,14 @@ if ($vuoiRestore -match "^[Ss]") {
 Pausa
 
 # =============================================================================
+# PASSI DI CONFIGURAZIONE (tasto B a fine passo = torna indietro)
+# =============================================================================
+
+$passo = 0
+while ($passo -ge 0 -and $passo -le 10) {
+switch ($passo) {
+0 {
+# =============================================================================
 # STEP 0 - LINGUA E REGIONE (ITALIANO)
 # =============================================================================
 
@@ -705,8 +727,9 @@ if ($impostaLingua -match "^[Ss]") {
     Add-Report "Lingua italiana (it-IT)" "SALTATO"
 }
 
-Pausa
-
+if (Continua) { $passo-- } else { $passo++ }
+}
+1 {
 # =============================================================================
 # STEP 1 - NOME CLIENTE
 # =============================================================================
@@ -755,8 +778,9 @@ if ($nomeCliente.Trim() -ne "") {
     Add-Report "Nome cliente" "SALTATO"
 }
 
-Pausa
-
+if (Continua) { $passo-- } else { $passo++ }
+}
+2 {
 # =============================================================================
 # STEP 2 - RISCATTO LICENZA OFFICE
 # =============================================================================
@@ -778,8 +802,9 @@ if ($risposta -match "^[Ss]") {
     Add-Report "Riscatto licenza Office (setup.office.com)" "SALTATO"
 }
 
-Pausa
-
+if (Continua) { $passo-- } else { $passo++ }
+}
+3 {
 # =============================================================================
 # STEP 3 - INSTALLAZIONE OFFICE
 # =============================================================================
@@ -887,8 +912,9 @@ while ($true) {
     }
 }
 
-Pausa
-
+if (Continua) { $passo-- } else { $passo++ }
+}
+4 {
 # =============================================================================
 # STEP 4 - ANTIVIRUS
 # =============================================================================
@@ -996,8 +1022,9 @@ switch ($sceltaAV) {
     }
 }
 
-Pausa
-
+if (Continua) { $passo-- } else { $passo++ }
+}
+5 {
 # =============================================================================
 # STEP 4c - UNIEURO CYBER PROTECTION (opzionale)
 # =============================================================================
@@ -1015,8 +1042,9 @@ if ($vuoiUnieuro -match "^[Ss]") {
     Add-Report "Unieuro Cyber Protection" "SALTATO"
 }
 
-Pausa
-
+if (Continua) { $passo-- } else { $passo++ }
+}
+6 {
 # =============================================================================
 # STEP 5 - BROWSER
 # =============================================================================
@@ -1073,8 +1101,9 @@ if ($sceltaBrowser -match "^[Ss]$") {
     }
 }
 
-Pausa
-
+if (Continua) { $passo-- } else { $passo++ }
+}
+7 {
 # =============================================================================
 # STEP 6 - APPLICAZIONI BASE
 # =============================================================================
@@ -1175,8 +1204,9 @@ switch ($sceltaApps) {
     }
 }
 
-Pausa
-
+if (Continua) { $passo-- } else { $passo++ }
+}
+8 {
 # =============================================================================
 # STEP 7 - RIMOZIONE APP SUPERFLUE (BLOATWARE) - opzionale
 # =============================================================================
@@ -1266,8 +1296,9 @@ if ($vuoiDebloat -match "^[Ss]") {
     Add-Report "Rimozione bloatware" "SALTATO"
 }
 
-Pausa
-
+if (Continua) { $passo-- } else { $passo++ }
+}
+9 {
 # =============================================================================
 # STEP 8 - AGGIORNAMENTO APP INSTALLATE - opzionale
 # =============================================================================
@@ -1294,8 +1325,9 @@ if ($vuoiUpgrade -match "^[Ss]") {
     Add-Report "Aggiornamento app installate" "SALTATO"
 }
 
-Pausa
-
+if (Continua) { $passo-- } else { $passo++ }
+}
+10 {
 # =============================================================================
 # STEP 9 - CONFIGURAZIONE WINDOWS BASE - opzionale
 # =============================================================================
@@ -1330,7 +1362,11 @@ if ($vuoiConfig -match "^[Ss]") {
     Add-Report "Configurazione Windows base" "SALTATO"
 }
 
-Pausa
+if (Continua) { $passo-- } else { $passo++ }
+}
+}
+if ($passo -lt 0) { $passo = 0 }
+}
 
 # =============================================================================
 # FINE
