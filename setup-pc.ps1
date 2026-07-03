@@ -207,7 +207,7 @@ if ($bloccati -gt 0) {
     Write-Info "$bloccati servizio/i non raggiungibile/i: probabile firewall o proxy aziendale."
     Write-Info "Rimedi: tieni setup-pc.ps1 accanto ad Avvia.bat (evita GitHub); per le"
     Write-Info "  installazioni app usa un hotspot o una rete senza filtri."
-    Add-Report "Rete: $bloccati servizio/i bloccato/i" "ERRORE"
+    Add-Report "Rete: $bloccati servizio/i bloccato/i" "AVVISO"
     Pausa
 } else {
     Write-OK "Tutti i servizi chiave sono raggiungibili."
@@ -365,13 +365,20 @@ if ($impostaLingua -match "^[Ss]") {
         Set-WinUILanguageOverride -Language it-IT
         Set-Culture it-IT
         Set-WinHomeLocation -GeoId 118    # Italia
-        Set-WinSystemLocale it-IT
 
-        Write-OK "Lingua e regione base impostate su Italiano (it-IT)."
+        Write-OK "Lingua, tastiera e regione impostate su Italiano (it-IT)."
         Add-Report "Lingua italiana (it-IT)" "OK"
     } catch {
         Write-Errore "Impossibile impostare la lingua base: $_"
         Add-Report "Lingua italiana (it-IT)" "ERRORE"
+    }
+
+    # Locale di sistema (per programmi non-Unicode): separato, un suo errore
+    # non deve invalidare tastiera/formati gia' applicati sopra.
+    try {
+        Set-WinSystemLocale it-IT
+    } catch {
+        Write-Info "Impostazione locale di sistema non riuscita: proseguo (tastiera/formati restano validi)."
     }
 
     # --- 2) Language pack (Windows 11 22H2+): richiede Internet, NON deve bloccare il resto ---
@@ -819,6 +826,7 @@ if ($Report.Count -eq 0) {
     $nOk      = ($Report | Where-Object { $_.Esito -eq "OK" }).Count
     $nErrore  = ($Report | Where-Object { $_.Esito -eq "ERRORE" }).Count
     $nSaltato = ($Report | Where-Object { $_.Esito -eq "SALTATO" }).Count
+    $nAvviso  = ($Report | Where-Object { $_.Esito -eq "AVVISO" }).Count
 
     foreach ($r in $Report) {
         switch ($r.Esito) {
@@ -830,7 +838,7 @@ if ($Report.Count -eq 0) {
     }
 
     Write-Host ""
-    Write-Host ("Totale: {0} OK, {1} ERRORE, {2} SALTATO" -f $nOk, $nErrore, $nSaltato) -ForegroundColor Cyan
+    Write-Host ("Totale: {0} OK, {1} ERRORE, {2} SALTATO, {3} AVVISO" -f $nOk, $nErrore, $nSaltato, $nAvviso) -ForegroundColor Cyan
     if ($nErrore -gt 0) {
         Write-Host "Controlla le voci in ERRORE prima di consegnare il PC." -ForegroundColor Red
     }
