@@ -346,26 +346,9 @@ Write-Info "Lingua/regione attuale: $culturaAttuale"
 
 $impostaLingua = Read-Host "Impostare il sistema in Italiano (it-IT)? (S/N)"
 if ($impostaLingua -match "^[Ss]") {
+
+    # --- 1) Impostazioni BASE (locali, sempre applicabili anche senza rete) ---
     try {
-        # Language pack (Windows 11 22H2+): installa it-IT se mancante
-        if (Get-Command Install-Language -ErrorAction SilentlyContinue) {
-            $installate = (Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId
-            if ($installate -notcontains "it-IT") {
-                Write-Info "Installazione language pack it-IT (puo' richiedere qualche minuto)..."
-                Install-Language it-IT -ErrorAction Stop | Out-Null
-            } else {
-                Write-Info "Language pack it-IT gia' presente."
-            }
-        } else {
-            Write-Info "Install-Language non disponibile (Windows 10): il pacchetto lingua non si installa da script."
-            $packDaAggiungere = $true
-        }
-
-        # Lingua UI preferita di SISTEMA (Windows 11): imposta l'interfaccia in it-IT
-        if (Get-Command Set-SystemPreferredUILanguage -ErrorAction SilentlyContinue) {
-            Set-SystemPreferredUILanguage it-IT
-        }
-
         # Lista lingue utente: italiano in cima + tastiera italiana (0410:00000410)
         $lista = New-WinUserLanguageList it-IT
         $lista[0].InputMethodTips.Clear()
@@ -377,33 +360,60 @@ if ($impostaLingua -match "^[Ss]") {
         Set-WinHomeLocation -GeoId 118    # Italia
         Set-WinSystemLocale it-IT
 
-        # Propaga lingua/regione a: schermata di login + nuovi account + account di sistema
-        # (senza questo cambia solo l'utente corrente, login e nuovi utenti restano in inglese)
-        if (Get-Command Copy-UserInternationalSettingsToSystem -ErrorAction SilentlyContinue) {
+        Write-OK "Lingua e regione base impostate su Italiano (it-IT)."
+        Add-Report "Lingua italiana (it-IT)" "OK"
+    } catch {
+        Write-Errore "Impossibile impostare la lingua base: $_"
+        Add-Report "Lingua italiana (it-IT)" "ERRORE"
+    }
+
+    # --- 2) Language pack (Windows 11 22H2+): richiede Internet, NON deve bloccare il resto ---
+    if (Get-Command Install-Language -ErrorAction SilentlyContinue) {
+        try {
+            $installate = (Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId
+            if ($installate -notcontains "it-IT") {
+                Write-Info "Installazione language pack it-IT (puo' richiedere qualche minuto)..."
+                Install-Language it-IT -ErrorAction Stop | Out-Null
+            } else {
+                Write-Info "Language pack it-IT gia' presente."
+            }
+        } catch {
+            Write-Info "Language pack it-IT non installato (rete assente/bloccata?): le impostazioni base restano valide."
+        }
+    } else {
+        Write-Info "Install-Language non disponibile (Windows 10): il pacchetto lingua va aggiunto a mano."
+        $packDaAggiungere = $true
+    }
+
+    # --- 3) Lingua UI di sistema (Windows 11), non fatale ---
+    if (Get-Command Set-SystemPreferredUILanguage -ErrorAction SilentlyContinue) {
+        try { Set-SystemPreferredUILanguage it-IT } catch { Write-Info "Impostazione lingua UI di sistema non riuscita: proseguo." }
+    }
+
+    # --- 4) Propaga a login + nuovi utenti + sistema (Windows 11), non fatale ---
+    if (Get-Command Copy-UserInternationalSettingsToSystem -ErrorAction SilentlyContinue) {
+        try {
             Write-Info "Propagazione impostazioni a login e nuovi utenti..."
             Copy-UserInternationalSettingsToSystem -WelcomeScreen $true -NewUser $true
-        } else {
-            Write-Info "Copy-UserInternationalSettingsToSystem non disponibile: login/nuovi utenti da sistemare a mano (Impostazioni > Lingua > Amministrazione)."
+        } catch {
+            Write-Info "Propagazione a login/nuovi utenti non riuscita: da sistemare a mano se serve."
         }
+    } else {
+        Write-Info "Propagazione automatica a login/nuovi utenti non disponibile su questo Windows."
+    }
 
-        Write-OK "Lingua e regione impostate su Italiano (it-IT)."
-        Write-Info "La lingua di sistema e del login si applicano del tutto dopo il RIAVVIO del PC."
-        Add-Report "Lingua italiana (it-IT)" "OK"
+    Write-Info "La lingua di sistema e del login si applicano del tutto dopo il RIAVVIO del PC."
 
-        # Windows 10: il pacchetto lingua (display) va aggiunto a mano da Impostazioni
-        if ($packDaAggiungere) {
-            Write-Info "Su Windows 10 il pacchetto della lingua di visualizzazione va aggiunto a mano."
-            $apriImp = Read-Host "Aprire ora Impostazioni lingua per aggiungere/verificare l'Italiano? (S/N)"
-            if ($apriImp -match "^[Ss]") {
-                Start-Process "ms-settings:regionlanguage"
-                Write-Info "In Impostazioni: aggiungi 'Italiano (Italia)', impostalo come lingua di"
-                Write-Info "  visualizzazione e scarica il pacchetto lingua. Poi torna qui."
-                Pausa
-            }
+    # --- 5) Windows 10: il pacchetto lingua (display) va aggiunto a mano ---
+    if ($packDaAggiungere) {
+        Write-Info "Su Windows 10 il pacchetto della lingua di visualizzazione va aggiunto a mano."
+        $apriImp = Read-Host "Aprire ora Impostazioni lingua per aggiungere/verificare l'Italiano? (S/N)"
+        if ($apriImp -match "^[Ss]") {
+            Start-Process "ms-settings:regionlanguage"
+            Write-Info "In Impostazioni: aggiungi 'Italiano (Italia)', impostalo come lingua di"
+            Write-Info "  visualizzazione e scarica il pacchetto lingua. Poi torna qui."
+            Pausa
         }
-    } catch {
-        Write-Errore "Impossibile impostare la lingua: $_"
-        Add-Report "Lingua italiana (it-IT)" "ERRORE"
     }
 } else {
     Write-Info "Impostazione lingua saltata."
@@ -771,14 +781,15 @@ if ($sceltaApps -match "^[Ss]$") {
     $indici = $sceltaApps -split "," | ForEach-Object { $_.Trim() }
     if (Confirm-Winget) {
         foreach ($indice in $indici) {
-            if ($indice -match "^\d+$") {
-                $idx = [int]$indice - 1
+            $num = 0
+            if ($indice -match "^\d+$" -and [int]::TryParse($indice, [ref]$num)) {
+                $idx = $num - 1
                 if ($idx -ge 0 -and $idx -lt $appsDisponibili.Count) {
                     Installa-Pacchetto -Nome $appsDisponibili[$idx].Nome -WingetId $appsDisponibili[$idx].Id
                 } else {
                     Write-Errore "Numero non valido: $indice"
                 }
-            } else {
+            } elseif ($indice -ne "") {
                 Write-Errore "Valore non riconosciuto: $indice"
             }
         }
