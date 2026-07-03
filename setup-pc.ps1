@@ -945,11 +945,22 @@ if ($Report.Count -eq 0) {
 
 # Salva il report anche su file di testo (riepilogo leggibile da archiviare)
 try {
-    $reportFile = Join-Path (Get-DesktopDir) ("setup-pc_report_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+    $nomeReport = "setup-pc_report_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss")
+    $reportFile = Join-Path (Get-DesktopDir) $nomeReport
     $righe = @("REPORT CONFIGURAZIONE PC - $(Get-Date -Format 'dd/MM/yyyy HH:mm')", "PC: $env:COMPUTERNAME", "")
     foreach ($r in $Report) { $righe += ("[{0,-8}] {1}" -f $r.Esito, $r.Voce) }
     $righe | Set-Content -Path $reportFile -Encoding UTF8
     Write-OK "Report salvato in: $reportFile"
+
+    # Copia anche nella cartella dello script (es. chiavetta USB), se nota:
+    # il Desktop resta col cliente, il tecnico tiene la copia sulla USB.
+    $scriptDir = if ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { $null }
+    if ($scriptDir -and (Test-Path $scriptDir) -and ((Resolve-Path $scriptDir).Path -ne (Resolve-Path (Get-DesktopDir)).Path)) {
+        try {
+            Copy-Item -Path $reportFile -Destination (Join-Path $scriptDir $nomeReport) -Force -ErrorAction Stop
+            Write-Info "Copia report anche in: $scriptDir"
+        } catch {}
+    }
 } catch {
     Write-Info "Impossibile salvare il report su file: $_"
 }
