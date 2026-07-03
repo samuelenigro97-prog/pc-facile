@@ -390,7 +390,8 @@ function Installa-Pacchetto {
 # BENVENUTO
 # =============================================================================
 
-Clear-Host
+# Clear-Host fallisce senza una console vera (esecuzione headless/redirect): protetto
+try { Clear-Host } catch {}
 Write-Titolo "AUTOMAZIONE CONFIGURAZIONE PC - Avvio"
 Write-Host "Questo script guida la configurazione del PC del cliente passo per passo." -ForegroundColor White
 Write-Host "Segui le istruzioni a schermo e premi INVIO quando indicato." -ForegroundColor White
