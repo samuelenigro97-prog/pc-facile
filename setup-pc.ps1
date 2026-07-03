@@ -574,11 +574,12 @@ Write-Titolo "STEP 1 - Nome Completo Cliente"
 
 # Legge il nome visualizzato attuale: prima LocalAccounts, poi ADSI (che
 # funziona anche in PowerShell x86, dove il modulo LocalAccounts non c'e').
+$adsiUser = 'WinNT://./' + $env:USERNAME + ',user'
 $nomeAttuale = $null
 try {
     $nomeAttuale = (Get-LocalUser -Name $env:USERNAME -ErrorAction Stop).FullName
 } catch {
-    try { $nomeAttuale = ([ADSI]"WinNT://./$env:USERNAME,user").FullName } catch {}
+    try { $nomeAttuale = ([ADSI]$adsiUser).FullName } catch {}
 }
 Write-Info "Utente corrente: $env:USERNAME"
 Write-Info "Nome visualizzato attuale: $(if ($nomeAttuale) { $nomeAttuale } else { '(non impostato)' })"
@@ -595,7 +596,7 @@ if ($nomeCliente.Trim() -ne "") {
     } catch {
         # 2) Fallback ADSI/WinNT: funziona anche in x86 e senza il modulo LocalAccounts
         try {
-            $u = [ADSI]"WinNT://./$env:USERNAME,user"
+            $u = [ADSI]$adsiUser
             $u.FullName = $nomeCliente.Trim()
             $u.SetInfo()
             $nomeOk = $true
@@ -798,7 +799,7 @@ function Installa-Antivirus {
         # Non e' un errore dello script: l'installer non e' ancora stato scaricato.
         Write-Info "Nessun .exe recente (ultimi 60 min) in Download o Desktop."
         $percorso = Read-Host "Incolla il percorso completo dell'installer $Nome (INVIO per saltare)"
-        $percorso = $percorso.Trim('"').Trim()
+        $percorso = ($percorso -replace '"', '').Trim()
         if ($percorso -ne "" -and (Test-Path $percorso)) {
             Start-Process -FilePath $percorso
             Write-OK "Installer $Nome avviato."
