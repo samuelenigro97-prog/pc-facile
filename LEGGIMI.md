@@ -55,35 +55,38 @@ Niente comandi da digitare.
 
 ---
 
-## 2-bis. Avvio manuale (se il .bat non va)
+## 2-bis. Avvio manuale da PowerShell (a prova di blocco)
 
-Apri **PowerShell come Amministratore**
+Apri **Windows PowerShell** (NON la versione "(x86)") **come Amministratore**
 (Start → scrivi `PowerShell` → tasto destro → *Esegui come amministratore*).
 
-Poi esegui, **sostituendo il percorso** con quello reale del file
-(usa `$env:USERPROFILE` per l'utente corrente, qualunque sia il suo nome):
+Usa questi comandi: eseguono lo script **in memoria** (come scriptblock), quindi
+**non** danno l'errore "L'esecuzione di script è disabilitata" e accettano i
+parametri. Non serve salvare file né toccare l'ExecutionPolicy.
 
 ```powershell
-# 1) consenti l'esecuzione script solo per questa sessione
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
+# CONFIGURA il PC (installa e imposta)
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/setup-pc.ps1)))
 
-# 2) rimuovi il blocco "file scaricato da Internet" (mark-of-the-web)
-Unblock-File -Path "$env:USERPROFILE\Desktop\setup-pc.ps1"
+# DIAGNOSTICA (controlla ID pacchetti e ambiente, NON installa)
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/setup-pc.ps1))) -Diagnostica
 
-# 3) avvia lo script
-& "$env:USERPROFILE\Desktop\setup-pc.ps1"
+# TEST a vuoto (percorre tutto senza installare/modificare)
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/setup-pc.ps1))) -Test
 ```
 
-In alternativa, in un colpo solo:
-
+Se invece hai il file salvato e vuoi lanciarlo da file:
 ```powershell
 powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\setup-pc.ps1"
 ```
 
-Se il file è su chiavetta (es. `D:`), usa `D:\setup-pc.ps1` al posto del percorso Desktop.
-
+> ⚠️ **Perché l'errore "esecuzione disabilitata"?** Windows blocca i file `.ps1`
+> di default. Eseguire come scriptblock in memoria (comandi sopra) o con
+> `-ExecutionPolicy Bypass` lo evita. Lo script non puo' risolverlo da dentro:
+> il blocco avviene PRIMA che parta.
+>
 > **Nota percorso:** usa `$env:USERPROFILE` (es. `C:\Users\telef`) — NON un nome
-> utente fisso come `oem`. Ogni PC può avere un profilo diverso.
+> utente fisso come `oem`. Ogni PC ha un profilo diverso.
 
 ---
 
