@@ -128,7 +128,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     } else {
         Write-Info "Riavvia PowerShell come amministratore e riprova."
         Pausa
-        exit 1
+        return  # return (non exit) per non chiudere la finestra se eseguito in memoria
     }
 }
 
@@ -497,7 +497,7 @@ if ($Diagnostica) {
     Write-Host ""
     Write-Info "Diagnostica completata. Nessuna modifica effettuata al sistema."
     try { Stop-Transcript -ErrorAction SilentlyContinue | Out-Null } catch {}
-    exit 0
+    return  # return (non exit) per non chiudere la finestra se eseguito in memoria
 }
 
 # =============================================================================
