@@ -47,6 +47,22 @@ function Pausa {
     Read-Host "Premi INVIO per continuare"
 }
 
+# Menu iniziale: se non e' stata scelta una modalita' via parametro, la chiedo.
+# Cosi' basta avviare lo script e scegliere 1/2/3 dalla prima schermata.
+if (-not $Test -and -not $Diagnostica) {
+    try { Clear-Host } catch {}
+    Write-Titolo "AVVIO PC PRO"
+    Write-Host "  Cosa vuoi fare?" -ForegroundColor White
+    Write-Host ""
+    Write-Host "    1) Configura il PC   (installa e imposta)"
+    Write-Host "    2) Diagnostica       (controlla, NON installa)"
+    Write-Host "    3) Test a vuoto      (percorre tutto, NON installa)"
+    Write-Host ""
+    $sceltaModo = Read-Host "Scelta (1/2/3, INVIO = 1)"
+    if ($sceltaModo -eq "2") { $Diagnostica = $true }
+    elseif ($sceltaModo -eq "3") { $Test = $true }
+}
+
 # Modalita' TEST (-Test): rende lo script non interattivo e non distruttivo.
 # Sovrascrive Read-Host (risponde N ai S/N, vuoto ai menu -> tutto saltato) e
 # Pausa (nessuna attesa). Cosi' si verifica l'intero flusso in automatico.
@@ -249,6 +265,45 @@ try {
         Write-Info "Spazio libero su $($env:SystemDrive) $freeGB GB"
         if ($freeGB -lt 10) {
             Write-Errore "Poco spazio libero ($freeGB GB): le installazioni potrebbero fallire."
+        }
+    }
+} catch {}
+
+# Attivazione di Windows (evita di consegnare un PC con Windows non attivo)
+try {
+    $winLic = Get-CimInstance -ClassName SoftwareLicensingProduct `
+        -Filter "ApplicationID='55c92734-d682-4d71-983e-d6ec3f16059f' AND PartialProductKey IS NOT NULL" `
+        -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($winLic -and $winLic.LicenseStatus -eq 1) {
+        Write-OK "Windows attivato."
+        Add-Report "Windows attivato" "OK"
+    } else {
+        Write-Errore "Windows NON risulta attivato: verifica la licenza prima di consegnare."
+        Add-Report "Windows attivato" "ERRORE"
+    }
+} catch {}
+
+# Salute del disco (SMART): avvisa se un disco non e' Healthy
+try {
+    $dischi = Get-PhysicalDisk -ErrorAction SilentlyContinue
+    if ($dischi) {
+        $malati = @($dischi | Where-Object { $_.HealthStatus -and $_.HealthStatus -ne 'Healthy' })
+        if ($malati.Count -gt 0) {
+            foreach ($d in $malati) { Write-Errore "Disco '$($d.FriendlyName)': stato $($d.HealthStatus)!" }
+            Add-Report "Salute disco" "ERRORE"
+        } else {
+            Write-OK "Dischi in salute (Healthy)."
+        }
+    }
+} catch {}
+
+# Report batteria (solo laptop): salva un HTML con la salute della batteria
+try {
+    if (Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue) {
+        $battFile = Join-Path (Get-DesktopDir) ("battery-report_{0}.html" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+        & powercfg /batteryreport /output "$battFile" 2>$null | Out-Null
+        if (Test-Path $battFile) {
+            Write-OK "Report batteria salvato: $battFile"
         }
     }
 } catch {}
@@ -1224,6 +1279,42 @@ if ($vuoiUpgrade -match "^[Ss]") {
 Pausa
 
 # =============================================================================
+# STEP 9 - CONFIGURAZIONE WINDOWS BASE - opzionale
+# =============================================================================
+
+Write-Titolo "STEP 9 - Configurazione Windows Base"
+
+Write-Host "Piccole comodita': mostra le estensioni dei file, apre Esplora file su" -ForegroundColor White
+Write-Host "'Questo PC' e disattiva l'avvio automatico di OneDrive." -ForegroundColor White
+Write-Host ""
+
+$vuoiConfig = Read-Host "Applicare queste impostazioni? (S/N)"
+if ($vuoiConfig -match "^[Ss]") {
+    try {
+        $adv = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+        Set-ItemProperty -Path $adv -Name "HideFileExt" -Value 0 -Type DWord -ErrorAction SilentlyContinue   # mostra estensioni
+        Set-ItemProperty -Path $adv -Name "LaunchTo"    -Value 1 -Type DWord -ErrorAction SilentlyContinue   # Esplora su "Questo PC"
+
+        # Disattiva l'avvio automatico di OneDrive (toglie la voce di avvio)
+        $run = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+        if (Get-ItemProperty -Path $run -Name "OneDrive" -ErrorAction SilentlyContinue) {
+            Remove-ItemProperty -Path $run -Name "OneDrive" -ErrorAction SilentlyContinue
+        }
+
+        Write-OK "Impostazioni applicate (attive al prossimo riavvio di Esplora file)."
+        Add-Report "Configurazione Windows base" "OK"
+    } catch {
+        Write-Errore "Impossibile applicare alcune impostazioni: $_"
+        Add-Report "Configurazione Windows base" "ERRORE"
+    }
+} else {
+    Write-Info "Configurazione Windows base saltata."
+    Add-Report "Configurazione Windows base" "SALTATO"
+}
+
+Pausa
+
+# =============================================================================
 # FINE
 # =============================================================================
 
@@ -1273,6 +1364,40 @@ try {
     }
 } catch {
     Write-Info "Impossibile salvare il report su file: $_"
+}
+
+# Scheda consegna cliente: foglio leggibile/stampabile da dare al cliente
+try {
+    $softwareOk = @($Report | Where-Object { $_.Voce -like "*installazione*" -and $_.Esito -eq "OK" } |
+                    ForEach-Object { ($_.Voce -replace ' \(installazione\)', '').Trim() })
+    $schedaFile = Join-Path (Get-DesktopDir) ("scheda-consegna_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+    $s = @()
+    $s += "============================================================"
+    $s += "        SCHEDA CONSEGNA PC"
+    $s += "============================================================"
+    $s += ""
+    $s += "Data configurazione : $(Get-Date -Format 'dd/MM/yyyy HH:mm')"
+    $s += "Nome PC             : $env:COMPUTERNAME"
+    $s += "Utente              : $env:USERNAME"
+    $s += ""
+    $s += "SOFTWARE INSTALLATO:"
+    if ($softwareOk.Count -gt 0) { foreach ($sw in $softwareOk) { $s += "  - $sw" } }
+    else { $s += "  (nessuno)" }
+    $s += ""
+    $s += "ANTIVIRUS / PROTEZIONE:"
+    $av = @($Report | Where-Object { ($_.Voce -like "*antivirus*" -or $_.Voce -like "*protezione*") -and $_.Esito -eq "OK" })
+    if ($av.Count -gt 0) { foreach ($a in $av) { $s += "  - $($a.Voce)" } } else { $s += "  (da verificare)" }
+    $s += ""
+    $s += "NOTE / CREDENZIALI (da compilare a mano):"
+    $s += "  Account Microsoft : ______________________________"
+    $s += "  App mobile        : ______________________________"
+    $s += "  Altro             : ______________________________"
+    $s += ""
+    $s += "Grazie e buon lavoro!"
+    $s | Set-Content -Path $schedaFile -Encoding UTF8
+    Write-OK "Scheda consegna salvata: $schedaFile"
+} catch {
+    Write-Info "Impossibile creare la scheda consegna: $_"
 }
 
 # Chiudi il log della sessione
