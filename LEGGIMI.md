@@ -1,4 +1,4 @@
-# Avvio PC Pro — `setup-pc.ps1`
+# PC Facile — `setup-pc.ps1`
 
 Script PowerShell per configurare i PC Windows dei clienti (negozio informatica):
 lingua italiana, nome cliente, Office, antivirus/protezione, browser, app base,
@@ -20,20 +20,20 @@ riavvio**.
 
 ## 1. Scarica il launcher
 
-Ti basta **UN file**: `Avvia.bat`.
+Ti basta **UN file**: `PC Facile.bat`.
 
 ```
-https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/Avvia.bat
+https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/PC%20Facile.bat
 ```
 
-Tasto destro → **Salva con nome** → `Avvia.bat`.
+Tasto destro → **Salva con nome** → `PC Facile.bat`.
 ⚠️ Verifica che finisca in `.bat` e **non** `.bat.txt`.
 
-`Avvia.bat` da solo scarica ed esegue l'ultima versione dello script da GitHub
+`PC Facile.bat` da solo scarica ed esegue l'ultima versione dello script da GitHub
 (serve Internet — sui PC da configurare c'è, serve anche per winget).
 
 **Uso OFFLINE (opzionale):** se vuoi lavorare senza Internet, scarica anche
-`setup-pc.ps1` e mettilo **nella stessa cartella** di `Avvia.bat`. Il launcher, se
+`setup-pc.ps1` e mettilo **nella stessa cartella** di `PC Facile.bat`. Il launcher, se
 lo trova accanto, usa quello invece di scaricarlo.
 ```
 https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/setup-pc.ps1
@@ -43,7 +43,7 @@ https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/setup-p
 
 ## 2. Avvio FACILE (consigliato) — doppio click
 
-**Doppio click su `Avvia.bat`.** Fa tutto da solo:
+**Doppio click su `PC Facile.bat`.** Fa tutto da solo:
 - chiede i privilegi di amministratore (UAC → *Sì*)
 - usa `setup-pc.ps1` accanto se c'è, altrimenti scarica l'ultima versione
 - avvia con ExecutionPolicy Bypass
@@ -156,7 +156,7 @@ aziendali (Group Policy, AppLocker) **non** si applicano al PC fresco. Il rischi
 solo che il **firewall/proxy blocchi i download**:
 
 - **GitHub bloccato** → usa la modalità **offline**: tieni `setup-pc.ps1` accanto ad
-  `Avvia.bat` (niente download).
+  `PC Facile.bat` (niente download).
 - **Winget/CDN Microsoft bloccati** → le app non si installano (il report lo segnala).
   Rimedio: **hotspot del telefono** per la fase installazioni, o installa dopo su rete
   senza filtri.

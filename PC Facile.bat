@@ -1,7 +1,7 @@
 @echo off
-title Avvio PC Pro
+title PC Facile
 REM ============================================================
-REM  Avvia.bat - launcher doppio-click per setup-pc.ps1
+REM  PC Facile.bat - launcher doppio-click per setup-pc.ps1
 REM  - Si auto-eleva ad amministratore (UAC)
 REM  - Parte SEMPRE con ExecutionPolicy Bypass (niente errori di blocco)
 REM  - Usa setup-pc.ps1 accanto (offline) o lo scarica da GitHub

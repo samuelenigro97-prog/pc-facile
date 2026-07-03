@@ -55,7 +55,7 @@ function Pausa {
 # Un solo tasto, senza INVIO: D=diagnostica, T=test, C/INVIO/altro=configura.
 if (-not $Test -and -not $Diagnostica) {
     try { Clear-Host } catch {}
-    Write-Titolo "AVVIO PC PRO   -   versione $SCRIPT_VERSION"
+    Write-Titolo "PC FACILE   -   versione $SCRIPT_VERSION"
     Write-Host "  Premi un tasto:" -ForegroundColor White
     Write-Host ""
     Write-Host "    [C] Configura il PC   (installa e imposta)"
@@ -262,7 +262,7 @@ try {
 
 Write-Info "PowerShell: $($PSVersionTable.PSVersion) ($($PSVersionTable.PSEdition))"
 if ($PSVersionTable.PSEdition -eq 'Core') {
-    Write-Info "Consiglio: usa Windows PowerShell 5.1 (Avvia.bat lo fa gia'). Su PowerShell 7"
+    Write-Info "Consiglio: usa Windows PowerShell 5.1 (PC Facile.bat lo fa gia'). Su PowerShell 7"
     Write-Info "  l'installazione di riserva di winget (Add-AppxPackage) puo' non funzionare."
 }
 
@@ -271,7 +271,7 @@ if ($PSVersionTable.PSEdition -eq 'Core') {
 if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) {
     Write-Errore "Stai usando PowerShell a 32-bit (x86) su Windows a 64-bit."
     Write-Info "winget puo' fallire. Chiudi e apri 'Windows PowerShell' NORMALE (64-bit),"
-    Write-Info "  NON la voce con '(x86)'. Oppure usa Avvia.bat (parte a 64-bit)."
+    Write-Info "  NON la voce con '(x86)'. Oppure usa PC Facile.bat (parte a 64-bit)."
     Pausa
 }
 
@@ -364,7 +364,7 @@ foreach ($e in $endpoints) {
 }
 if ($bloccati -gt 0) {
     Write-Info "$bloccati servizio/i non raggiungibile/i: probabile firewall o proxy aziendale."
-    Write-Info "Rimedi: tieni setup-pc.ps1 accanto ad Avvia.bat (evita GitHub); per le"
+    Write-Info "Rimedi: tieni setup-pc.ps1 accanto ad PC Facile.bat (evita GitHub); per le"
     Write-Info "  installazioni app usa un hotspot o una rete senza filtri."
     Add-Report "Rete: $bloccati servizio/i bloccato/i" "AVVISO"
     Pausa
@@ -549,7 +549,6 @@ if ($Diagnostica) {
             @{ N = "WhatsApp";             Id = "9NKSQGP7F2NH" },
             @{ N = "Sumatra PDF";          Id = "SumatraPDF.SumatraPDF" },
             @{ N = "AIMP";                 Id = "AIMP.AIMP" },
-            @{ N = "Skype";                Id = "Microsoft.Skype" },
             @{ N = "GIMP";                 Id = "GIMP.GIMP" },
             @{ N = "TeamViewer";           Id = "TeamViewer.TeamViewer" },
             @{ N = "qBittorrent";          Id = "qBittorrent.qBittorrent" },
@@ -1126,7 +1125,6 @@ $appsDisponibili = @(
     @{ Nome = "AIMP";               Id = "AIMP.AIMP" },
     @{ Nome = "7-Zip";              Id = "7zip.7zip" },
     @{ Nome = "WhatsApp";           Id = "9NKSQGP7F2NH" },
-    @{ Nome = "Skype";              Id = "Microsoft.Skype" },
     @{ Nome = "GIMP";               Id = "GIMP.GIMP" },
     @{ Nome = "Steam";              Id = "Valve.Steam" },
     @{ Nome = "AnyDesk";            Id = "AnyDesk.AnyDesk" },
@@ -1140,7 +1138,7 @@ $appsDisponibili = @(
 # I browser (Chrome/Firefox) restano nello STEP 5, qui non inclusi.
 $profili = [ordered]@{
     "BASE"    = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","TeamViewer.TeamViewer")
-    "UFFICIO" = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","TeamViewer.TeamViewer","Zoom.Zoom","Spotify.Spotify","Microsoft.Skype","GIMP.GIMP","SumatraPDF.SumatraPDF")
+    "UFFICIO" = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","TeamViewer.TeamViewer","Zoom.Zoom","Spotify.Spotify","GIMP.GIMP","SumatraPDF.SumatraPDF")
     "GAMING"  = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","TeamViewer.TeamViewer","Valve.Steam","Discord.Discord","qBittorrent.qBittorrent")
 }
 
@@ -1157,7 +1155,7 @@ function Installa-Set {
 
 Write-Host "Scegli come installare le applicazioni:" -ForegroundColor White
 Write-Host "  1) PROFILO BASE     (VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk, TeamViewer)"
-Write-Host "  2) PROFILO UFFICIO  (BASE + Zoom, Spotify, Skype, GIMP, Sumatra PDF)"
+Write-Host "  2) PROFILO UFFICIO  (BASE + Zoom, Spotify, GIMP, Sumatra PDF)"
 Write-Host "  3) PROFILO GAMING   (BASE + Steam, Discord, qBittorrent)"
 Write-Host "  4) COMPLETO         (tutte le app in lista)"
 Write-Host "  5) MANUALE          (scelgo io i singoli numeri)"
@@ -1471,7 +1469,7 @@ if ($RunReale) {
         $f += "  Altro             : ______________________________"
         $f += ""
         $f += "============================================================"
-        $f += "Avvio PC Pro - versione $SCRIPT_VERSION"
+        $f += "PC Facile - versione $SCRIPT_VERSION"
 
         $riepFile = Join-Path (Get-DesktopDir) ("Riepilogo-PC_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmm"))
         $f | Set-Content -Path $riepFile -Encoding UTF8
