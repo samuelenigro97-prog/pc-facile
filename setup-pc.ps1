@@ -572,12 +572,13 @@ Pausa
 
 Write-Titolo "STEP 1 - Nome Completo Cliente"
 
-# Get-LocalUser puo' fallire (account Microsoft/dominio, modulo assente): protetto
+# Legge il nome visualizzato attuale: prima LocalAccounts, poi ADSI (che
+# funziona anche in PowerShell x86, dove il modulo LocalAccounts non c'e').
 $nomeAttuale = $null
 try {
     $nomeAttuale = (Get-LocalUser -Name $env:USERNAME -ErrorAction Stop).FullName
 } catch {
-    Write-Info "Impossibile leggere il nome attuale (account non locale?): proseguo."
+    try { $nomeAttuale = ([ADSI]"WinNT://./$env:USERNAME,user").FullName } catch {}
 }
 Write-Info "Utente corrente: $env:USERNAME"
 Write-Info "Nome visualizzato attuale: $(if ($nomeAttuale) { $nomeAttuale } else { '(non impostato)' })"
@@ -586,12 +587,25 @@ Write-Host ""
 $nomeCliente = Read-Host "Inserisci il nome completo del cliente (es. Mario Rossi)"
 
 if ($nomeCliente.Trim() -ne "") {
+    $nomeOk = $false
+    # 1) Metodo moderno (modulo LocalAccounts, disponibile solo in PowerShell 64-bit)
     try {
         Set-LocalUser -Name $env:USERNAME -FullName $nomeCliente.Trim() -ErrorAction Stop
+        $nomeOk = $true
+    } catch {
+        # 2) Fallback ADSI/WinNT: funziona anche in x86 e senza il modulo LocalAccounts
+        try {
+            $u = [ADSI]"WinNT://./$env:USERNAME,user"
+            $u.FullName = $nomeCliente.Trim()
+            $u.SetInfo()
+            $nomeOk = $true
+        } catch {}
+    }
+    if ($nomeOk) {
         Write-OK "Nome utente aggiornato a: $($nomeCliente.Trim())"
         Add-Report "Nome cliente" "OK"
-    } catch {
-        Write-Errore "Impossibile aggiornare il nome (account Microsoft/dominio?): $_"
+    } else {
+        Write-Errore "Impossibile aggiornare il nome visualizzato dell'account $env:USERNAME."
         Add-Report "Nome cliente" "ERRORE"
     }
 } else {
@@ -762,9 +776,10 @@ function Installa-Antivirus {
     Read-Host "Premi INVIO QUANDO IL DOWNLOAD E' FINITO"
 
     # L'installer ha nome variabile: cerco l'.exe piu' recente in Download e Desktop
+    # (finestra ampia: la registrazione online puo' richiedere tempo)
     $cartelle = @((Join-Path $env:USERPROFILE "Downloads"), (Get-DesktopDir)) | Select-Object -Unique
     $recente = Get-ChildItem -Path $cartelle -Filter "*.exe" -ErrorAction SilentlyContinue |
-        Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-20) } |
+        Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-60) } |
         Sort-Object LastWriteTime -Descending |
         Select-Object -First 1
 
@@ -780,9 +795,21 @@ function Installa-Antivirus {
             Add-Report "$Nome (antivirus)" "SALTATO"
         }
     } else {
-        Write-Info "Nessun .exe recente (ultimi 20 min) in Download o Desktop."
-        Write-Info "Avvia l'installer $Nome manualmente."
-        Add-Report "$Nome (antivirus)" "ERRORE"
+        # Non e' un errore dello script: l'installer non e' ancora stato scaricato.
+        Write-Info "Nessun .exe recente (ultimi 60 min) in Download o Desktop."
+        $percorso = Read-Host "Incolla il percorso completo dell'installer $Nome (INVIO per saltare)"
+        $percorso = $percorso.Trim('"').Trim()
+        if ($percorso -ne "" -and (Test-Path $percorso)) {
+            Start-Process -FilePath $percorso
+            Write-OK "Installer $Nome avviato."
+            Add-Report "$Nome (antivirus)" "OK"
+        } elseif ($percorso -ne "") {
+            Write-Errore "Percorso non valido: $percorso"
+            Add-Report "$Nome (antivirus)" "ERRORE"
+        } else {
+            Write-Info "$Nome: installer da avviare a mano piu' tardi."
+            Add-Report "$Nome (antivirus)" "AVVISO"
+        }
     }
 }
 
