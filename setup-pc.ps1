@@ -542,7 +542,7 @@ if ($Diagnostica) {
             @{ N = "Adobe Acrobat Reader"; Id = "Adobe.Acrobat.Reader.64-bit" },
             @{ N = "Spotify";              Id = "Spotify.Spotify" },
             @{ N = "7-Zip";                Id = "7zip.7zip" },
-            @{ N = "WhatsApp";             Id = "9NKSQGP7F2NH" },
+            @{ N = "WhatsApp";             Id = "WhatsApp.WhatsApp" },
             @{ N = "Sumatra PDF";          Id = "SumatraPDF.SumatraPDF" },
             @{ N = "AIMP";                 Id = "AIMP.AIMP" },
             @{ N = "GIMP";                 Id = "GIMP.GIMP" },
@@ -1212,7 +1212,7 @@ $appsDisponibili = @(
     @{ Nome = "Spotify";            Id = "Spotify.Spotify" },
     @{ Nome = "AIMP";               Id = "AIMP.AIMP" },
     @{ Nome = "7-Zip";              Id = "7zip.7zip" },
-    @{ Nome = "WhatsApp";           Id = "9NKSQGP7F2NH" },
+    @{ Nome = "WhatsApp";           Id = "WhatsApp.WhatsApp" },
     @{ Nome = "GIMP";               Id = "GIMP.GIMP" },
     @{ Nome = "Steam";              Id = "Valve.Steam" },
     @{ Nome = "AnyDesk";            Id = "AnyDesk.AnyDesk" },
@@ -1225,9 +1225,9 @@ $appsDisponibili = @(
 # Preset profili: sottoinsiemi della lista sopra (per winget Id).
 # I browser (Chrome/Firefox) restano nello STEP 5, qui non inclusi.
 $profili = [ordered]@{
-    "BASE"    = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","TeamViewer.TeamViewer")
-    "UFFICIO" = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","TeamViewer.TeamViewer","Zoom.Zoom","Spotify.Spotify","GIMP.GIMP","SumatraPDF.SumatraPDF")
-    "GAMING"  = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","TeamViewer.TeamViewer","Valve.Steam","Discord.Discord","qBittorrent.qBittorrent")
+    "BASE"    = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","WhatsApp.WhatsApp","AnyDesk.AnyDesk","TeamViewer.TeamViewer")
+    "UFFICIO" = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","WhatsApp.WhatsApp","AnyDesk.AnyDesk","TeamViewer.TeamViewer","Zoom.Zoom","Spotify.Spotify","GIMP.GIMP","SumatraPDF.SumatraPDF")
+    "GAMING"  = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","WhatsApp.WhatsApp","AnyDesk.AnyDesk","TeamViewer.TeamViewer","Valve.Steam","Discord.Discord","qBittorrent.qBittorrent")
 }
 
 # Installa gli app della lista il cui Id e' nel set passato
