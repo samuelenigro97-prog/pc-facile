@@ -14,6 +14,10 @@ param(
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
+# Versione del programma (mostrata nell'header e nel riepilogo).
+# Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
+$SCRIPT_VERSION = "1.3 (2026-07-03)"
+
 # =============================================================================
 # FUNZIONI UTILITY
 # =============================================================================
@@ -51,7 +55,7 @@ function Pausa {
 # Un solo tasto, senza INVIO: D=diagnostica, T=test, C/INVIO/altro=configura.
 if (-not $Test -and -not $Diagnostica) {
     try { Clear-Host } catch {}
-    Write-Titolo "AVVIO PC PRO"
+    Write-Titolo "AVVIO PC PRO   -   versione $SCRIPT_VERSION"
     Write-Host "  Premi un tasto:" -ForegroundColor White
     Write-Host ""
     Write-Host "    [C] Configura il PC   (installa e imposta)"
@@ -185,10 +189,10 @@ try {
     $sac = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy" `
             -Name VerifiedAndReputablePolicyState -ErrorAction SilentlyContinue).VerifiedAndReputablePolicyState
     if ($sac -eq 1) {
-        Write-Errore "Smart App Control ATTIVO: puo' bloccare script e installer scaricati."
-        Write-Info "Per disattivarlo: Sicurezza di Windows > Controllo app e browser >"
-        Write-Info "  Controllo intelligente delle app > Disattivato."
-        Write-Info "ATTENZIONE: la disattivazione e' IRREVERSIBILE senza reinstallare Windows."
+        Write-Host "[AVVISO] Smart App Control ATTIVO: potrebbe bloccare alcuni installer scaricati." -ForegroundColor Yellow
+        Write-Info "Se un'installazione viene bloccata: Sicurezza di Windows > Controllo app e browser >"
+        Write-Info "  Controllo intelligente delle app > Disattivato (IRREVERSIBILE senza reinstallare Windows)."
+        Write-Info "Puoi comunque proseguire: molte app (firmate/reputate) si installano lo stesso."
         Pausa
     }
 } catch {}
@@ -491,7 +495,7 @@ function Installa-Pacchetto {
 # =============================================================================
 
 if ($Diagnostica) {
-    Write-Titolo "DIAGNOSTICA - Nessuna modifica al sistema"
+    Write-Titolo "DIAGNOSTICA (v$SCRIPT_VERSION) - Nessuna modifica al sistema"
 
     # Ambiente
     if ([Environment]::Is64BitOperatingSystem -and -not [Environment]::Is64BitProcess) {
@@ -1423,6 +1427,7 @@ if ($RunReale) {
         $f += "  Altro             : ______________________________"
         $f += ""
         $f += "============================================================"
+        $f += "Avvio PC Pro - versione $SCRIPT_VERSION"
 
         $riepFile = Join-Path (Get-DesktopDir) ("Riepilogo-PC_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmm"))
         $f | Set-Content -Path $riepFile -Encoding UTF8
