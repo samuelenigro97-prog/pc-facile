@@ -560,27 +560,48 @@ if ($Diagnostica) {
 
         Write-Host ""
         Write-Info "Verifica ID pacchetti con 'winget show' (nessuna installazione)..."
-        $ko = 0
+        $ko = 0; $installati = 0
         foreach ($p in $tuttiId) {
             $src = @()
             if ($p.Id -match '^[A-Z0-9]{12}$') { $src = @('--source', 'msstore') }
             winget show --exact --id $p.Id @src --accept-source-agreements 2>$null | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                Write-OK "OK   $($p.N)  [$($p.Id)]"
+            $valido = ($LASTEXITCODE -eq 0)
+            winget list --exact --id $p.Id @src --accept-source-agreements 2>$null | Out-Null
+            $gia = ($LASTEXITCODE -eq 0)
+            if ($valido) {
+                if ($gia) { Write-OK "OK   $($p.N)  [gia' installato]"; $installati++ }
+                else { Write-OK "OK   $($p.N)  [$($p.Id)]" }
             } else {
                 Write-Errore "KO   $($p.N)  [$($p.Id)]  (codice $LASTEXITCODE)"
                 $ko++
             }
         }
         Write-Host ""
-        if ($ko -eq 0) {
-            Write-OK "Tutti gli ID pacchetti sono validi."
-        } else {
-            Write-Errore "$ko ID pacchetto/i non risolti: da correggere nello script."
-        }
+        Write-Host ("Riepilogo pacchetti: {0} validi, {1} KO, {2} gia' installati (su {3})" -f ($tuttiId.Count - $ko), $ko, $installati, $tuttiId.Count) -ForegroundColor Cyan
+        if ($ko -eq 0) { Write-OK "Tutti gli ID pacchetti sono validi." }
+        else { Write-Errore "$ko ID pacchetto/i non risolti: da correggere nello script." }
     } else {
         Write-Errore "winget NON disponibile: impossibile validare i pacchetti."
     }
+
+    # Test scrittura sul Desktop (il report/riepilogo finale si salva qui)
+    Write-Host ""
+    try {
+        $tf = Join-Path (Get-DesktopDir) "pcfacile_test.tmp"
+        "test" | Set-Content -Path $tf -ErrorAction Stop
+        Remove-Item $tf -Force -ErrorAction SilentlyContinue
+        Write-OK "Desktop scrivibile (report/riepilogo OK): $(Get-DesktopDir)"
+    } catch {
+        Write-Errore "Desktop NON scrivibile: il file riepilogo potrebbe non salvarsi."
+    }
+
+    # Office installato? (per attivazione perpetuo serve ospp.vbs)
+    $ospp = @(
+        "$env:ProgramFiles\Microsoft Office\Office16\ospp.vbs",
+        "${env:ProgramFiles(x86)}\Microsoft Office\Office16\ospp.vbs"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($ospp) { Write-OK "Office installato (ospp.vbs trovato): attivazione perpetuo possibile." }
+    else { Write-Info "Office non ancora installato (ospp.vbs assente): normale su PC nuovo." }
 
     Write-Host ""
     Write-Info "Diagnostica completata. Nessuna modifica effettuata al sistema."
