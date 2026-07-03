@@ -521,6 +521,12 @@ if ($Diagnostica) {
             @{ N = "Spotify";              Id = "Spotify.Spotify" },
             @{ N = "7-Zip";                Id = "7zip.7zip" },
             @{ N = "WhatsApp";             Id = "9NKSQGP7F2NH" },
+            @{ N = "Sumatra PDF";          Id = "SumatraPDF.SumatraPDF" },
+            @{ N = "AIMP";                 Id = "AIMP.AIMP" },
+            @{ N = "Skype";                Id = "Microsoft.Skype" },
+            @{ N = "GIMP";                 Id = "GIMP.GIMP" },
+            @{ N = "TeamViewer";           Id = "TeamViewer.TeamViewer" },
+            @{ N = "qBittorrent";          Id = "qBittorrent.qBittorrent" },
             @{ N = "Steam";                Id = "Valve.Steam" },
             @{ N = "AnyDesk";              Id = "AnyDesk.AnyDesk" },
             @{ N = "Discord";              Id = "Discord.Discord" },
@@ -1074,11 +1080,17 @@ Write-Titolo "STEP 6 - Applicazioni Base"
 $appsDisponibili = @(
     @{ Nome = "VLC Media Player";   Id = "VideoLAN.VLC" },
     @{ Nome = "Adobe Acrobat Reader"; Id = "Adobe.Acrobat.Reader.64-bit" },
+    @{ Nome = "Sumatra PDF";        Id = "SumatraPDF.SumatraPDF" },
     @{ Nome = "Spotify";            Id = "Spotify.Spotify" },
+    @{ Nome = "AIMP";               Id = "AIMP.AIMP" },
     @{ Nome = "7-Zip";              Id = "7zip.7zip" },
     @{ Nome = "WhatsApp";           Id = "9NKSQGP7F2NH" },
+    @{ Nome = "Skype";              Id = "Microsoft.Skype" },
+    @{ Nome = "GIMP";               Id = "GIMP.GIMP" },
     @{ Nome = "Steam";              Id = "Valve.Steam" },
     @{ Nome = "AnyDesk";            Id = "AnyDesk.AnyDesk" },
+    @{ Nome = "TeamViewer";         Id = "TeamViewer.TeamViewer" },
+    @{ Nome = "qBittorrent";        Id = "qBittorrent.qBittorrent" },
     @{ Nome = "Discord";            Id = "Discord.Discord" },
     @{ Nome = "Zoom";               Id = "Zoom.Zoom" }
 )
@@ -1086,9 +1098,9 @@ $appsDisponibili = @(
 # Preset profili: sottoinsiemi della lista sopra (per winget Id).
 # I browser (Chrome/Firefox) restano nello STEP 5, qui non inclusi.
 $profili = [ordered]@{
-    "BASE"    = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk")
-    "UFFICIO" = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","Zoom.Zoom","Spotify.Spotify")
-    "GAMING"  = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","Valve.Steam","Discord.Discord")
+    "BASE"    = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","TeamViewer.TeamViewer")
+    "UFFICIO" = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","TeamViewer.TeamViewer","Zoom.Zoom","Spotify.Spotify","Microsoft.Skype","GIMP.GIMP","SumatraPDF.SumatraPDF")
+    "GAMING"  = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","TeamViewer.TeamViewer","Valve.Steam","Discord.Discord","qBittorrent.qBittorrent")
 }
 
 # Installa gli app della lista il cui Id e' nel set passato
@@ -1103,9 +1115,9 @@ function Installa-Set {
 }
 
 Write-Host "Scegli come installare le applicazioni:" -ForegroundColor White
-Write-Host "  1) PROFILO BASE     (VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk)"
-Write-Host "  2) PROFILO UFFICIO  (BASE + Zoom, Spotify)"
-Write-Host "  3) PROFILO GAMING   (BASE + Steam, Discord)"
+Write-Host "  1) PROFILO BASE     (VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk, TeamViewer)"
+Write-Host "  2) PROFILO UFFICIO  (BASE + Zoom, Spotify, Skype, GIMP, Sumatra PDF)"
+Write-Host "  3) PROFILO GAMING   (BASE + Steam, Discord, qBittorrent)"
 Write-Host "  4) COMPLETO         (tutte le app in lista)"
 Write-Host "  5) MANUALE          (scelgo io i singoli numeri)"
 Write-Host "  S) Salta"
@@ -1179,7 +1191,7 @@ $bloatwareAppx = @(
     "Microsoft.BingNews", "Microsoft.BingWeather", "Microsoft.BingSearch",
     "Microsoft.GetHelp", "Microsoft.Getstarted", "Microsoft.Microsoft3DViewer",
     "Microsoft.MicrosoftSolitaireCollection", "Microsoft.MixedReality.Portal",
-    "Microsoft.People", "Microsoft.SkypeApp", "Microsoft.WindowsFeedbackHub",
+    "Microsoft.People", "Microsoft.WindowsFeedbackHub",
     "Microsoft.ZuneMusic", "Microsoft.ZuneVideo", "Microsoft.Windows.DevHome",
     "Microsoft.Todos", "MicrosoftCorporationII.QuickAssist", "Clipchamp.Clipchamp",
     "king.com.*", "*.CandyCrush*",
@@ -1396,7 +1408,18 @@ if ($RunReale) {
         $f += "NOTE / CREDENZIALI (da compilare a mano)"
         $f += $sep
         $f += "  Account Microsoft : ______________________________"
-        $f += "  App mobile        : ______________________________"
+        $f += "  Password          : ______________________________"
+        # Campi dedicati per ogni antivirus/protezione attivato in questa sessione
+        foreach ($a in $av) {
+            $nomeSvc = ($a.Voce -replace ' \(antivirus\)', '' -replace ' \(protezione\)', '').Trim()
+            $f += ""
+            $f += "  [$nomeSvc]"
+            $f += "  Email/utente account : ______________________________"
+            $f += "  Password account     : ______________________________"
+            $f += "  Codice/PIN licenza   : ______________________________"
+            $f += "  Credenziali app      : ______________________________"
+        }
+        $f += ""
         $f += "  Altro             : ______________________________"
         $f += ""
         $f += "============================================================"
