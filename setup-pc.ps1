@@ -914,6 +914,89 @@ switch ($sceltaApps) {
 Pausa
 
 # =============================================================================
+# STEP 7 - RIMOZIONE APP SUPERFLUE (BLOATWARE) - opzionale
+# =============================================================================
+
+Write-Titolo "STEP 7 - Rimozione App Superflue (Bloatware)"
+
+Write-Host "Rimuove app preinstallate raramente usate (giochi, Bing, Skype, ecc.)." -ForegroundColor White
+Write-Host "NON tocca: Store, Foto, Calcolatrice, Media Player, Xbox, browser, Office." -ForegroundColor White
+Write-Host ""
+
+# Lista conservativa di app comunemente considerate superflue (con wildcard sul nome)
+$bloatware = @(
+    "Microsoft.BingNews",
+    "Microsoft.BingWeather",
+    "Microsoft.GetHelp",
+    "Microsoft.Getstarted",
+    "Microsoft.Microsoft3DViewer",
+    "Microsoft.MicrosoftSolitaireCollection",
+    "Microsoft.MixedReality.Portal",
+    "Microsoft.People",
+    "Microsoft.SkypeApp",
+    "Microsoft.WindowsFeedbackHub",
+    "Microsoft.ZuneMusic",
+    "Microsoft.ZuneVideo",
+    "Microsoft.Windows.DevHome",
+    "Clipchamp.Clipchamp",
+    "king.com.CandyCrushSaga",
+    "king.com.CandyCrushSodaSaga"
+)
+
+$vuoiDebloat = Read-Host "Rimuovere le app superflue elencate? (S/N)"
+if ($vuoiDebloat -match "^[Ss]") {
+    $rimosse = 0
+    foreach ($pkg in $bloatware) {
+        try {
+            $trovati = Get-AppxPackage -AllUsers -Name $pkg -ErrorAction SilentlyContinue
+            foreach ($t in $trovati) {
+                Remove-AppxPackage -Package $t.PackageFullName -AllUsers -ErrorAction SilentlyContinue
+                $rimosse++
+            }
+            # Rimuovi anche il provisioning: i nuovi utenti non le riavranno
+            Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -like $pkg } |
+                ForEach-Object { Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction SilentlyContinue | Out-Null }
+        } catch {}
+    }
+    Write-OK "Rimozione completata ($rimosse pacchetti rimossi)."
+    Add-Report "Rimozione bloatware ($rimosse rimossi)" "OK"
+} else {
+    Write-Info "Rimozione bloatware saltata."
+    Add-Report "Rimozione bloatware" "SALTATO"
+}
+
+Pausa
+
+# =============================================================================
+# STEP 8 - AGGIORNAMENTO APP INSTALLATE - opzionale
+# =============================================================================
+
+Write-Titolo "STEP 8 - Aggiornamento App Installate"
+
+Write-Host "Aggiorna all'ultima versione le app gestite da winget (incluse molte OEM)." -ForegroundColor White
+Write-Host "Puo' richiedere diversi minuti. NB: i DRIVER si aggiornano da Windows Update." -ForegroundColor White
+Write-Host ""
+
+$vuoiUpgrade = Read-Host "Aggiornare ora tutte le app installate? (S/N)"
+if ($vuoiUpgrade -match "^[Ss]") {
+    if (Confirm-Winget) {
+        Write-Info "Aggiornamento in corso (puo' richiedere diversi minuti)..."
+        winget upgrade --all --silent --accept-package-agreements --accept-source-agreements --include-unknown
+        Write-OK "Aggiornamento app completato."
+        Add-Report "Aggiornamento app installate" "OK"
+    } else {
+        Write-Errore "Winget non disponibile."
+        Add-Report "Aggiornamento app installate" "ERRORE"
+    }
+} else {
+    Write-Info "Aggiornamento app saltato."
+    Add-Report "Aggiornamento app installate" "SALTATO"
+}
+
+Pausa
+
+# =============================================================================
 # FINE
 # =============================================================================
 
