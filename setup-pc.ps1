@@ -16,7 +16,17 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "2.7 (2026-07-04)"
+$SCRIPT_VERSION = "2.8 (2026-07-04)"
+
+# Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
+# dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
+# storpierebbe). L'output e' gia' UTF-8 (impostato sopra), quindi si vedono.
+$SYM_OK    = [char]0x2713                  # spunta
+$SYM_ERR   = [char]0x2717                  # croce
+$SYM_INFO  = [char]0x2192                  # freccia
+$BOX_FULL  = [char]0x2588                  # blocco pieno (barra progresso)
+$BOX_EMPTY = [char]0x2591                  # blocco leggero (barra progresso)
+$LINEA_D   = ([string][char]0x2550) * 60   # linea doppia orizzontale
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -25,25 +35,25 @@ $SCRIPT_VERSION = "2.7 (2026-07-04)"
 function Write-Titolo {
     param([string]$Testo)
     Write-Host ""
-    Write-Host "============================================================" -ForegroundColor Cyan
-    Write-Host "  $Testo" -ForegroundColor Cyan
-    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "  $LINEA_D" -ForegroundColor Cyan
+    Write-Host "   $Testo" -ForegroundColor White
+    Write-Host "  $LINEA_D" -ForegroundColor Cyan
     Write-Host ""
 }
 
 function Write-OK {
     param([string]$Testo)
-    Write-Host "[OK] $Testo" -ForegroundColor Green
+    Write-Host "   $SYM_OK  $Testo" -ForegroundColor Green
 }
 
 function Write-Info {
     param([string]$Testo)
-    Write-Host "[INFO] $Testo" -ForegroundColor Yellow
+    Write-Host "   $SYM_INFO  $Testo" -ForegroundColor Yellow
 }
 
 function Write-Errore {
     param([string]$Testo)
-    Write-Host "[ERRORE] $Testo" -ForegroundColor Red
+    Write-Host "   $SYM_ERR  $Testo" -ForegroundColor Red
 }
 
 function Pausa {
@@ -55,19 +65,26 @@ function Pausa {
 # Un solo tasto, senza INVIO: D=diagnostica, T=test, C/INVIO/altro=configura.
 if (-not $Test -and -not $Diagnostica) {
     try { Clear-Host } catch {}
-    Write-Titolo "PC FACILE   -   versione $SCRIPT_VERSION"
+    $larg = 56
+    $titoloB = "PC FACILE   -   versione $SCRIPT_VERSION"
+    $padSx = [int](($larg - $titoloB.Length) / 2)
+    $padDx = $larg - $padSx - $titoloB.Length
+    Write-Host ("  " + [char]0x2554 + (([string][char]0x2550) * $larg) + [char]0x2557) -ForegroundColor Cyan
+    Write-Host ("  " + [char]0x2551 + (" " * $padSx) + $titoloB + (" " * $padDx) + [char]0x2551) -ForegroundColor White
+    Write-Host ("  " + [char]0x255A + (([string][char]0x2550) * $larg) + [char]0x255D) -ForegroundColor Cyan
+    Write-Host ""
     Write-Host "  Premi un tasto:" -ForegroundColor White
     Write-Host ""
-    Write-Host "    [C] Configura il PC   (installa e imposta)"
-    Write-Host "    [D] Diagnostica       (controlla, NON installa)"
-    Write-Host "    [T] Test a vuoto      (percorre tutto, NON installa)"
+    Write-Host "    [C]" -ForegroundColor Cyan -NoNewline; Write-Host " Configura il PC   (installa e imposta)" -ForegroundColor White
+    Write-Host "    [D]" -ForegroundColor Cyan -NoNewline; Write-Host " Diagnostica       (controlla, NON installa)" -ForegroundColor White
+    Write-Host "    [T]" -ForegroundColor Cyan -NoNewline; Write-Host " Test a vuoto      (percorre tutto, NON installa)" -ForegroundColor White
     Write-Host ""
     Write-Host "  (C oppure INVIO = Configura)" -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "  LEGENDA TASTI:" -ForegroundColor White
-    Write-Host "    Nei menu    : premi la LETTERA o il NUMERO indicato" -ForegroundColor DarkGray
+    Write-Host "    Nei menu     : premi la LETTERA o il NUMERO indicato" -ForegroundColor DarkGray
     Write-Host "    Nelle domande: S = si, N = no" -ForegroundColor DarkGray
-    Write-Host "    A fine passo : INVIO = avanti, B o CANC = torna indietro" -ForegroundColor DarkGray
+    Write-Host "    Fine passo   : si avanza automaticamente" -ForegroundColor DarkGray
     Write-Host "    Per uscire   : chiudi la finestra" -ForegroundColor DarkGray
 
     $tasto = ""
@@ -1105,7 +1122,11 @@ if ($vuoiConfig -match "^[Ss]") { Pausa }
 $passo = 1
 while ($passo -ge 1 -and $passo -le 8) {
 Write-Host ""
-Write-Host ("  [ Passo $passo di 8 ]") -ForegroundColor DarkCyan
+$barLen = 20
+$pieni = [int]($barLen * $passo / 8)
+if ($pieni -gt $barLen) { $pieni = $barLen }
+$bar = (([string]$BOX_FULL) * $pieni) + (([string]$BOX_EMPTY) * ($barLen - $pieni))
+Write-Host ("  Passo $passo/8  [$bar]") -ForegroundColor DarkCyan
 switch ($passo) {
 1 {
 # =============================================================================
