@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "3.1 (2026-07-04)"
+$SCRIPT_VERSION = "3.2 (2026-07-04)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -28,14 +28,41 @@ $BOX_FULL  = [char]0x2588                  # blocco pieno (barra progresso)
 $BOX_EMPTY = [char]0x2591                  # blocco leggero (barra progresso)
 $LINEA_D   = ([string][char]0x2550) * 60   # linea doppia orizzontale
 
-# Tema colori: Unieuro = ARANCIONE (#EE7203) + navy + bianco. La console legacy
-# (conhost, che parte col doppio-click del .bat) ha solo 16 colori con nome e
-# NON ha l'arancione; l'hex esatto vorrebbe ANSI truecolor, ma servirebbe
-# abilitare il VT via P/Invoke - vietato perche' l'antivirus lo segnala come
-# codice sospetto. Quindi 'DarkYellow' e' l'ambra/arancio piu' vicino sicuro.
-# Cambia $THEME_COL per ritinteggiare tutto.
-$THEME_COL = "DarkYellow"   # colore decorativo: bordi, banner, barra, accenti
-$THEME_TXT = "White"    # testo dei titoli
+# Tema colori: Unieuro = ARANCIONE (#EE7203) + navy + bianco.
+# La console conhost (parte col doppio-click del .bat) ha solo 16 colori con
+# nome e NON ha l'arancione. Per l'arancione ESATTO servono le sequenze ANSI
+# truecolor (24-bit), che pero' funzionano solo se il "Virtual Terminal" e'
+# abilitato. Lo abilitiamo SENZA P/Invoke (vietato: l'antivirus lo segnala)
+# scrivendo la chiave di registro HKCU\Console\VirtualTerminalLevel=1, che
+# conhost legge all'avvio di ogni nuova finestra.
+#
+# Logica: se il VT risulta gia' abilitato -> uso l'arancione vero via ANSI
+# ($AON/$AOFF avvolgono il testo). Altrimenti fallback pulito su 'DarkYellow'
+# (ambra, l'arancio piu' vicino tra i 16 nomi). In piu' scriviamo la chiave,
+# cosi' dai lanci successivi su quel PC parte l'arancione vero.
+$THEME_TXT = "White"    # testo dei titoli (bianco, come il payoff del logo)
+
+# La chiave vale per le finestre APERTE DOPO averla scritta: il primo giro su
+# un PC nuovo puo' essere ancora ambra, i successivi arancione.
+try {
+    if (-not (Test-Path 'HKCU:\Console')) { New-Item -Path 'HKCU:\Console' -Force | Out-Null }
+    Set-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -Value 1 -Type DWord -ErrorAction Stop
+} catch {}
+
+# Rileva se il VT e' attivo per QUESTA finestra (chiave gia' presente al lancio).
+$vtOn = $false
+try { $vtOn = ((Get-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction Stop).VirtualTerminalLevel -eq 1) } catch {}
+
+if ($vtOn) {
+    $ESC       = [char]27
+    $AON       = "$ESC[38;2;238;114;3m"   # arancione Unieuro #EE7203 (foreground)
+    $AOFF      = "$ESC[0m"                  # reset
+    $THEME_COL = "White"   # colore -ForegroundColor "di riserva"; l'ANSI ha priorita'
+} else {
+    $AON       = ""
+    $AOFF      = ""
+    $THEME_COL = "DarkYellow"   # ambra: fallback quando l'arancione vero non e' disponibile
+}
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -44,9 +71,9 @@ $THEME_TXT = "White"    # testo dei titoli
 function Write-Titolo {
     param([string]$Testo)
     Write-Host ""
-    Write-Host "  $LINEA_D" -ForegroundColor $THEME_COL
+    Write-Host "$AON  $LINEA_D$AOFF" -ForegroundColor $THEME_COL
     Write-Host "   $Testo" -ForegroundColor $THEME_TXT
-    Write-Host "  $LINEA_D" -ForegroundColor $THEME_COL
+    Write-Host "$AON  $LINEA_D$AOFF" -ForegroundColor $THEME_COL
     Write-Host ""
 }
 
@@ -78,15 +105,15 @@ if (-not $Test -and -not $Diagnostica) {
     $titoloB = "PC FACILE   -   versione $SCRIPT_VERSION"
     $padSx = [int](($larg - $titoloB.Length) / 2)
     $padDx = $larg - $padSx - $titoloB.Length
-    Write-Host ("  " + [char]0x2554 + (([string][char]0x2550) * $larg) + [char]0x2557) -ForegroundColor $THEME_COL
+    Write-Host ("$AON  " + [char]0x2554 + (([string][char]0x2550) * $larg) + [char]0x2557 + "$AOFF") -ForegroundColor $THEME_COL
     Write-Host ("  " + [char]0x2551 + (" " * $padSx) + $titoloB + (" " * $padDx) + [char]0x2551) -ForegroundColor $THEME_TXT
-    Write-Host ("  " + [char]0x255A + (([string][char]0x2550) * $larg) + [char]0x255D) -ForegroundColor $THEME_COL
+    Write-Host ("$AON  " + [char]0x255A + (([string][char]0x2550) * $larg) + [char]0x255D + "$AOFF") -ForegroundColor $THEME_COL
     Write-Host ""
     Write-Host "  Premi un tasto:" -ForegroundColor White
     Write-Host ""
-    Write-Host "    [C]" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Configura il PC   (installa e imposta)" -ForegroundColor White
-    Write-Host "    [D]" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Diagnostica       (controlla, NON installa)" -ForegroundColor White
-    Write-Host "    [T]" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Test a vuoto      (percorre tutto, NON installa)" -ForegroundColor White
+    Write-Host "$AON    [C]$AOFF" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Configura il PC   (installa e imposta)" -ForegroundColor White
+    Write-Host "$AON    [D]$AOFF" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Diagnostica       (controlla, NON installa)" -ForegroundColor White
+    Write-Host "$AON    [T]$AOFF" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Test a vuoto      (percorre tutto, NON installa)" -ForegroundColor White
     Write-Host ""
     Write-Host "  (C oppure INVIO = Configura)" -ForegroundColor DarkGray
     Write-Host ""
@@ -103,9 +130,9 @@ if (-not $Test -and -not $Diagnostica) {
     } catch {
         $tasto = (Read-Host "Scelta (C/D/T)").ToUpper()   # fallback se ReadKey non disponibile
     }
-    if ($tasto -eq "D" -or $tasto -eq "2") { $Diagnostica = $true; Write-Host "  -> Diagnostica" -ForegroundColor $THEME_COL }
-    elseif ($tasto -eq "T" -or $tasto -eq "3") { $Test = $true; Write-Host "  -> Test a vuoto" -ForegroundColor $THEME_COL }
-    else { Write-Host "  -> Configura il PC" -ForegroundColor $THEME_COL }
+    if ($tasto -eq "D" -or $tasto -eq "2") { $Diagnostica = $true; Write-Host "$AON  -> Diagnostica$AOFF" -ForegroundColor $THEME_COL }
+    elseif ($tasto -eq "T" -or $tasto -eq "3") { $Test = $true; Write-Host "$AON  -> Test a vuoto$AOFF" -ForegroundColor $THEME_COL }
+    else { Write-Host "$AON  -> Configura il PC$AOFF" -ForegroundColor $THEME_COL }
     Write-Host ""
 }
 
@@ -1135,7 +1162,7 @@ $barLen = 20
 $pieni = [int]($barLen * $passo / 8)
 if ($pieni -gt $barLen) { $pieni = $barLen }
 $bar = (([string]$BOX_FULL) * $pieni) + (([string]$BOX_EMPTY) * ($barLen - $pieni))
-Write-Host ("  Passo $passo/8  [$bar]") -ForegroundColor $THEME_COL
+Write-Host ("$AON  Passo $passo/8  [$bar]$AOFF") -ForegroundColor $THEME_COL
 switch ($passo) {
 1 {
 # =============================================================================
@@ -1616,7 +1643,7 @@ if ($Report.Count -eq 0) {
     }
 
     Write-Host ""
-    Write-Host ("Totale: {0} OK, {1} ERRORE, {2} SALTATO, {3} AVVISO" -f $nOk, $nErrore, $nSaltato, $nAvviso) -ForegroundColor $THEME_COL
+    Write-Host ("$AON" + ("Totale: {0} OK, {1} ERRORE, {2} SALTATO, {3} AVVISO" -f $nOk, $nErrore, $nSaltato, $nAvviso) + "$AOFF") -ForegroundColor $THEME_COL
     if ($nErrore -gt 0) {
         Write-Host "Controlla le voci in ERRORE prima di consegnare il PC." -ForegroundColor Red
     }
@@ -1729,6 +1756,6 @@ if ($linguaCambiata) {
 }
 
 Write-Host ""
-Write-Host "Buon lavoro!" -ForegroundColor $THEME_COL
+Write-Host "${AON}Buon lavoro!$AOFF" -ForegroundColor $THEME_COL
 # Niente Pausa qui: l'unico "premi un tasto" e' quello finale del launcher .bat
 # ("Operazione terminata"), cosi' non si preme INVIO due volte.

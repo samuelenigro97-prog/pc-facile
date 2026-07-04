@@ -8,6 +8,11 @@ REM  - Usa setup-pc.ps1 accanto (offline) o lo scarica su file e lo lancia
 REM  Il MENU (Configura/Diagnostica/Test) e' nello script, prima schermata.
 REM ============================================================
 
+REM --- Abilita il Virtual Terminal della console (colori ANSI truecolor:
+REM     arancione Unieuro esatto). Solo una chiave di registro, niente P/Invoke.
+REM     In cima cosi' la finestra elevata (nuova) parte gia' coi colori veri. ---
+reg add "HKCU\Console" /v VirtualTerminalLevel /t REG_DWORD /d 1 /f >nul 2>&1
+
 REM --- Auto-elevazione: se non sono admin, mi rilancio come admin ---
 net session >nul 2>&1
 if %errorlevel% neq 0 (
