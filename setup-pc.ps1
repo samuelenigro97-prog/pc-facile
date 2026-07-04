@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "1.3 (2026-07-03)"
+$SCRIPT_VERSION = "1.4 (2026-07-04)"
 
 # =============================================================================
 # FUNZIONI UTILITY
