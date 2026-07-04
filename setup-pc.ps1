@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "1.8 (2026-07-04)"
+$SCRIPT_VERSION = "1.9 (2026-07-04)"
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -728,7 +728,8 @@ if ($impostaLingua -match "^[Ss]") {
     Add-Report "Lingua italiana (it-IT)" "SALTATO"
 }
 
-Pausa
+# Pausa per leggere l'esito solo se ho impostato la lingua; con N vado dritto.
+if ($impostaLingua -match "^[Ss]") { Pausa }
 
 # =============================================================================
 # PUNTO DI RIPRISTINO (rete di sicurezza prima delle modifiche)
@@ -759,7 +760,7 @@ if ($vuoiRestore -match "^[Ss]") {
     Add-Report "Punto di ripristino" "SALTATO"
 }
 
-Pausa
+if ($vuoiRestore -match "^[Ss]") { Pausa }
 
 # =============================================================================
 # ACCOUNT MICROSOFT (accedi/crea presto: velocizza Office e antivirus dopo)
@@ -782,7 +783,7 @@ if ($vuoiMs -match "^[Ss]") {
     Add-Report "Account Microsoft" "SALTATO"
 }
 
-Pausa
+if ($vuoiMs -match "^[Ss]") { Pausa }
 
 # =============================================================================
 # RIMOZIONE ANTIVIRUS DI PROVA (all'inizio: evita conflitti e blocchi)
@@ -855,7 +856,7 @@ if ($vuoiRimAV -match "^[Ss]") {
     Add-Report "Antivirus di prova" "SALTATO"
 }
 
-Pausa
+if ($vuoiRimAV -match "^[Ss]") { Pausa }
 
 # =============================================================================
 # PASSI DI CONFIGURAZIONE (tasto B a fine passo = torna indietro)
