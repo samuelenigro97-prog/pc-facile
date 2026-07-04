@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "1.7 (2026-07-04)"
+$SCRIPT_VERSION = "1.8 (2026-07-04)"
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -1464,6 +1464,30 @@ if ($vuoiDebloat -match "^[Ss]") {
             }
         }
     }
+    # 3) Task pianificati all'avvio/logon: DISABILITO (non elimino) i junk noti.
+    #    Salto i task di sistema \Microsoft\Windows\ (non tocco l'OS) e NON
+    #    disabilito gli updater dei browser (servono per la sicurezza).
+    $taskJunk = @(
+        '*Adobe*', '*HP*', '*Lenovo*', '*Dell*', '*ASUS*', '*Acer*',
+        '*SupportAssist*', '*Vantage*', '*CCleaner*', '*WildTangent*',
+        '*ExpressVPN*', '*Java Update*', '*JavaUpdate*'
+    )
+    if (-not $mcafeeNostro) { $taskJunk += '*McAfee*' }
+    if (-not $nortonNostro) { $taskJunk += '*Norton*' }
+    try {
+        foreach ($tk in (Get-ScheduledTask -ErrorAction SilentlyContinue)) {
+            if ($tk.State -eq 'Disabled') { continue }
+            if ($tk.TaskPath -like '\Microsoft\Windows\*') { continue }   # OS: non toccare
+            $full = "$($tk.TaskPath)$($tk.TaskName)"
+            foreach ($pat in $taskJunk) {
+                if ($full -like $pat) {
+                    Disable-ScheduledTask -TaskName $tk.TaskName -TaskPath $tk.TaskPath -ErrorAction SilentlyContinue | Out-Null
+                    $avvioTolti++
+                    break
+                }
+            }
+        }
+    } catch {}
     if ($avvioTolti -gt 0) {
         Write-OK "Tolti $avvioTolti programmi inutili dall'avvio automatico."
     } else {
