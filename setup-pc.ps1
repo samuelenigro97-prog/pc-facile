@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "1.9 (2026-07-04)"
+$SCRIPT_VERSION = "2.0 (2026-07-04)"
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -872,7 +872,7 @@ switch ($passo) {
 # STEP 1 - NOME CLIENTE
 # =============================================================================
 
-Write-Titolo "Nome Completo Cliente"
+Write-Titolo "Nome Cliente e PC"
 
 # Legge il nome visualizzato attuale: prima LocalAccounts, poi ADSI (che
 # funziona anche in PowerShell x86, dove il modulo LocalAccounts non c'e').
@@ -887,51 +887,50 @@ Write-Info "Utente corrente: $env:USERNAME"
 Write-Info "Nome visualizzato attuale: $(if ($nomeAttuale) { $nomeAttuale } else { '(non impostato)' })"
 Write-Host ""
 
-$nomeCliente = Read-Host "Inserisci il nome completo del cliente (es. Mario Rossi)"
+Write-Info "Nome PC attuale: $env:COMPUTERNAME"
+Write-Host ""
+# UN SOLO nome: vale sia per l'account Windows sia per il nome del PC.
+$nomeCliente = (Read-Host "Nome del cliente (usato per l'account E per il nome del PC) - INVIO per saltare").Trim()
 
-if ($nomeCliente.Trim() -ne "") {
+if ($nomeCliente -ne "") {
     $nomeOk = $false
     # 1) Metodo moderno (modulo LocalAccounts, disponibile solo in PowerShell 64-bit)
     try {
-        Set-LocalUser -Name $env:USERNAME -FullName $nomeCliente.Trim() -ErrorAction Stop
+        Set-LocalUser -Name $env:USERNAME -FullName $nomeCliente -ErrorAction Stop
         $nomeOk = $true
     } catch {
         # 2) Fallback ADSI/WinNT: funziona anche in x86 e senza il modulo LocalAccounts
         try {
             $u = [ADSI]$adsiUser
-            $u.FullName = $nomeCliente.Trim()
+            $u.FullName = $nomeCliente
             $u.SetInfo()
             $nomeOk = $true
         } catch {}
     }
     if ($nomeOk) {
-        Write-OK "Nome utente aggiornato a: $($nomeCliente.Trim())"
+        Write-OK "Nome account aggiornato a: $nomeCliente"
         Add-Report "Nome cliente" "OK"
     } else {
         Write-Errore "Impossibile aggiornare il nome visualizzato dell'account $env:USERNAME."
         Add-Report "Nome cliente" "ERRORE"
     }
-} else {
-    Write-Info "Nome non modificato."
-    Add-Report "Nome cliente" "SALTATO"
-}
 
-# Rinomina del PC (nome di rete). Opzionale, si applica al riavvio.
-Write-Host ""
-Write-Info "Nome PC attuale: $env:COMPUTERNAME"
-$nuovoPc = Read-Host "Nuovo nome del PC (INVIO per lasciarlo invariato)"
-$nuovoPc = ($nuovoPc -replace '[^A-Za-z0-9-]', '').Trim()
-if ($nuovoPc -ne "" -and $nuovoPc -ne $env:COMPUTERNAME) {
-    try {
-        Rename-Computer -NewName $nuovoPc -Force -ErrorAction Stop
-        Write-OK "PC rinominato in '$nuovoPc' (attivo dopo il riavvio)."
-        Add-Report "Rinomina PC ($nuovoPc)" "OK"
-    } catch {
-        Write-Errore "Impossibile rinominare il PC: $_"
-        Add-Report "Rinomina PC" "ERRORE"
+    # Stesso nome anche per il PC (hostname): solo A-Z 0-9 e trattino, max 15 char.
+    $pcNuovo = ($nomeCliente -replace '[^A-Za-z0-9-]', '')
+    if ($pcNuovo.Length -gt 15) { $pcNuovo = $pcNuovo.Substring(0, 15) }
+    if ($pcNuovo -ne "" -and $pcNuovo -ne $env:COMPUTERNAME) {
+        try {
+            Rename-Computer -NewName $pcNuovo -Force -ErrorAction Stop
+            Write-OK "PC rinominato in '$pcNuovo' (attivo dopo il riavvio)."
+            Add-Report "Rinomina PC ($pcNuovo)" "OK"
+        } catch {
+            Write-Errore "Impossibile rinominare il PC: $_"
+            Add-Report "Rinomina PC" "ERRORE"
+        }
     }
 } else {
-    Write-Info "Nome PC non modificato."
+    Write-Info "Nome non modificato (account e PC invariati)."
+    Add-Report "Nome cliente" "SALTATO"
 }
 
 if (Continua) { $passo-- } else { $passo++ }
@@ -1163,7 +1162,7 @@ function Attiva-ServizioWeb {
 
 switch ($sceltaAV) {
     "1" {
-        Installa-Antivirus -Nome "McAfee" -UrlRiscatto "https://home.mcafee.com/activate"
+        Installa-Antivirus -Nome "McAfee" -UrlRiscatto "https://www.mcafee.com/activate"
     }
     "2" {
         Installa-Antivirus -Nome "Norton" -UrlRiscatto "https://www.norton.com/setup"
