@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "2.6 (2026-07-04)"
+$SCRIPT_VERSION = "2.7 (2026-07-04)"
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -1700,5 +1700,5 @@ if ($linguaCambiata) {
 
 Write-Host ""
 Write-Host "Buon lavoro!" -ForegroundColor Cyan
-Write-Host ""
-Pausa
+# Niente Pausa qui: l'unico "premi un tasto" e' quello finale del launcher .bat
+# ("Operazione terminata"), cosi' non si preme INVIO due volte.
