@@ -670,6 +670,14 @@ if ($impostaLingua -match "^[Ss]") {
         Write-Info "Impostazione locale di sistema non riuscita: proseguo (tastiera/formati restano validi)."
     }
 
+    # Fuso orario Italia (CET) + orologio sincronizzato
+    try {
+        Set-TimeZone -Id "W. Europe Standard Time" -ErrorAction Stop
+        Write-OK "Fuso orario impostato su Italia (CET)."
+    } catch {
+        Write-Info "Impostazione fuso orario non riuscita: proseguo."
+    }
+
     # --- 2) Language pack (Windows 11 22H2+): richiede Internet, NON deve bloccare il resto ---
     if (Get-Command Install-Language -ErrorAction SilentlyContinue) {
         try {
@@ -906,6 +914,24 @@ if ($nomeCliente.Trim() -ne "") {
 } else {
     Write-Info "Nome non modificato."
     Add-Report "Nome cliente" "SALTATO"
+}
+
+# Rinomina del PC (nome di rete). Opzionale, si applica al riavvio.
+Write-Host ""
+Write-Info "Nome PC attuale: $env:COMPUTERNAME"
+$nuovoPc = Read-Host "Nuovo nome del PC (INVIO per lasciarlo invariato)"
+$nuovoPc = ($nuovoPc -replace '[^A-Za-z0-9-]', '').Trim()
+if ($nuovoPc -ne "" -and $nuovoPc -ne $env:COMPUTERNAME) {
+    try {
+        Rename-Computer -NewName $nuovoPc -Force -ErrorAction Stop
+        Write-OK "PC rinominato in '$nuovoPc' (attivo dopo il riavvio)."
+        Add-Report "Rinomina PC ($nuovoPc)" "OK"
+    } catch {
+        Write-Errore "Impossibile rinominare il PC: $_"
+        Add-Report "Rinomina PC" "ERRORE"
+    }
+} else {
+    Write-Info "Nome PC non modificato."
 }
 
 if (Continua) { $passo-- } else { $passo++ }
