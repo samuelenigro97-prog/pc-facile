@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "1.5 (2026-07-04)"
+$SCRIPT_VERSION = "1.6 (2026-07-04)"
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -871,7 +871,7 @@ switch ($passo) {
 # STEP 1 - NOME CLIENTE
 # =============================================================================
 
-Write-Titolo "STEP 1 - Nome Completo Cliente"
+Write-Titolo "Nome Completo Cliente"
 
 # Legge il nome visualizzato attuale: prima LocalAccounts, poi ADSI (che
 # funziona anche in PowerShell x86, dove il modulo LocalAccounts non c'e').
@@ -940,7 +940,7 @@ if (Continua) { $passo-- } else { $passo++ }
 # STEP 2 - RISCATTO LICENZA OFFICE
 # =============================================================================
 
-Write-Titolo "STEP 2 - Riscatto Licenza Microsoft Office"
+Write-Titolo "Riscatto Licenza Microsoft Office"
 
 Write-Host "Verrà aperto il browser su setup.office.com" -ForegroundColor White
 Write-Host "Il cliente deve accedere con il proprio account Microsoft per riscattare la licenza." -ForegroundColor White
@@ -964,7 +964,7 @@ if (Continua) { $passo-- } else { $passo++ }
 # STEP 3 - INSTALLAZIONE OFFICE
 # =============================================================================
 
-Write-Titolo "STEP 3 - Installazione Suite Office"
+Write-Titolo "Installazione Suite Office"
 
 Write-Host "Scegli la suite da installare:" -ForegroundColor White
 Write-Host "  1) Microsoft 365 (richiede licenza attiva)"
@@ -1074,7 +1074,7 @@ if (Continua) { $passo-- } else { $passo++ }
 # STEP 4 - ANTIVIRUS
 # =============================================================================
 
-Write-Titolo "STEP 4 - Antivirus"
+Write-Titolo "Antivirus"
 
 Write-Host "Scegli l'antivirus da installare:" -ForegroundColor White
 Write-Host "  1) McAfee"
@@ -1184,7 +1184,7 @@ if (Continua) { $passo-- } else { $passo++ }
 # STEP 4c - UNIEURO CYBER PROTECTION (opzionale)
 # =============================================================================
 
-Write-Titolo "STEP 4c - Unieuro Cyber Protection"
+Write-Titolo "Unieuro Cyber Protection"
 
 Write-Host "Servizio venduto solo su richiesta: salta se il cliente non l'ha acquistato." -ForegroundColor White
 Write-Host ""
@@ -1204,7 +1204,7 @@ if (Continua) { $passo-- } else { $passo++ }
 # STEP 5 - BROWSER
 # =============================================================================
 
-Write-Titolo "STEP 5 - Browser"
+Write-Titolo "Browser"
 
 $browserDisponibili = $CatalogoBrowser
 
@@ -1255,7 +1255,7 @@ if (Continua) { $passo-- } else { $passo++ }
 # STEP 6 - APPLICAZIONI BASE
 # =============================================================================
 
-Write-Titolo "STEP 6 - Applicazioni Base"
+Write-Titolo "Applicazioni Base"
 
 # App e profili derivano dal CATALOGO unico definito all'inizio (niente duplicati).
 $appsDisponibili = $CatalogoApp
@@ -1340,7 +1340,7 @@ if (Continua) { $passo-- } else { $passo++ }
 # STEP 7 - RIMOZIONE APP SUPERFLUE (BLOATWARE) - opzionale
 # =============================================================================
 
-Write-Titolo "STEP 7 - Rimozione App Superflue (Bloatware)"
+Write-Titolo "Rimozione App Superflue (Bloatware)"
 
 Write-Host "Rimuove: bloatware del produttore (HP/Lenovo/Dell/Asus/Acer), app consumer" -ForegroundColor White
 Write-Host "Microsoft (Bing, giochi, Clipchamp...), trial antivirus preinstallati, toolbar." -ForegroundColor White
@@ -1432,7 +1432,7 @@ if (Continua) { $passo-- } else { $passo++ }
 # STEP 8 - AGGIORNAMENTO APP INSTALLATE - opzionale
 # =============================================================================
 
-Write-Titolo "STEP 8 - Aggiornamento App Installate"
+Write-Titolo "Aggiornamento App Installate"
 
 Write-Host "Aggiorna all'ultima versione le app gestite da winget (incluse molte OEM)." -ForegroundColor White
 Write-Host "Puo' richiedere diversi minuti. NB: i DRIVER si aggiornano da Windows Update." -ForegroundColor White
@@ -1461,7 +1461,7 @@ if (Continua) { $passo-- } else { $passo++ }
 # STEP 9 - CONFIGURAZIONE WINDOWS BASE - opzionale
 # =============================================================================
 
-Write-Titolo "STEP 9 - Configurazione Windows Base"
+Write-Titolo "Configurazione Windows Base"
 
 Write-Host "Piccole comodita': mostra le estensioni dei file, apre Esplora file su" -ForegroundColor White
 Write-Host "'Questo PC' e disattiva l'avvio automatico di OneDrive." -ForegroundColor White
