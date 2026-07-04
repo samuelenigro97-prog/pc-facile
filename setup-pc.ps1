@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "2.8 (2026-07-04)"
+$SCRIPT_VERSION = "2.9 (2026-07-04)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -28,6 +28,12 @@ $BOX_FULL  = [char]0x2588                  # blocco pieno (barra progresso)
 $BOX_EMPTY = [char]0x2591                  # blocco leggero (barra progresso)
 $LINEA_D   = ([string][char]0x2550) * 60   # linea doppia orizzontale
 
+# Tema colori: Unieuro = rosso + bianco. La console ha solo 16 colori con nome,
+# quindi 'Red' approssima il rosso Unieuro (per l'hex esatto servirebbero le
+# sequenze ANSI truecolor). Cambia $THEME_COL per ritinteggiare tutto.
+$THEME_COL = "Red"      # colore decorativo: bordi, banner, barra, accenti
+$THEME_TXT = "White"    # testo dei titoli
+
 # =============================================================================
 # FUNZIONI UTILITY
 # =============================================================================
@@ -35,9 +41,9 @@ $LINEA_D   = ([string][char]0x2550) * 60   # linea doppia orizzontale
 function Write-Titolo {
     param([string]$Testo)
     Write-Host ""
-    Write-Host "  $LINEA_D" -ForegroundColor Cyan
-    Write-Host "   $Testo" -ForegroundColor White
-    Write-Host "  $LINEA_D" -ForegroundColor Cyan
+    Write-Host "  $LINEA_D" -ForegroundColor $THEME_COL
+    Write-Host "   $Testo" -ForegroundColor $THEME_TXT
+    Write-Host "  $LINEA_D" -ForegroundColor $THEME_COL
     Write-Host ""
 }
 
@@ -69,15 +75,15 @@ if (-not $Test -and -not $Diagnostica) {
     $titoloB = "PC FACILE   -   versione $SCRIPT_VERSION"
     $padSx = [int](($larg - $titoloB.Length) / 2)
     $padDx = $larg - $padSx - $titoloB.Length
-    Write-Host ("  " + [char]0x2554 + (([string][char]0x2550) * $larg) + [char]0x2557) -ForegroundColor Cyan
-    Write-Host ("  " + [char]0x2551 + (" " * $padSx) + $titoloB + (" " * $padDx) + [char]0x2551) -ForegroundColor White
-    Write-Host ("  " + [char]0x255A + (([string][char]0x2550) * $larg) + [char]0x255D) -ForegroundColor Cyan
+    Write-Host ("  " + [char]0x2554 + (([string][char]0x2550) * $larg) + [char]0x2557) -ForegroundColor $THEME_COL
+    Write-Host ("  " + [char]0x2551 + (" " * $padSx) + $titoloB + (" " * $padDx) + [char]0x2551) -ForegroundColor $THEME_TXT
+    Write-Host ("  " + [char]0x255A + (([string][char]0x2550) * $larg) + [char]0x255D) -ForegroundColor $THEME_COL
     Write-Host ""
     Write-Host "  Premi un tasto:" -ForegroundColor White
     Write-Host ""
-    Write-Host "    [C]" -ForegroundColor Cyan -NoNewline; Write-Host " Configura il PC   (installa e imposta)" -ForegroundColor White
-    Write-Host "    [D]" -ForegroundColor Cyan -NoNewline; Write-Host " Diagnostica       (controlla, NON installa)" -ForegroundColor White
-    Write-Host "    [T]" -ForegroundColor Cyan -NoNewline; Write-Host " Test a vuoto      (percorre tutto, NON installa)" -ForegroundColor White
+    Write-Host "    [C]" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Configura il PC   (installa e imposta)" -ForegroundColor White
+    Write-Host "    [D]" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Diagnostica       (controlla, NON installa)" -ForegroundColor White
+    Write-Host "    [T]" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Test a vuoto      (percorre tutto, NON installa)" -ForegroundColor White
     Write-Host ""
     Write-Host "  (C oppure INVIO = Configura)" -ForegroundColor DarkGray
     Write-Host ""
@@ -94,9 +100,9 @@ if (-not $Test -and -not $Diagnostica) {
     } catch {
         $tasto = (Read-Host "Scelta (C/D/T)").ToUpper()   # fallback se ReadKey non disponibile
     }
-    if ($tasto -eq "D" -or $tasto -eq "2") { $Diagnostica = $true; Write-Host "  -> Diagnostica" -ForegroundColor Cyan }
-    elseif ($tasto -eq "T" -or $tasto -eq "3") { $Test = $true; Write-Host "  -> Test a vuoto" -ForegroundColor Cyan }
-    else { Write-Host "  -> Configura il PC" -ForegroundColor Cyan }
+    if ($tasto -eq "D" -or $tasto -eq "2") { $Diagnostica = $true; Write-Host "  -> Diagnostica" -ForegroundColor $THEME_COL }
+    elseif ($tasto -eq "T" -or $tasto -eq "3") { $Test = $true; Write-Host "  -> Test a vuoto" -ForegroundColor $THEME_COL }
+    else { Write-Host "  -> Configura il PC" -ForegroundColor $THEME_COL }
     Write-Host ""
 }
 
@@ -1126,7 +1132,7 @@ $barLen = 20
 $pieni = [int]($barLen * $passo / 8)
 if ($pieni -gt $barLen) { $pieni = $barLen }
 $bar = (([string]$BOX_FULL) * $pieni) + (([string]$BOX_EMPTY) * ($barLen - $pieni))
-Write-Host ("  Passo $passo/8  [$bar]") -ForegroundColor DarkCyan
+Write-Host ("  Passo $passo/8  [$bar]") -ForegroundColor $THEME_COL
 switch ($passo) {
 1 {
 # =============================================================================
@@ -1607,7 +1613,7 @@ if ($Report.Count -eq 0) {
     }
 
     Write-Host ""
-    Write-Host ("Totale: {0} OK, {1} ERRORE, {2} SALTATO, {3} AVVISO" -f $nOk, $nErrore, $nSaltato, $nAvviso) -ForegroundColor Cyan
+    Write-Host ("Totale: {0} OK, {1} ERRORE, {2} SALTATO, {3} AVVISO" -f $nOk, $nErrore, $nSaltato, $nAvviso) -ForegroundColor $THEME_COL
     if ($nErrore -gt 0) {
         Write-Host "Controlla le voci in ERRORE prima di consegnare il PC." -ForegroundColor Red
     }
