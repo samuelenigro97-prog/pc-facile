@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "2.0 (2026-07-04)"
+$SCRIPT_VERSION = "2.1 (2026-07-04)"
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -135,22 +135,6 @@ $CatalogoApp = @(
     @{ Nome = "Discord";              Id = "Discord.Discord";              Profili = @("GAMING") },
     @{ Nome = "Zoom";                 Id = "Zoom.Zoom";                    Profili = @("UFFICIO") }
 )
-
-# Fine passo: INVIO = avanti, B = torna al passo precedente.
-# Ritorna $true se l'utente vuole tornare indietro.
-function Continua {
-    if ($Test) { return $false }   # in Test avanza sempre, niente attesa
-    Write-Host ""
-    Write-Host "  [INVIO] continua     [B] o [CANC] torna al passo precedente" -ForegroundColor DarkGray
-    try {
-        $k = [Console]::ReadKey($true)
-        if ("$($k.KeyChar)".ToUpper() -eq 'B') { return $true }
-        if ($k.Key -eq [ConsoleKey]::Delete -or $k.Key -eq [ConsoleKey]::Backspace) { return $true }
-        return $false
-    } catch {
-        return $false   # host senza console: come INVIO
-    }
-}
 
 # =============================================================================
 # REPORT FINALE + CONNETTIVITA'
@@ -486,10 +470,13 @@ function Installa-Pacchetto {
         [string]$WingetId
     )
 
-    # Gli ID Microsoft Store sono 12 caratteri maiuscoli/numeri (es. WhatsApp):
-    # senza --source msstore winget puo' non trovarli/installarli.
+    # Disambigua SEMPRE la sorgente: ID Microsoft Store (12 caratteri) -> msstore,
+    # tutto il resto -> winget. Senza --source, winget da' errore -1978335138
+    # ("specify --source") quando lo stesso ID compare in piu' sorgenti, ed evita
+    # anche di interrogare msstore (dove capitano errori di certificato/CDN).
     $sorgente = @()
     if ($WingetId -match '^[A-Z0-9]{12}$') { $sorgente = @('--source', 'msstore') }
+    else { $sorgente = @('--source', 'winget') }
 
     # Gia' installato? (--exact: evita falsi positivi da match parziale dell'ID)
     winget list --exact --id $WingetId @sorgente --accept-source-agreements 2>$null | Out-Null
@@ -859,7 +846,7 @@ if ($vuoiRimAV -match "^[Ss]") {
 if ($vuoiRimAV -match "^[Ss]") { Pausa }
 
 # =============================================================================
-# PASSI DI CONFIGURAZIONE (tasto B a fine passo = torna indietro)
+# PASSI DI CONFIGURAZIONE (dopo ogni scelta si avanza automaticamente)
 # =============================================================================
 
 $passo = 1
@@ -933,7 +920,7 @@ if ($nomeCliente -ne "") {
     Add-Report "Nome cliente" "SALTATO"
 }
 
-if (Continua) { $passo-- } else { $passo++ }
+$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 2 {
 # =============================================================================
@@ -957,7 +944,7 @@ if ($risposta -match "^[Ss]") {
     Add-Report "Riscatto licenza Office (setup.office.com)" "SALTATO"
 }
 
-if (Continua) { $passo-- } else { $passo++ }
+$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 3 {
 # =============================================================================
@@ -1067,7 +1054,7 @@ while ($true) {
     }
 }
 
-if (Continua) { $passo-- } else { $passo++ }
+$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 4 {
 # =============================================================================
@@ -1177,7 +1164,7 @@ switch ($sceltaAV) {
     }
 }
 
-if (Continua) { $passo-- } else { $passo++ }
+$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 5 {
 # =============================================================================
@@ -1197,7 +1184,7 @@ if ($vuoiUnieuro -match "^[Ss]") {
     Add-Report "Unieuro Cyber Protection" "SALTATO"
 }
 
-if (Continua) { $passo-- } else { $passo++ }
+$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 6 {
 # =============================================================================
@@ -1248,7 +1235,7 @@ if ($sceltaBrowser -match "^[Ss]$") {
     }
 }
 
-if (Continua) { $passo-- } else { $passo++ }
+$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 7 {
 # =============================================================================
@@ -1333,7 +1320,7 @@ switch ($sceltaApps) {
     }
 }
 
-if (Continua) { $passo-- } else { $passo++ }
+$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 8 {
 # =============================================================================
@@ -1505,7 +1492,7 @@ if ($vuoiDebloat -match "^[Ss]") {
     Add-Report "Rimozione bloatware" "SALTATO"
 }
 
-if (Continua) { $passo-- } else { $passo++ }
+$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 9 {
 # =============================================================================
@@ -1534,7 +1521,7 @@ if ($vuoiUpgrade -match "^[Ss]") {
     Add-Report "Aggiornamento app installate" "SALTATO"
 }
 
-if (Continua) { $passo-- } else { $passo++ }
+$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 10 {
 # =============================================================================
@@ -1571,7 +1558,7 @@ if ($vuoiConfig -match "^[Ss]") {
     Add-Report "Configurazione Windows base" "SALTATO"
 }
 
-if (Continua) { $passo-- } else { $passo++ }
+$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 }
 if ($passo -lt 1) { $passo = 1 }
