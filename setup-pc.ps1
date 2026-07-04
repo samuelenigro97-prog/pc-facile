@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "3.0 (2026-07-04)"
+$SCRIPT_VERSION = "3.1 (2026-07-04)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -28,10 +28,13 @@ $BOX_FULL  = [char]0x2588                  # blocco pieno (barra progresso)
 $BOX_EMPTY = [char]0x2591                  # blocco leggero (barra progresso)
 $LINEA_D   = ([string][char]0x2550) * 60   # linea doppia orizzontale
 
-# Tema colori: Unieuro = rosso + bianco. La console ha solo 16 colori con nome,
-# quindi 'Red' approssima il rosso Unieuro (per l'hex esatto servirebbero le
-# sequenze ANSI truecolor). Cambia $THEME_COL per ritinteggiare tutto.
-$THEME_COL = "Red"      # colore decorativo: bordi, banner, barra, accenti
+# Tema colori: Unieuro = ARANCIONE (#EE7203) + navy + bianco. La console legacy
+# (conhost, che parte col doppio-click del .bat) ha solo 16 colori con nome e
+# NON ha l'arancione; l'hex esatto vorrebbe ANSI truecolor, ma servirebbe
+# abilitare il VT via P/Invoke - vietato perche' l'antivirus lo segnala come
+# codice sospetto. Quindi 'DarkYellow' e' l'ambra/arancio piu' vicino sicuro.
+# Cambia $THEME_COL per ritinteggiare tutto.
+$THEME_COL = "DarkYellow"   # colore decorativo: bordi, banner, barra, accenti
 $THEME_TXT = "White"    # testo dei titoli
 
 # =============================================================================
