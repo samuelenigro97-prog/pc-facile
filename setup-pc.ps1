@@ -626,6 +626,19 @@ Write-Host "Questo script guida la configurazione del PC del cliente passo per p
 Write-Host "Segui le istruzioni a schermo e premi INVIO quando indicato." -ForegroundColor White
 Pausa
 
+# Conferma prima di modifiche reali (solo in Configura, non Test/Diagnostica)
+if ($RunReale) {
+    Write-Titolo "CONFIGURA - Modifiche REALI"
+    Write-Host "Stai per CONFIGURARE questo PC: verranno installati programmi e cambiate" -ForegroundColor White
+    Write-Host "impostazioni. Ad ogni passo ti verra' chiesta conferma (S/N)." -ForegroundColor White
+    Write-Host "Per un giro di prova SENZA modifiche, chiudi e scegli T (Test) o D (Diagnostica)." -ForegroundColor White
+    Write-Host ""
+    $procedi = Read-Host "Procedere con la configurazione? (S/N)"
+    if ($procedi -notmatch "^[Ss]") {
+        Write-Info "Configurazione annullata. Nessuna modifica effettuata."
+        return
+    }
+}
 
 # =============================================================================
 # LINGUA E REGIONE (ITALIANO) - primo passo
@@ -866,6 +879,8 @@ Pausa
 
 $passo = 1
 while ($passo -ge 1 -and $passo -le 10) {
+Write-Host ""
+Write-Host ("  [ Passo $passo di 10 ]") -ForegroundColor DarkCyan
 switch ($passo) {
 1 {
 # =============================================================================
