@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "2.2 (2026-07-04)"
+$SCRIPT_VERSION = "2.3 (2026-07-04)"
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -773,6 +773,73 @@ if ($vuoiMs -match "^[Ss]") {
 if ($vuoiMs -match "^[Ss]") { Pausa }
 
 # =============================================================================
+# ATTIVAZIONE OFFICE (subito dopo l'account Microsoft: si riscatta/attiva)
+# =============================================================================
+
+Write-Titolo "Attivazione Office"
+
+Write-Host "Su quasi tutti i PC nuovi Office/M365 e' GIA' installato: qui ATTIVI la licenza." -ForegroundColor White
+Write-Host "  1) Microsoft 365 (abbonamento) - apre setup.office.com per riscatto/attivazione" -ForegroundColor White
+Write-Host "  2) Office perpetuo (2021/2024) - inserisci il product key" -ForegroundColor White
+Write-Host "  3) Salta" -ForegroundColor White
+Write-Host ""
+
+function Get-OsppPath {
+    $percorsi = @(
+        "$env:ProgramFiles\Microsoft Office\Office16\ospp.vbs",
+        "${env:ProgramFiles(x86)}\Microsoft Office\Office16\ospp.vbs"
+    )
+    foreach ($p in $percorsi) { if (Test-Path $p) { return $p } }
+    return $null
+}
+
+$sceltaAtt = Read-Host "Scelta (1-3)"
+switch ($sceltaAtt) {
+    "1" {
+        Start-Process "https://setup.office.com"
+        Write-OK "Browser aperto su setup.office.com"
+        Write-Info "Accedi con l'account Microsoft del cliente per riscattare e attivare Office 365."
+        Add-Report "Office 365 (riscatto/attivazione)" "OK"
+    }
+    "2" {
+        $osppPath = Get-OsppPath
+        if (-not $osppPath) {
+            Write-Errore "ospp.vbs non trovato: Office non risulta installato su questo PC."
+            Add-Report "Attivazione Office perpetuo" "ERRORE"
+        } else {
+            $chiaveLicenza = (Read-Host "Inserisci il product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)").Trim().ToUpper()
+            if ($chiaveLicenza -notmatch "^([A-Z0-9]{5}-){4}[A-Z0-9]{5}$") {
+                Write-Errore "Formato non valido: 5 gruppi da 5 caratteri separati da trattino."
+                Add-Report "Attivazione Office perpetuo" "ERRORE"
+            } else {
+                Write-Info "Inserimento product key..."
+                cscript //nologo $osppPath /inpkey:$chiaveLicenza
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Errore "Inserimento chiave fallito (codice $LASTEXITCODE)."
+                    Add-Report "Attivazione Office perpetuo" "ERRORE"
+                } else {
+                    Write-Info "Attivazione in corso..."
+                    cscript //nologo $osppPath /act
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-OK "Office attivato con successo."
+                        Add-Report "Attivazione Office perpetuo" "OK"
+                    } else {
+                        Write-Errore "Attivazione fallita (codice $LASTEXITCODE). Verifica chiave e connessione."
+                        Add-Report "Attivazione Office perpetuo" "ERRORE"
+                    }
+                }
+            }
+        }
+    }
+    default {
+        Write-Info "Attivazione Office saltata."
+        Add-Report "Attivazione Office" "SALTATO"
+    }
+}
+
+if ($sceltaAtt -match "^[12]$") { Pausa }
+
+# =============================================================================
 # RIMOZIONE ANTIVIRUS DI PROVA (all'inizio: evita conflitti e blocchi)
 # =============================================================================
 
@@ -1000,9 +1067,9 @@ if ($vuoiDebloat -match "^[Ss]") { Pausa }
 # =============================================================================
 
 $passo = 1
-while ($passo -ge 1 -and $passo -le 9) {
+while ($passo -ge 1 -and $passo -le 8) {
 Write-Host ""
-Write-Host ("  [ Passo $passo di 9 ]") -ForegroundColor DarkCyan
+Write-Host ("  [ Passo $passo di 8 ]") -ForegroundColor DarkCyan
 switch ($passo) {
 1 {
 # =============================================================================
@@ -1074,139 +1141,36 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 }
 2 {
 # =============================================================================
-# STEP 2 - RISCATTO LICENZA OFFICE
+# STEP 2 - INSTALLA SUITE OFFICE GRATUITA (OpenOffice / LibreOffice)
 # =============================================================================
 
-Write-Titolo "Riscatto Licenza Microsoft Office"
+Write-Titolo "Installa Suite Office (alternativa gratuita)"
 
-Write-Host "Verrà aperto il browser su setup.office.com" -ForegroundColor White
-Write-Host "Il cliente deve accedere con il proprio account Microsoft per riscattare la licenza." -ForegroundColor White
+Write-Host "Serve solo se vuoi una suite GRATUITA al posto di Microsoft Office." -ForegroundColor White
+Write-Host "(Microsoft 365 lo attivi nel passo 'Attivazione Office', all'inizio.)" -ForegroundColor DarkGray
+Write-Host "  1) OpenOffice" -ForegroundColor White
+Write-Host "  2) LibreOffice" -ForegroundColor White
+Write-Host "  3) Salta" -ForegroundColor White
 Write-Host ""
 
-$risposta = Read-Host "Aprire setup.office.com ora? (S/N)"
-if ($risposta -match "^[Ss]") {
-    Start-Process "https://setup.office.com"
-    Write-OK "Browser aperto su setup.office.com"
-    Write-Info "Attendi che il cliente completi il riscatto licenza prima di procedere."
-    Add-Report "Riscatto licenza Office (setup.office.com)" "OK"
-} else {
-    Write-Info "Passaggio saltato."
-    Add-Report "Riscatto licenza Office (setup.office.com)" "SALTATO"
+$sceltaSuite = Read-Host "Scelta (1-3)"
+switch ($sceltaSuite) {
+    "1" {
+        if (Confirm-Winget) { Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice" }
+        else { Write-Errore "Winget non disponibile." ; Add-Report "OpenOffice (installazione)" "ERRORE" }
+    }
+    "2" {
+        if (Confirm-Winget) { Installa-Pacchetto -Nome "LibreOffice" -WingetId "TheDocumentFoundation.LibreOffice" }
+        else { Write-Errore "Winget non disponibile." ; Add-Report "LibreOffice (installazione)" "ERRORE" }
+    }
+    default {
+        Write-Info "Nessuna suite alternativa installata."
+    }
 }
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 3 {
-# =============================================================================
-# STEP 3 - INSTALLAZIONE OFFICE
-# =============================================================================
-
-Write-Titolo "Installazione Suite Office"
-
-Write-Host "Scegli la suite da installare:" -ForegroundColor White
-Write-Host "  1) Microsoft 365 (richiede licenza attiva)"
-Write-Host "  2) OpenOffice"
-Write-Host "  3) LibreOffice"
-Write-Host "  4) Salta"
-Write-Host ""
-
-$sceltaOffice = Read-Host "Scelta (1-4)"
-
-switch ($sceltaOffice) {
-    "1" {
-        Write-Info "Verifica Winget..."
-        if (Confirm-Winget) {
-            Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
-        } else {
-            Write-Errore "Winget non disponibile. Installa Microsoft 365 manualmente."
-        }
-    }
-    "2" {
-        if (Confirm-Winget) {
-            Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice"
-        } else {
-            Write-Errore "Winget non disponibile."
-        }
-    }
-    "3" {
-        if (Confirm-Winget) {
-            Installa-Pacchetto -Nome "LibreOffice" -WingetId "TheDocumentFoundation.LibreOffice"
-        } else {
-            Write-Errore "Winget non disponibile."
-        }
-    }
-    "4" {
-        Write-Info "Installazione Office saltata."
-    }
-    default {
-        Write-Info "Nessuna scelta valida: passaggio saltato."
-    }
-}
-
-# --- Attivazione licenza Office PERPETUA (product key) ---
-Write-Host ""
-Write-Host "Se hai installato Office PERPETUO (2021/2024), attivalo ora col product key." -ForegroundColor White
-Write-Host "Per Microsoft 365 (abbonamento) rispondi N: si attiva dal login su setup.office.com." -ForegroundColor White
-Write-Host ""
-
-function Get-OsppPath {
-    $percorsi = @(
-        "$env:ProgramFiles\Microsoft Office\Office16\ospp.vbs",
-        "${env:ProgramFiles(x86)}\Microsoft Office\Office16\ospp.vbs"
-    )
-    foreach ($p in $percorsi) { if (Test-Path $p) { return $p } }
-    return $null
-}
-
-while ($true) {
-    $rispostaChiave = Read-Host "Attivare una licenza Office perpetua con product key? (S/N)"
-
-    if ($rispostaChiave -match "^[Ss]$") {
-        $osppPath = Get-OsppPath
-        if (-not $osppPath) {
-            Write-Errore "ospp.vbs non trovato. Office non installato o percorso diverso."
-            Write-Info "Installa Office (sopra) prima di attivare."
-            Add-Report "Attivazione Office perpetuo" "ERRORE"
-            break
-        }
-        $chiaveLicenza = (Read-Host "Inserisci il product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)").Trim().ToUpper()
-        if ($chiaveLicenza -notmatch "^([A-Z0-9]{5}-){4}[A-Z0-9]{5}$") {
-            Write-Errore "Formato non valido: 5 gruppi da 5 caratteri separati da trattino."
-            continue
-        }
-        Write-Info "Inserimento product key..."
-        cscript //nologo $osppPath /inpkey:$chiaveLicenza
-        if ($LASTEXITCODE -ne 0) {
-            Write-Errore "Inserimento chiave fallito (codice $LASTEXITCODE)."
-            Add-Report "Attivazione Office perpetuo" "ERRORE"
-            break
-        }
-        Write-Info "Attivazione in corso..."
-        cscript //nologo $osppPath /act
-        if ($LASTEXITCODE -eq 0) {
-            Write-OK "Office attivato con successo."
-            Add-Report "Attivazione Office perpetuo" "OK"
-        } else {
-            Write-Errore "Attivazione fallita (codice $LASTEXITCODE). Verifica chiave e connessione."
-            Add-Report "Attivazione Office perpetuo" "ERRORE"
-        }
-        break
-    } elseif ($rispostaChiave -match "^[Nn]$") {
-        Write-Info "Attivazione perpetua saltata."
-        Add-Report "Attivazione Office perpetuo" "SALTATO"
-        break
-    } elseif ($rispostaChiave -eq "") {
-        Write-Info "Nessun input (fine stdin). Passaggio saltato."
-        Add-Report "Attivazione Office perpetuo" "SALTATO"
-        break
-    } else {
-        Write-Errore "Input non valido. Rispondi con S o N."
-    }
-}
-
-$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
-}
-4 {
 # =============================================================================
 # STEP 4 - ANTIVIRUS
 # =============================================================================
@@ -1316,7 +1280,7 @@ switch ($sceltaAV) {
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-5 {
+4 {
 # =============================================================================
 # STEP 4c - UNIEURO CYBER PROTECTION (opzionale)
 # =============================================================================
@@ -1336,7 +1300,7 @@ if ($vuoiUnieuro -match "^[Ss]") {
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-6 {
+5 {
 # =============================================================================
 # STEP 5 - BROWSER
 # =============================================================================
@@ -1387,7 +1351,7 @@ if ($sceltaBrowser -match "^[Ss]$") {
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-7 {
+6 {
 # =============================================================================
 # STEP 6 - APPLICAZIONI BASE
 # =============================================================================
@@ -1472,7 +1436,7 @@ switch ($sceltaApps) {
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-8 {
+7 {
 # =============================================================================
 # STEP 8 - AGGIORNAMENTO APP INSTALLATE - opzionale
 # =============================================================================
@@ -1501,7 +1465,7 @@ if ($vuoiUpgrade -match "^[Ss]") {
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-9 {
+8 {
 # =============================================================================
 # STEP 9 - CONFIGURAZIONE WINDOWS BASE - opzionale
 # =============================================================================
