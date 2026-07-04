@@ -62,23 +62,32 @@ jobs:
         run: |
           Write-Host "=== PSSCRIPTANALYZER ===" -ForegroundColor Cyan
           [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
-          try { Install-PackageProvider -Name NuGet -Force -ErrorAction SilentlyContinue | Out-Null } catch {}
-          # Install-Module a volte fallisce per un hiccup di PSGallery sul runner: riprovo.
-          $installato = $false
-          for ($i = 1; $i -le 3; $i++) {
-            try {
-              Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -Repository PSGallery -ErrorAction Stop
-              $installato = $true; break
-            } catch {
-              Write-Host "Tentativo $i di installazione fallito: $_" -ForegroundColor Yellow
-              Start-Sleep -Seconds 10
+          # I runner Windows spesso hanno gia' PSScriptAnalyzer: se c'e', niente
+          # rete/PSGallery (che a volte fa flake: "No repository 'PSGallery'").
+          if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
+            # PSGallery a volte non e' registrato sul runner: lo registro prima di
+            # configurarlo, cosi' Set-PSRepository non esplode.
+            if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+              try { Register-PSRepository -Default -ErrorAction Stop } catch {}
+            }
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+            try { Install-PackageProvider -Name NuGet -Force -ErrorAction SilentlyContinue | Out-Null } catch {}
+            # Install-Module a volte fallisce per un hiccup di PSGallery: riprovo.
+            for ($i = 1; $i -le 3; $i++) {
+              try {
+                Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -Repository PSGallery -ErrorAction Stop
+                break
+              } catch {
+                Write-Host "Tentativo $i di installazione fallito: $_" -ForegroundColor Yellow
+                Start-Sleep -Seconds 10
+              }
             }
           }
-          if (-not $installato) {
-            Write-Host "[INFO] PSScriptAnalyzer non installabile (PSGallery irraggiungibile): salto l'analisi, non blocco la build." -ForegroundColor Yellow
+          if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
+            Write-Host "[INFO] PSScriptAnalyzer non disponibile (PSGallery irraggiungibile): salto l'analisi, non blocco la build." -ForegroundColor Yellow
             exit 0
           }
+          Import-Module PSScriptAnalyzer -ErrorAction SilentlyContinue
           # Write-Host e' voluto (output colorato interattivo): escludo quella regola.
           $results = Invoke-ScriptAnalyzer -Path setup-pc.ps1 -Severity Error,Warning -ExcludeRule PSAvoidUsingWriteHost
           if ($results) {
