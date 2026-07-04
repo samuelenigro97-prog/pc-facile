@@ -101,6 +101,41 @@ if ($Test -or $Diagnostica) {
 # file su Desktop (log/report/scheda/batteria), per non sporcare coi controlli.
 $RunReale = (-not $Test -and -not $Diagnostica)
 
+# =============================================================================
+# CATALOGO PACCHETTI - UNICA FONTE (usato da STEP 3/5/6 e dalla Diagnostica)
+# Cambi un ID QUI e vale ovunque. Profili: BASE / UFFICIO / GAMING.
+# =============================================================================
+$CatalogoOffice = @(
+    @{ Nome = "Microsoft 365"; Id = "Microsoft.Office" },
+    @{ Nome = "OpenOffice";    Id = "Apache.OpenOffice" },
+    @{ Nome = "LibreOffice";   Id = "TheDocumentFoundation.LibreOffice" }
+)
+$CatalogoBrowser = @(
+    @{ Nome = "Google Chrome";   Id = "Google.Chrome" },
+    @{ Nome = "Mozilla Firefox"; Id = "Mozilla.Firefox" },
+    @{ Nome = "Microsoft Edge";  Id = "Microsoft.Edge" },
+    @{ Nome = "Brave";           Id = "Brave.Brave" },
+    @{ Nome = "Opera";           Id = "Opera.Opera" },
+    @{ Nome = "Opera GX";        Id = "Opera.OperaGX" },
+    @{ Nome = "Vivaldi";         Id = "Vivaldi.Vivaldi" }
+)
+$CatalogoApp = @(
+    @{ Nome = "VLC Media Player";     Id = "VideoLAN.VLC";                 Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "Adobe Acrobat Reader"; Id = "Adobe.Acrobat.Reader.64-bit";  Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "Sumatra PDF";          Id = "SumatraPDF.SumatraPDF";        Profili = @("UFFICIO") },
+    @{ Nome = "Spotify";              Id = "Spotify.Spotify";              Profili = @("UFFICIO") },
+    @{ Nome = "AIMP";                 Id = "AIMP.AIMP";                    Profili = @() },
+    @{ Nome = "7-Zip";                Id = "7zip.7zip";                    Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "WhatsApp";             Id = "9NKSQGP7F2NH";                 Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "GIMP";                 Id = "GIMP.GIMP";                    Profili = @("UFFICIO") },
+    @{ Nome = "Steam";                Id = "Valve.Steam";                  Profili = @("GAMING") },
+    @{ Nome = "AnyDesk";              Id = "AnyDesk.AnyDesk";              Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "TeamViewer";           Id = "TeamViewer.TeamViewer";        Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "qBittorrent";          Id = "qBittorrent.qBittorrent";      Profili = @("GAMING") },
+    @{ Nome = "Discord";              Id = "Discord.Discord";              Profili = @("GAMING") },
+    @{ Nome = "Zoom";                 Id = "Zoom.Zoom";                    Profili = @("UFFICIO") }
+)
+
 # Fine passo: INVIO = avanti, B = torna al passo precedente.
 # Ritorna $true se l'utente vuole tornare indietro.
 function Continua {
@@ -526,33 +561,8 @@ if ($Diagnostica) {
     if (Confirm-Winget) {
         Write-OK "winget disponibile (sorgenti riparate)."
 
-        # Tutti gli ID pacchetti usati dallo script
-        $tuttiId = @(
-            @{ N = "Microsoft 365";        Id = "Microsoft.Office" },
-            @{ N = "OpenOffice";           Id = "Apache.OpenOffice" },
-            @{ N = "LibreOffice";          Id = "TheDocumentFoundation.LibreOffice" },
-            @{ N = "Google Chrome";        Id = "Google.Chrome" },
-            @{ N = "Mozilla Firefox";      Id = "Mozilla.Firefox" },
-            @{ N = "Microsoft Edge";       Id = "Microsoft.Edge" },
-            @{ N = "Brave";                Id = "Brave.Brave" },
-            @{ N = "Opera";                Id = "Opera.Opera" },
-            @{ N = "Opera GX";             Id = "Opera.OperaGX" },
-            @{ N = "Vivaldi";              Id = "Vivaldi.Vivaldi" },
-            @{ N = "VLC Media Player";     Id = "VideoLAN.VLC" },
-            @{ N = "Adobe Acrobat Reader"; Id = "Adobe.Acrobat.Reader.64-bit" },
-            @{ N = "Spotify";              Id = "Spotify.Spotify" },
-            @{ N = "7-Zip";                Id = "7zip.7zip" },
-            @{ N = "WhatsApp";             Id = "9NKSQGP7F2NH" },
-            @{ N = "Sumatra PDF";          Id = "SumatraPDF.SumatraPDF" },
-            @{ N = "AIMP";                 Id = "AIMP.AIMP" },
-            @{ N = "GIMP";                 Id = "GIMP.GIMP" },
-            @{ N = "TeamViewer";           Id = "TeamViewer.TeamViewer" },
-            @{ N = "qBittorrent";          Id = "qBittorrent.qBittorrent" },
-            @{ N = "Steam";                Id = "Valve.Steam" },
-            @{ N = "AnyDesk";              Id = "AnyDesk.AnyDesk" },
-            @{ N = "Discord";              Id = "Discord.Discord" },
-            @{ N = "Zoom";                 Id = "Zoom.Zoom" }
-        )
+        # Tutti gli ID pacchetti: derivati dal CATALOGO unico (Office + Browser + App)
+        $tuttiId = $CatalogoOffice + $CatalogoBrowser + $CatalogoApp
 
         Write-Host ""
         Write-Info "Verifica ID pacchetti con 'winget show' (nessuna installazione)..."
@@ -565,10 +575,10 @@ if ($Diagnostica) {
             winget list --exact --id $p.Id @src --accept-source-agreements 2>$null | Out-Null
             $gia = ($LASTEXITCODE -eq 0)
             if ($valido) {
-                if ($gia) { Write-OK "OK   $($p.N)  [gia' installato]"; $installati++ }
-                else { Write-OK "OK   $($p.N)  [$($p.Id)]" }
+                if ($gia) { Write-OK "OK   $($p.Nome)  [gia' installato]"; $installati++ }
+                else { Write-OK "OK   $($p.Nome)  [$($p.Id)]" }
             } else {
-                Write-Errore "KO   $($p.N)  [$($p.Id)]  (codice $LASTEXITCODE)"
+                Write-Errore "KO   $($p.Nome)  [$($p.Id)]  (codice $LASTEXITCODE)"
                 $ko++
             }
         }
@@ -1146,15 +1156,7 @@ if (Continua) { $passo-- } else { $passo++ }
 
 Write-Titolo "STEP 5 - Browser"
 
-$browserDisponibili = @(
-    @{ Nome = "Google Chrome";   Id = "Google.Chrome" },
-    @{ Nome = "Mozilla Firefox"; Id = "Mozilla.Firefox" },
-    @{ Nome = "Microsoft Edge";  Id = "Microsoft.Edge" },
-    @{ Nome = "Brave";           Id = "Brave.Brave" },
-    @{ Nome = "Opera";           Id = "Opera.Opera" },
-    @{ Nome = "Opera GX";        Id = "Opera.OperaGX" },
-    @{ Nome = "Vivaldi";         Id = "Vivaldi.Vivaldi" }
-)
+$browserDisponibili = $CatalogoBrowser
 
 Write-Host "Browser disponibili:" -ForegroundColor White
 for ($i = 0; $i -lt $browserDisponibili.Count; $i++) {
@@ -1205,29 +1207,12 @@ if (Continua) { $passo-- } else { $passo++ }
 
 Write-Titolo "STEP 6 - Applicazioni Base"
 
-$appsDisponibili = @(
-    @{ Nome = "VLC Media Player";   Id = "VideoLAN.VLC" },
-    @{ Nome = "Adobe Acrobat Reader"; Id = "Adobe.Acrobat.Reader.64-bit" },
-    @{ Nome = "Sumatra PDF";        Id = "SumatraPDF.SumatraPDF" },
-    @{ Nome = "Spotify";            Id = "Spotify.Spotify" },
-    @{ Nome = "AIMP";               Id = "AIMP.AIMP" },
-    @{ Nome = "7-Zip";              Id = "7zip.7zip" },
-    @{ Nome = "WhatsApp";           Id = "9NKSQGP7F2NH" },
-    @{ Nome = "GIMP";               Id = "GIMP.GIMP" },
-    @{ Nome = "Steam";              Id = "Valve.Steam" },
-    @{ Nome = "AnyDesk";            Id = "AnyDesk.AnyDesk" },
-    @{ Nome = "TeamViewer";         Id = "TeamViewer.TeamViewer" },
-    @{ Nome = "qBittorrent";        Id = "qBittorrent.qBittorrent" },
-    @{ Nome = "Discord";            Id = "Discord.Discord" },
-    @{ Nome = "Zoom";               Id = "Zoom.Zoom" }
-)
-
-# Preset profili: sottoinsiemi della lista sopra (per winget Id).
-# I browser (Chrome/Firefox) restano nello STEP 5, qui non inclusi.
+# App e profili derivano dal CATALOGO unico definito all'inizio (niente duplicati).
+$appsDisponibili = $CatalogoApp
 $profili = [ordered]@{
-    "BASE"    = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","TeamViewer.TeamViewer")
-    "UFFICIO" = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","TeamViewer.TeamViewer","Zoom.Zoom","Spotify.Spotify","GIMP.GIMP","SumatraPDF.SumatraPDF")
-    "GAMING"  = @("VideoLAN.VLC","Adobe.Acrobat.Reader.64-bit","7zip.7zip","9NKSQGP7F2NH","AnyDesk.AnyDesk","TeamViewer.TeamViewer","Valve.Steam","Discord.Discord","qBittorrent.qBittorrent")
+    "BASE"    = @($CatalogoApp | Where-Object { $_.Profili -contains "BASE" }    | ForEach-Object { $_.Id })
+    "UFFICIO" = @($CatalogoApp | Where-Object { $_.Profili -contains "UFFICIO" } | ForEach-Object { $_.Id })
+    "GAMING"  = @($CatalogoApp | Where-Object { $_.Profili -contains "GAMING" }  | ForEach-Object { $_.Id })
 }
 
 # Installa gli app della lista il cui Id e' nel set passato
