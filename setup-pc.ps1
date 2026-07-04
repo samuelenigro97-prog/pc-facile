@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "1.4 (2026-07-04)"
+$SCRIPT_VERSION = "1.5 (2026-07-04)"
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -318,9 +318,9 @@ try {
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"
     )
     foreach ($k in $chiaviReboot) { if (Test-Path $k) { $rebootPending = $true } }
-    $pfro = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager" `
-             -Name PendingFileRenameOperations -ErrorAction SilentlyContinue).PendingFileRenameOperations
-    if ($pfro) { $rebootPending = $true }
+    # NB: PendingFileRenameOperations NON e' piu' un segnale: su PC appena
+    # installati da USB e' quasi sempre popolato con rinomine innocue e dava
+    # un falso "riavvio in sospeso". Restano le due chiavi CBS/WindowsUpdate.
     if ($rebootPending) {
         Write-Info "C'e' un RIAVVIO in sospeso: alcune installazioni potrebbero fallire."
         Write-Info "Consiglio: riavvia il PC e rilancia lo script per risultati migliori."
@@ -621,24 +621,8 @@ if ($Diagnostica) {
 
 # Clear-Host fallisce senza una console vera (esecuzione headless/redirect): protetto
 try { Clear-Host } catch {}
-Write-Titolo "AUTOMAZIONE CONFIGURAZIONE PC - Avvio"
-Write-Host "Questo script guida la configurazione del PC del cliente passo per passo." -ForegroundColor White
-Write-Host "Segui le istruzioni a schermo e premi INVIO quando indicato." -ForegroundColor White
-Pausa
-
-# Conferma prima di modifiche reali (solo in Configura, non Test/Diagnostica)
-if ($RunReale) {
-    Write-Titolo "CONFIGURA - Modifiche REALI"
-    Write-Host "Stai per CONFIGURARE questo PC: verranno installati programmi e cambiate" -ForegroundColor White
-    Write-Host "impostazioni. Ad ogni passo ti verra' chiesta conferma (S/N)." -ForegroundColor White
-    Write-Host "Per un giro di prova SENZA modifiche, chiudi e scegli T (Test) o D (Diagnostica)." -ForegroundColor White
-    Write-Host ""
-    $procedi = Read-Host "Procedere con la configurazione? (S/N)"
-    if ($procedi -notmatch "^[Ss]") {
-        Write-Info "Configurazione annullata. Nessuna modifica effettuata."
-        return
-    }
-}
+# La scelta [C] Configura nel menu iniziale e' gia' la conferma: si parte
+# diretti. Ogni singolo passo chiede comunque S/N, niente modifiche a sorpresa.
 
 # =============================================================================
 # LINGUA E REGIONE (ITALIANO) - primo passo
