@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "2.5 (2026-07-04)"
+$SCRIPT_VERSION = "2.6 (2026-07-04)"
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -1480,7 +1480,7 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 Write-Titolo "Aggiornamento App Installate"
 
 Write-Host "Aggiorna all'ultima versione le app gestite da winget (incluse molte OEM)." -ForegroundColor White
-Write-Host "Puo' richiedere diversi minuti. NB: i DRIVER si aggiornano da Windows Update." -ForegroundColor White
+Write-Host "Puo' richiedere diversi minuti. (I driver hanno il loro passo dedicato dopo.)" -ForegroundColor White
 Write-Host ""
 
 $vuoiUpgrade = Read-Host "Aggiornare ora tutte le app installate? (S/N)"
