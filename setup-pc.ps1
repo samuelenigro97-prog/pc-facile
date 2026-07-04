@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "2.4 (2026-07-04)"
+$SCRIPT_VERSION = "2.5 (2026-07-04)"
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -1594,6 +1594,20 @@ if ($Report.Count -eq 0) {
 
 # UN SOLO file riepilogo, ordinato - solo run reale (Configura)
 if ($RunReale) {
+    # --- Dati cliente + credenziali da inserire nel riepilogo (opzionale) ---
+    $credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
+    Write-Host ""
+    Write-Titolo "Dati Cliente e Credenziali (riepilogo)"
+    Write-Host "Puoi annotare account e credenziali da consegnare al cliente nel file riepilogo." -ForegroundColor White
+    Write-Host "ATTENZIONE: finiscono IN CHIARO nel file sul Desktop. Consegnale al cliente e" -ForegroundColor Yellow
+    Write-Host "poi ELIMINA il file dal PC." -ForegroundColor Yellow
+    Write-Host ""
+    $vuoiCred = Read-Host "Annotare account/credenziali nel riepilogo? (S/N)"
+    if ($vuoiCred -match "^[Ss]") {
+        $credMsAccount  = (Read-Host "Account Microsoft / email (INVIO per saltare)").Trim()
+        $credMsPassword = (Read-Host "Password account (in chiaro nel file; INVIO per saltare)").Trim()
+        $credAltro      = (Read-Host "Altre note/credenziali (INVIO per saltare)").Trim()
+    }
     try {
         $winOk   = @($Report | Where-Object { $_.Voce -eq 'Windows attivato' -and $_.Esito -eq 'OK' }).Count -gt 0
         $diskBad = @($Report | Where-Object { $_.Voce -eq 'Salute disco' -and $_.Esito -eq 'ERRORE' }).Count -gt 0
@@ -1612,6 +1626,7 @@ if ($RunReale) {
         $f += "============================================================"
         $f += ""
         $f += "Data     : $(Get-Date -Format 'dd/MM/yyyy HH:mm')"
+        $f += "Cliente  : $(if ($nomeCliente) { $nomeCliente } else { '(non impostato)' })"
         $f += "Nome PC  : $env:COMPUTERNAME"
         $f += "Utente   : $env:USERNAME"
         $f += ""
@@ -1639,22 +1654,24 @@ if ($RunReale) {
         foreach ($r in $altre) { $f += ("  [{0,-8}] {1}" -f $r.Esito, $r.Voce) }
         $f += ""
         $f += $sep
-        $f += "NOTE / CREDENZIALI (da compilare a mano)"
+        $blank = "______________________________"
+        $haCred = ($credMsAccount -or $credMsPassword -or $credAltro)
+        $f += "NOTE / CREDENZIALI$(if ($haCred) { ' - CONTIENE DATI IN CHIARO: ELIMINA IL FILE DOPO LA CONSEGNA' } else { ' (da compilare a mano)' })"
         $f += $sep
-        $f += "  Account Microsoft : ______________________________"
-        $f += "  Password          : ______________________________"
+        $f += "  Account Microsoft : $(if ($credMsAccount) { $credMsAccount } else { $blank })"
+        $f += "  Password          : $(if ($credMsPassword) { $credMsPassword } else { $blank })"
         # Campi dedicati per ogni antivirus/protezione attivato in questa sessione
         foreach ($a in $av) {
             $nomeSvc = ($a.Voce -replace ' \(antivirus\)', '' -replace ' \(protezione\)', '').Trim()
             $f += ""
             $f += "  [$nomeSvc]"
-            $f += "  Email/utente account : ______________________________"
-            $f += "  Password account     : ______________________________"
-            $f += "  Codice/PIN licenza   : ______________________________"
-            $f += "  Credenziali app      : ______________________________"
+            $f += "  Email/utente account : $blank"
+            $f += "  Password account     : $blank"
+            $f += "  Codice/PIN licenza   : $blank"
+            $f += "  Credenziali app      : $blank"
         }
         $f += ""
-        $f += "  Altro             : ______________________________"
+        $f += "  Altro             : $(if ($credAltro) { $credAltro } else { $blank })"
         $f += ""
         $f += "============================================================"
         $f += "PC Facile - versione $SCRIPT_VERSION"
