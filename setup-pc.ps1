@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "3.2 (2026-07-04)"
+$SCRIPT_VERSION = "3.3 (2026-07-04)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -63,6 +63,16 @@ if ($vtOn) {
     $AOFF      = ""
     $THEME_COL = "DarkYellow"   # ambra: fallback quando l'arancione vero non e' disponibile
 }
+
+# Sfondo blu navy come nel logo Unieuro. La console dipinge lo sfondo col
+# colore NOMINATO (l'RGB esatto non e' impostabile senza P/Invoke): 'DarkBlue'
+# e' il navy della palette. Il testo di default va su grigio chiaro cosi' resta
+# leggibile. Impostato una volta qui: ogni Clear-Host successivo ridipinge navy.
+try {
+    $Host.UI.RawUI.BackgroundColor = 'DarkBlue'
+    $Host.UI.RawUI.ForegroundColor = 'Gray'
+    Clear-Host
+} catch {}
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -115,13 +125,13 @@ if (-not $Test -and -not $Diagnostica) {
     Write-Host "$AON    [D]$AOFF" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Diagnostica       (controlla, NON installa)" -ForegroundColor White
     Write-Host "$AON    [T]$AOFF" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Test a vuoto      (percorre tutto, NON installa)" -ForegroundColor White
     Write-Host ""
-    Write-Host "  (C oppure INVIO = Configura)" -ForegroundColor DarkGray
+    Write-Host "  (C oppure INVIO = Configura)" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  LEGENDA TASTI:" -ForegroundColor White
-    Write-Host "    Nei menu     : premi la LETTERA o il NUMERO indicato" -ForegroundColor DarkGray
-    Write-Host "    Nelle domande: S = si, N = no" -ForegroundColor DarkGray
-    Write-Host "    Fine passo   : si avanza automaticamente" -ForegroundColor DarkGray
-    Write-Host "    Per uscire   : chiudi la finestra" -ForegroundColor DarkGray
+    Write-Host "    Nei menu     : premi la LETTERA o il NUMERO indicato" -ForegroundColor Gray
+    Write-Host "    Nelle domande: S = si, N = no" -ForegroundColor Gray
+    Write-Host "    Fine passo   : si avanza automaticamente" -ForegroundColor Gray
+    Write-Host "    Per uscire   : chiudi la finestra" -ForegroundColor Gray
 
     $tasto = ""
     try {
@@ -144,7 +154,7 @@ if ($Test -or $Diagnostica) {
     function Read-Host {
         param([Parameter(Position = 0)][string]$Prompt)
         $risposta = if ($Prompt -match 'S/N') { "N" } else { "" }
-        Write-Host "$Prompt [AUTO => '$risposta']" -ForegroundColor DarkGray
+        Write-Host "$Prompt [AUTO => '$risposta']" -ForegroundColor Gray
         return $risposta
     }
     function Pausa { }
@@ -975,7 +985,7 @@ Write-Host "Rimuove il bloatware del produttore (HP/Lenovo/Dell/Asus/Acer) e le 
 Write-Host "consumer Microsoft/terze parti inutili, e toglie gli updater/helper dall'avvio" -ForegroundColor White
 Write-Host "automatico (boot piu' veloce). Elenca ogni app che rimuove." -ForegroundColor White
 Write-Host "NON tocca: Xbox, Spotify, Store, Foto, ne' i programmi installati dopo nel setup." -ForegroundColor White
-Write-Host "(Gli antivirus di prova li ha gia' gestiti il passo precedente.)" -ForegroundColor DarkGray
+Write-Host "(Gli antivirus di prova li ha gia' gestiti il passo precedente.)" -ForegroundColor Gray
 Write-Host ""
 
 # App Store (Appx) superflue. Wildcard sul nome. NON include Xbox ne' Spotify,
@@ -1240,7 +1250,7 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 Write-Titolo "Installa Suite Office (alternativa gratuita)"
 
 Write-Host "Serve solo se vuoi una suite GRATUITA al posto di Microsoft Office." -ForegroundColor White
-Write-Host "(Microsoft 365 lo attivi nel passo 'Attivazione Office', all'inizio.)" -ForegroundColor DarkGray
+Write-Host "(Microsoft 365 lo attivi nel passo 'Attivazione Office', all'inizio.)" -ForegroundColor Gray
 Write-Host "  1) OpenOffice" -ForegroundColor White
 Write-Host "  2) LibreOffice" -ForegroundColor White
 Write-Host "  3) Salta" -ForegroundColor White
