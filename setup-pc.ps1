@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "2.9 (2026-07-04)"
+$SCRIPT_VERSION = "3.0 (2026-07-04)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -593,7 +593,7 @@ if ($Diagnostica) {
             }
         }
         Write-Host ""
-        Write-Host ("Riepilogo pacchetti: {0} validi, {1} KO, {2} gia' installati (su {3})" -f ($tuttiId.Count - $ko), $ko, $installati, $tuttiId.Count) -ForegroundColor Cyan
+        Write-Host ("Riepilogo pacchetti: {0} validi, {1} KO, {2} gia' installati (su {3})" -f ($tuttiId.Count - $ko), $ko, $installati, $tuttiId.Count) -ForegroundColor $THEME_TXT
         if ($ko -eq 0) { Write-OK "Tutti gli ID pacchetti sono validi." }
         else { Write-Errore "$ko ID pacchetto/i non risolti: da correggere nello script." }
     } else {
@@ -1726,6 +1726,6 @@ if ($linguaCambiata) {
 }
 
 Write-Host ""
-Write-Host "Buon lavoro!" -ForegroundColor Cyan
+Write-Host "Buon lavoro!" -ForegroundColor $THEME_COL
 # Niente Pausa qui: l'unico "premi un tasto" e' quello finale del launcher .bat
 # ("Operazione terminata"), cosi' non si preme INVIO due volte.
