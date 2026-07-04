@@ -799,19 +799,44 @@ if ($vuoiRimAV -match "^[Ss]") {
             "Norton 360", "Norton Security", "Norton AntiVirus", "Norton",
             "Avast Free Antivirus", "AVG Antivirus"
         )
-        $tolti = 0
+        $tolti = 0; $mcafeeTrovato = $false; $nortonTrovato = $false
         foreach ($n in $avTrial) {
             winget list --name $n --accept-source-agreements 2>$null | Out-Null
             if ($LASTEXITCODE -eq 0) {
                 Write-Info "Rimozione $n..."
                 winget uninstall --name $n --silent --accept-source-agreements --disable-interactivity 2>$null | Out-Null
                 $tolti++
+                if ($n -like "McAfee*") { $mcafeeTrovato = $true }
+                if ($n -like "Norton*") { $nortonTrovato = $true }
             }
         }
         if ($tolti -gt 0) {
             Write-OK "Rimossi/avviata rimozione di $tolti antivirus di prova."
-            Write-Info "McAfee a volte richiede un riavvio per sparire del tutto."
             Add-Report "Antivirus di prova rimossi ($tolti)" "OK"
+
+            # Pulizia COMPLETA coi tool ufficiali (winget lascia residui)
+            if ($mcafeeTrovato) {
+                Write-Info "McAfee lascia residui: MCPR (tool ufficiale McAfee) pulisce tutto."
+                $r = Read-Host "Scaricare e avviare MCPR per rimuovere McAfee del tutto? (S/N)"
+                if ($r -match "^[Ss]") {
+                    try {
+                        $mcpr = "$env:TEMP\MCPR.exe"
+                        irm "https://download.mcafee.com/molbin/iss-loc/SupportTools/MCPR/MCPR.exe" -OutFile $mcpr -ErrorAction Stop
+                        Start-Process -FilePath $mcpr
+                        Write-OK "MCPR avviato: segui la procedura a schermo, poi RIAVVIA il PC."
+                    } catch {
+                        Write-Info "Download MCPR non riuscito. Scaricalo da: https://www.mcafee.com/support/?articleId=TS101331"
+                    }
+                }
+            }
+            if ($nortonTrovato) {
+                Write-Info "Norton lascia residui: 'Norton Remove and Reinstall' pulisce tutto."
+                $r = Read-Host "Aprire la pagina del tool di rimozione Norton? (S/N)"
+                if ($r -match "^[Ss]") {
+                    Start-Process "https://norton.com/nrnr"
+                    Write-OK "Pagina aperta: scarica ed esegui il tool, poi RIAVVIA il PC."
+                }
+            }
         } else {
             Write-Info "Nessun antivirus di prova trovato."
             Add-Report "Antivirus di prova" "SALTATO"
