@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "1.6 (2026-07-04)"
+$SCRIPT_VERSION = "1.7 (2026-07-04)"
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -1344,6 +1344,7 @@ Write-Titolo "Rimozione App Superflue (Bloatware)"
 
 Write-Host "Rimuove: bloatware del produttore (HP/Lenovo/Dell/Asus/Acer), app consumer" -ForegroundColor White
 Write-Host "Microsoft (Bing, giochi, Clipchamp...), trial antivirus preinstallati, toolbar." -ForegroundColor White
+Write-Host "Toglie anche gli updater/helper inutili dall'avvio automatico (boot piu' veloce)." -ForegroundColor White
 Write-Host "NON tocca: Xbox, Spotify, Store, Foto, ne' i programmi installati in questo setup." -ForegroundColor White
 Write-Host ""
 
@@ -1414,6 +1415,61 @@ if ($vuoiDebloat -match "^[Ss]") {
             } catch {}
         }
     }
+
+    # --- Pulizia AVVIO AUTOMATICO: toglie solo updater/helper NOTI (produttore,
+    # trial, promo). Lista mirata come per il bloatware: NON tocca driver,
+    # OneDrive, ne' le app installate in questo setup. Riavvio piu' veloce. ---
+    $avvioJunk = @(
+        'HP*', '*Lenovo*', 'Dell*', '*ASUS*', 'Acer*', '*SupportAssist*', '*Vantage*',
+        'Adobe*', 'SunJavaUpdate*', 'iTunesHelper', 'QuickTime*', 'CCleaner*',
+        'WildTangent*', 'ExpressVPN*', '*Booking*'
+    )
+    if (-not $mcafeeNostro) { $avvioJunk += 'McAfee*' }
+    if (-not $nortonNostro) { $avvioJunk += 'Norton*' }
+
+    $avvioTolti = 0
+    # 1) Voci di registro "Run" (utente + macchina + 32-bit): tolgo per nome-voce
+    $runKeys = @(
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run',
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run',
+        'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Run'
+    )
+    $metaProp = @('PSPath', 'PSParentPath', 'PSChildName', 'PSDrive', 'PSProvider')
+    foreach ($rk in $runKeys) {
+        if (-not (Test-Path $rk)) { continue }
+        $voci = Get-ItemProperty -Path $rk -ErrorAction SilentlyContinue
+        if (-not $voci) { continue }
+        foreach ($v in $voci.PSObject.Properties) {
+            if ($metaProp -contains $v.Name) { continue }
+            foreach ($pat in $avvioJunk) {
+                if ($v.Name -like $pat) {
+                    Remove-ItemProperty -Path $rk -Name $v.Name -ErrorAction SilentlyContinue
+                    $avvioTolti++
+                    break
+                }
+            }
+        }
+    }
+    # 2) Collegamenti nelle cartelle "Esecuzione automatica" (utente + tutti)
+    foreach ($dir in @([Environment]::GetFolderPath('Startup'), [Environment]::GetFolderPath('CommonStartup'))) {
+        if (-not $dir -or -not (Test-Path $dir)) { continue }
+        Get-ChildItem -Path $dir -Filter *.lnk -ErrorAction SilentlyContinue | ForEach-Object {
+            $nomeLnk = $_.BaseName
+            foreach ($pat in $avvioJunk) {
+                if ($nomeLnk -like $pat) {
+                    Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+                    $avvioTolti++
+                    break
+                }
+            }
+        }
+    }
+    if ($avvioTolti -gt 0) {
+        Write-OK "Tolti $avvioTolti programmi inutili dall'avvio automatico."
+    } else {
+        Write-Info "Avvio automatico: nessun elemento noto da togliere."
+    }
+    Add-Report "Pulizia avvio automatico ($avvioTolti)" "OK"
 
     Write-OK "Rimozione bloatware completata ($rimosse app Store + trial/utility Win32 via winget)."
     if ($mcafeeNostro -or $nortonNostro) {
