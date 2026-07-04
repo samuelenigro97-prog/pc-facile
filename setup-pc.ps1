@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "2.1 (2026-07-04)"
+$SCRIPT_VERSION = "2.2 (2026-07-04)"
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -846,13 +846,163 @@ if ($vuoiRimAV -match "^[Ss]") {
 if ($vuoiRimAV -match "^[Ss]") { Pausa }
 
 # =============================================================================
+# RIMOZIONE BLOATWARE + PULIZIA AVVIO (all'inizio, subito dopo gli AV di prova)
+# =============================================================================
+
+Write-Titolo "Rimozione App Superflue (Bloatware)"
+
+Write-Host "Rimuove il bloatware del produttore (HP/Lenovo/Dell/Asus/Acer) e le app" -ForegroundColor White
+Write-Host "consumer Microsoft/terze parti inutili, e toglie gli updater/helper dall'avvio" -ForegroundColor White
+Write-Host "automatico (boot piu' veloce). Elenca ogni app che rimuove." -ForegroundColor White
+Write-Host "NON tocca: Xbox, Spotify, Store, Foto, ne' i programmi installati dopo nel setup." -ForegroundColor White
+Write-Host "(Gli antivirus di prova li ha gia' gestiti il passo precedente.)" -ForegroundColor DarkGray
+Write-Host ""
+
+# App Store (Appx) superflue. Wildcard sul nome. NON include Xbox ne' Spotify,
+# ne' driver/stampante (pattern mirati sul bloatware, non l'intero publisher).
+$bloatwareAppx = @(
+    # --- Microsoft consumer / giochi ---
+    "Microsoft.BingNews", "Microsoft.BingWeather", "Microsoft.BingSearch",
+    "Microsoft.GetHelp", "Microsoft.Getstarted", "Microsoft.Microsoft3DViewer",
+    "Microsoft.MicrosoftSolitaireCollection", "Microsoft.MixedReality.Portal",
+    "Microsoft.People", "Microsoft.WindowsFeedbackHub",
+    "Microsoft.ZuneMusic", "Microsoft.ZuneVideo", "Microsoft.Windows.DevHome",
+    "Microsoft.Todos", "MicrosoftCorporationII.QuickAssist", "Clipchamp.Clipchamp",
+    "king.com.*", "*.CandyCrush*",
+    # --- Social/streaming preinstallati (terze parti) ---
+    "*.Facebook", "*.Instagram", "*.TikTok", "*.Netflix", "*.DisneyPlus",
+    "*.AmazonPrimeVideo", "*Booking*", "*.Twitter", "*ExpressVPN*",
+    # --- HP ---
+    "*SupportAssistant*", "*myHP*", "AD2F1837.HPPrivacySettings", "*HPJumpStart*",
+    "*HPPCHardwareDiagnostics*", "*HPPowerManager*", "*HPQuickDrop*", "*HPSystemInformation*",
+    "*HPWorkWell*", "*HPProgrammableKey*", "*HPDesktopSupportUtilities*",
+    # --- Lenovo ---
+    "*LenovoVantage*", "*LenovoCompanion*", "*LenovoUtility*", "*LenovoWelcome*",
+    "*LenovoQuickClean*", "*LenovoNow*", "*LenovoSmartCommunication*",
+    # --- Dell ---
+    "*DellSupportAssist*", "*DellCustomerConnect*", "*DellDigitalDelivery*",
+    "*DellUpdate*", "*DellOptimizer*", "*PartnerPromo*", "*DellPowerManager*",
+    # --- Asus / Acer ---
+    "*MyASUS*", "*ASUSPCAssistant*", "*ASUSGiftBox*", "*GlideX*", "*ASUSSplendid*",
+    "*AcerCollection*", "*AcerRegistration*", "*AcerJumpstart*", "*AcerCareCenter*"
+)
+
+$vuoiDebloat = Read-Host "Rimuovere il bloatware elencato? (S/N)"
+if ($vuoiDebloat -match "^[Ss]") {
+    $rimosse = 0
+    foreach ($pkg in $bloatwareAppx) {
+        try {
+            $trovati = Get-AppxPackage -AllUsers -Name $pkg -ErrorAction SilentlyContinue
+            foreach ($t in $trovati) {
+                Write-Info "Rimuovo app: $($t.Name)"
+                Remove-AppxPackage -Package $t.PackageFullName -AllUsers -ErrorAction SilentlyContinue
+                $rimosse++
+            }
+            # Rimuovi anche il provisioning: i nuovi utenti non le riavranno
+            Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -like $pkg } |
+                ForEach-Object { Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction SilentlyContinue | Out-Null }
+        } catch {}
+    }
+
+    # Utility/trial Win32 via winget. NIENTE antivirus: li gestisce gia' il passo
+    # "Rimozione Antivirus di Prova" qui sopra (nessuna duplicazione).
+    $trialWin32 = @("HP Support Assistant", "HP Documentation", "HP Sure Recover",
+                    "WildTangent Games", "ExpressVPN", "Dropbox Promotion")
+    if (Confirm-Winget) {
+        foreach ($nome in $trialWin32) {
+            winget uninstall --name $nome --silent --accept-source-agreements --disable-interactivity 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { Write-Info "Rimosso (winget): $nome"; $rimosse++ }
+        }
+    }
+
+    # --- Pulizia AVVIO AUTOMATICO: updater/helper NOTI (produttore, promo). NON
+    # tocca driver, OneDrive, gli updater dei browser, ne' le app del setup. ---
+    $avvioJunk = @(
+        'HP*', '*Lenovo*', 'Dell*', '*ASUS*', 'Acer*', '*SupportAssist*', '*Vantage*',
+        'Adobe*', 'SunJavaUpdate*', 'iTunesHelper', 'QuickTime*', 'CCleaner*',
+        'WildTangent*', 'ExpressVPN*', '*Booking*'
+    )
+    $avvioTolti = 0
+    # 1) Voci di registro "Run" (utente + macchina + 32-bit): tolgo per nome-voce
+    $runKeys = @(
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run',
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run',
+        'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Run'
+    )
+    $metaProp = @('PSPath', 'PSParentPath', 'PSChildName', 'PSDrive', 'PSProvider')
+    foreach ($rk in $runKeys) {
+        if (-not (Test-Path $rk)) { continue }
+        $voci = Get-ItemProperty -Path $rk -ErrorAction SilentlyContinue
+        if (-not $voci) { continue }
+        foreach ($v in $voci.PSObject.Properties) {
+            if ($metaProp -contains $v.Name) { continue }
+            foreach ($pat in $avvioJunk) {
+                if ($v.Name -like $pat) {
+                    Write-Info "Tolgo da avvio: $($v.Name)"
+                    Remove-ItemProperty -Path $rk -Name $v.Name -ErrorAction SilentlyContinue
+                    $avvioTolti++
+                    break
+                }
+            }
+        }
+    }
+    # 2) Collegamenti nelle cartelle "Esecuzione automatica" (utente + tutti)
+    foreach ($dir in @([Environment]::GetFolderPath('Startup'), [Environment]::GetFolderPath('CommonStartup'))) {
+        if (-not $dir -or -not (Test-Path $dir)) { continue }
+        Get-ChildItem -Path $dir -Filter *.lnk -ErrorAction SilentlyContinue | ForEach-Object {
+            $nomeLnk = $_.BaseName
+            foreach ($pat in $avvioJunk) {
+                if ($nomeLnk -like $pat) {
+                    Write-Info "Tolgo collegamento avvio: $nomeLnk"
+                    Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+                    $avvioTolti++
+                    break
+                }
+            }
+        }
+    }
+    # 3) Task pianificati all'avvio/logon: DISABILITO (non elimino) i junk noti.
+    #    Salto i task di sistema \Microsoft\Windows\ e gli updater dei browser.
+    $taskJunk = @(
+        '*Adobe*', '*HP*', '*Lenovo*', '*Dell*', '*ASUS*', '*Acer*',
+        '*SupportAssist*', '*Vantage*', '*CCleaner*', '*WildTangent*',
+        '*ExpressVPN*', '*Java Update*', '*JavaUpdate*'
+    )
+    try {
+        foreach ($tk in (Get-ScheduledTask -ErrorAction SilentlyContinue)) {
+            if ($tk.State -eq 'Disabled') { continue }
+            if ($tk.TaskPath -like '\Microsoft\Windows\*') { continue }   # OS: non toccare
+            $full = "$($tk.TaskPath)$($tk.TaskName)"
+            foreach ($pat in $taskJunk) {
+                if ($full -like $pat) {
+                    Write-Info "Disabilito task avvio: $($tk.TaskName)"
+                    Disable-ScheduledTask -TaskName $tk.TaskName -TaskPath $tk.TaskPath -ErrorAction SilentlyContinue | Out-Null
+                    $avvioTolti++
+                    break
+                }
+            }
+        }
+    } catch {}
+
+    Write-OK "Bloatware: rimosse $rimosse app; tolti $avvioTolti elementi dall'avvio automatico."
+    Add-Report "Rimozione bloatware ($rimosse app)" "OK"
+    Add-Report "Pulizia avvio automatico ($avvioTolti)" "OK"
+} else {
+    Write-Info "Rimozione bloatware saltata."
+    Add-Report "Rimozione bloatware" "SALTATO"
+}
+
+if ($vuoiDebloat -match "^[Ss]") { Pausa }
+
+# =============================================================================
 # PASSI DI CONFIGURAZIONE (dopo ogni scelta si avanza automaticamente)
 # =============================================================================
 
 $passo = 1
-while ($passo -ge 1 -and $passo -le 10) {
+while ($passo -ge 1 -and $passo -le 9) {
 Write-Host ""
-Write-Host ("  [ Passo $passo di 10 ]") -ForegroundColor DarkCyan
+Write-Host ("  [ Passo $passo di 9 ]") -ForegroundColor DarkCyan
 switch ($passo) {
 1 {
 # =============================================================================
@@ -1324,178 +1474,6 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 }
 8 {
 # =============================================================================
-# STEP 7 - RIMOZIONE APP SUPERFLUE (BLOATWARE) - opzionale
-# =============================================================================
-
-Write-Titolo "Rimozione App Superflue (Bloatware)"
-
-Write-Host "Rimuove: bloatware del produttore (HP/Lenovo/Dell/Asus/Acer), app consumer" -ForegroundColor White
-Write-Host "Microsoft (Bing, giochi, Clipchamp...), trial antivirus preinstallati, toolbar." -ForegroundColor White
-Write-Host "Toglie anche gli updater/helper inutili dall'avvio automatico (boot piu' veloce)." -ForegroundColor White
-Write-Host "NON tocca: Xbox, Spotify, Store, Foto, ne' i programmi installati in questo setup." -ForegroundColor White
-Write-Host ""
-
-# App Store (Appx) superflue. Wildcard sul nome. NON include Xbox ne' Spotify,
-# ne' driver/stampante (uso pattern mirati sul bloatware, non l'intero publisher).
-$bloatwareAppx = @(
-    # --- Microsoft consumer / giochi ---
-    "Microsoft.BingNews", "Microsoft.BingWeather", "Microsoft.BingSearch",
-    "Microsoft.GetHelp", "Microsoft.Getstarted", "Microsoft.Microsoft3DViewer",
-    "Microsoft.MicrosoftSolitaireCollection", "Microsoft.MixedReality.Portal",
-    "Microsoft.People", "Microsoft.WindowsFeedbackHub",
-    "Microsoft.ZuneMusic", "Microsoft.ZuneVideo", "Microsoft.Windows.DevHome",
-    "Microsoft.Todos", "MicrosoftCorporationII.QuickAssist", "Clipchamp.Clipchamp",
-    "king.com.*", "*.CandyCrush*",
-    # --- Social/streaming preinstallati (terze parti) ---
-    "*.Facebook", "*.Instagram", "*.TikTok", "*.Netflix", "*.DisneyPlus",
-    "*.AmazonPrimeVideo", "*Booking*", "*.Twitter", "*ExpressVPN*",
-    # --- HP ---
-    "*SupportAssistant*", "*myHP*", "AD2F1837.HPPrivacySettings", "*HPJumpStart*",
-    "*HPPCHardwareDiagnostics*", "*HPPowerManager*", "*HPQuickDrop*", "*HPSystemInformation*",
-    "*HPWorkWell*", "*HPProgrammableKey*", "*HPDesktopSupportUtilities*",
-    # --- Lenovo ---
-    "*LenovoVantage*", "*LenovoCompanion*", "*LenovoUtility*", "*LenovoWelcome*",
-    "*LenovoQuickClean*", "*LenovoNow*", "*LenovoSmartCommunication*",
-    # --- Dell ---
-    "*DellSupportAssist*", "*DellCustomerConnect*", "*DellDigitalDelivery*",
-    "*DellUpdate*", "*DellOptimizer*", "*PartnerPromo*", "*DellPowerManager*",
-    # --- Asus / Acer ---
-    "*MyASUS*", "*ASUSPCAssistant*", "*ASUSGiftBox*", "*GlideX*", "*ASUSSplendid*",
-    "*AcerCollection*", "*AcerRegistration*", "*AcerJumpstart*", "*AcerCareCenter*"
-)
-
-$vuoiDebloat = Read-Host "Rimuovere il bloatware elencato? (S/N)"
-if ($vuoiDebloat -match "^[Ss]") {
-    $rimosse = 0
-    foreach ($pkg in $bloatwareAppx) {
-        try {
-            $trovati = Get-AppxPackage -AllUsers -Name $pkg -ErrorAction SilentlyContinue
-            foreach ($t in $trovati) {
-                Remove-AppxPackage -Package $t.PackageFullName -AllUsers -ErrorAction SilentlyContinue
-                $rimosse++
-            }
-            # Rimuovi anche il provisioning: i nuovi utenti non le riavranno
-            Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
-                Where-Object { $_.DisplayName -like $pkg } |
-                ForEach-Object { Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction SilentlyContinue | Out-Null }
-        } catch {}
-    }
-
-    # Trial antivirus + utility Win32 via winget.
-    # GUARDIA: NON rimuovo l'antivirus che ho appena installato in questa sessione.
-    $mcafeeNostro = @($Report | Where-Object { $_.Voce -like "McAfee*" -and $_.Esito -eq "OK" }).Count -gt 0
-    $nortonNostro = @($Report | Where-Object { $_.Voce -like "Norton*" -and $_.Esito -eq "OK" }).Count -gt 0
-
-    $trialWin32 = @("HP Support Assistant", "HP Documentation", "HP Sure Recover",
-                    "WildTangent Games", "ExpressVPN", "Dropbox Promotion")
-    if (-not $mcafeeNostro) {
-        $trialWin32 += @("McAfee LiveSafe", "McAfee Total Protection", "McAfee Personal Security", "McAfee WebAdvisor", "McAfee Security")
-    }
-    if (-not $nortonNostro) {
-        $trialWin32 += @("Norton 360", "Norton Security", "Norton")
-    }
-
-    if (Confirm-Winget) {
-        foreach ($nome in $trialWin32) {
-            try {
-                winget uninstall --name $nome --silent --accept-source-agreements --disable-interactivity 2>$null | Out-Null
-            } catch {}
-        }
-    }
-
-    # --- Pulizia AVVIO AUTOMATICO: toglie solo updater/helper NOTI (produttore,
-    # trial, promo). Lista mirata come per il bloatware: NON tocca driver,
-    # OneDrive, ne' le app installate in questo setup. Riavvio piu' veloce. ---
-    $avvioJunk = @(
-        'HP*', '*Lenovo*', 'Dell*', '*ASUS*', 'Acer*', '*SupportAssist*', '*Vantage*',
-        'Adobe*', 'SunJavaUpdate*', 'iTunesHelper', 'QuickTime*', 'CCleaner*',
-        'WildTangent*', 'ExpressVPN*', '*Booking*'
-    )
-    if (-not $mcafeeNostro) { $avvioJunk += 'McAfee*' }
-    if (-not $nortonNostro) { $avvioJunk += 'Norton*' }
-
-    $avvioTolti = 0
-    # 1) Voci di registro "Run" (utente + macchina + 32-bit): tolgo per nome-voce
-    $runKeys = @(
-        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run',
-        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run',
-        'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Run'
-    )
-    $metaProp = @('PSPath', 'PSParentPath', 'PSChildName', 'PSDrive', 'PSProvider')
-    foreach ($rk in $runKeys) {
-        if (-not (Test-Path $rk)) { continue }
-        $voci = Get-ItemProperty -Path $rk -ErrorAction SilentlyContinue
-        if (-not $voci) { continue }
-        foreach ($v in $voci.PSObject.Properties) {
-            if ($metaProp -contains $v.Name) { continue }
-            foreach ($pat in $avvioJunk) {
-                if ($v.Name -like $pat) {
-                    Remove-ItemProperty -Path $rk -Name $v.Name -ErrorAction SilentlyContinue
-                    $avvioTolti++
-                    break
-                }
-            }
-        }
-    }
-    # 2) Collegamenti nelle cartelle "Esecuzione automatica" (utente + tutti)
-    foreach ($dir in @([Environment]::GetFolderPath('Startup'), [Environment]::GetFolderPath('CommonStartup'))) {
-        if (-not $dir -or -not (Test-Path $dir)) { continue }
-        Get-ChildItem -Path $dir -Filter *.lnk -ErrorAction SilentlyContinue | ForEach-Object {
-            $nomeLnk = $_.BaseName
-            foreach ($pat in $avvioJunk) {
-                if ($nomeLnk -like $pat) {
-                    Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
-                    $avvioTolti++
-                    break
-                }
-            }
-        }
-    }
-    # 3) Task pianificati all'avvio/logon: DISABILITO (non elimino) i junk noti.
-    #    Salto i task di sistema \Microsoft\Windows\ (non tocco l'OS) e NON
-    #    disabilito gli updater dei browser (servono per la sicurezza).
-    $taskJunk = @(
-        '*Adobe*', '*HP*', '*Lenovo*', '*Dell*', '*ASUS*', '*Acer*',
-        '*SupportAssist*', '*Vantage*', '*CCleaner*', '*WildTangent*',
-        '*ExpressVPN*', '*Java Update*', '*JavaUpdate*'
-    )
-    if (-not $mcafeeNostro) { $taskJunk += '*McAfee*' }
-    if (-not $nortonNostro) { $taskJunk += '*Norton*' }
-    try {
-        foreach ($tk in (Get-ScheduledTask -ErrorAction SilentlyContinue)) {
-            if ($tk.State -eq 'Disabled') { continue }
-            if ($tk.TaskPath -like '\Microsoft\Windows\*') { continue }   # OS: non toccare
-            $full = "$($tk.TaskPath)$($tk.TaskName)"
-            foreach ($pat in $taskJunk) {
-                if ($full -like $pat) {
-                    Disable-ScheduledTask -TaskName $tk.TaskName -TaskPath $tk.TaskPath -ErrorAction SilentlyContinue | Out-Null
-                    $avvioTolti++
-                    break
-                }
-            }
-        }
-    } catch {}
-    if ($avvioTolti -gt 0) {
-        Write-OK "Tolti $avvioTolti programmi inutili dall'avvio automatico."
-    } else {
-        Write-Info "Avvio automatico: nessun elemento noto da togliere."
-    }
-    Add-Report "Pulizia avvio automatico ($avvioTolti)" "OK"
-
-    Write-OK "Rimozione bloatware completata ($rimosse app Store + trial/utility Win32 via winget)."
-    if ($mcafeeNostro -or $nortonNostro) {
-        Write-Info "Antivirus installato in questa sessione mantenuto (non rimosso)."
-    }
-    Add-Report "Rimozione bloatware ($rimosse Store)" "OK"
-} else {
-    Write-Info "Rimozione bloatware saltata."
-    Add-Report "Rimozione bloatware" "SALTATO"
-}
-
-$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
-}
-9 {
-# =============================================================================
 # STEP 8 - AGGIORNAMENTO APP INSTALLATE - opzionale
 # =============================================================================
 
@@ -1523,7 +1501,7 @@ if ($vuoiUpgrade -match "^[Ss]") {
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-10 {
+9 {
 # =============================================================================
 # STEP 9 - CONFIGURAZIONE WINDOWS BASE - opzionale
 # =============================================================================
