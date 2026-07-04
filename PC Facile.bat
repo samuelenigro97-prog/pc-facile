@@ -26,7 +26,7 @@ REM --- Altrimenti scarico su file temporaneo e lo lancio con -File (stabile) --
 echo Scarico l'ultima versione da GitHub...
 set "PS1=%TEMP%\setup-pc.ps1"
 if exist "%PS1%" del "%PS1%" >nul 2>&1
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { irm 'https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/setup-pc.ps1' -OutFile '%PS1%' } catch { Write-Host ('Download fallito: ' + $_) -ForegroundColor Red }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { irm 'https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1' -OutFile '%PS1%' } catch { Write-Host ('Download fallito: ' + $_) -ForegroundColor Red }"
 if exist "%PS1%" (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%"
 ) else (

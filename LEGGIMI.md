@@ -23,7 +23,7 @@ riavvio**.
 Ti basta **UN file**: `PC Facile.bat`.
 
 ```
-https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/PC%20Facile.bat
+https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/PC%20Facile.bat
 ```
 
 Tasto destro → **Salva con nome** → `PC Facile.bat`.
@@ -36,7 +36,7 @@ Tasto destro → **Salva con nome** → `PC Facile.bat`.
 `setup-pc.ps1` e mettilo **nella stessa cartella** di `PC Facile.bat`. Il launcher, se
 lo trova accanto, usa quello invece di scaricarlo.
 ```
-https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/setup-pc.ps1
+https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1
 ```
 
 ---
@@ -66,13 +66,13 @@ parametri. Non serve salvare file né toccare l'ExecutionPolicy.
 
 ```powershell
 # CONFIGURA il PC (installa e imposta)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/setup-pc.ps1)))
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1)))
 
 # DIAGNOSTICA (controlla ID pacchetti e ambiente, NON installa)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/setup-pc.ps1))) -Diagnostica
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1))) -Diagnostica
 
 # TEST a vuoto (percorre tutto senza installare/modificare)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/test-setup-pc/main/setup-pc.ps1))) -Test
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1))) -Test
 ```
 
 Se invece hai il file salvato e vuoi lanciarlo da file:
