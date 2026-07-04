@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "2.3 (2026-07-04)"
+$SCRIPT_VERSION = "2.4 (2026-07-04)"
 
 # =============================================================================
 # FUNZIONI UTILITY
@@ -1063,6 +1063,42 @@ if ($vuoiDebloat -match "^[Ss]") {
 if ($vuoiDebloat -match "^[Ss]") { Pausa }
 
 # =============================================================================
+# CONFIGURAZIONE WINDOWS BASE (insieme al debloat: pulizia + comodita')
+# =============================================================================
+
+Write-Titolo "Configurazione Windows Base"
+
+Write-Host "Piccole comodita': mostra le estensioni dei file, apre Esplora file su" -ForegroundColor White
+Write-Host "'Questo PC' e disattiva l'avvio automatico di OneDrive." -ForegroundColor White
+Write-Host ""
+
+$vuoiConfig = Read-Host "Applicare queste impostazioni? (S/N)"
+if ($vuoiConfig -match "^[Ss]") {
+    try {
+        $adv = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+        Set-ItemProperty -Path $adv -Name "HideFileExt" -Value 0 -Type DWord -ErrorAction SilentlyContinue   # mostra estensioni
+        Set-ItemProperty -Path $adv -Name "LaunchTo"    -Value 1 -Type DWord -ErrorAction SilentlyContinue   # Esplora su "Questo PC"
+
+        # Disattiva l'avvio automatico di OneDrive (toglie la voce di avvio)
+        $run = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+        if (Get-ItemProperty -Path $run -Name "OneDrive" -ErrorAction SilentlyContinue) {
+            Remove-ItemProperty -Path $run -Name "OneDrive" -ErrorAction SilentlyContinue
+        }
+
+        Write-OK "Impostazioni applicate (attive al prossimo riavvio di Esplora file)."
+        Add-Report "Configurazione Windows base" "OK"
+    } catch {
+        Write-Errore "Impossibile applicare alcune impostazioni: $_"
+        Add-Report "Configurazione Windows base" "ERRORE"
+    }
+} else {
+    Write-Info "Configurazione Windows base saltata."
+    Add-Report "Configurazione Windows base" "SALTATO"
+}
+
+if ($vuoiConfig -match "^[Ss]") { Pausa }
+
+# =============================================================================
 # PASSI DI CONFIGURAZIONE (dopo ogni scelta si avanza automaticamente)
 # =============================================================================
 
@@ -1467,37 +1503,57 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 }
 8 {
 # =============================================================================
-# STEP 9 - CONFIGURAZIONE WINDOWS BASE - opzionale
+# STEP 8 - INSTALLA/AGGIORNA DRIVER (Windows Update, opzionale, ultimo passo)
 # =============================================================================
 
-Write-Titolo "Configurazione Windows Base"
+Write-Titolo "Driver (Windows Update)"
 
-Write-Host "Piccole comodita': mostra le estensioni dei file, apre Esplora file su" -ForegroundColor White
-Write-Host "'Questo PC' e disattiva l'avvio automatico di OneDrive." -ForegroundColor White
+Write-Host "Cerca e installa i driver mancanti/aggiornati dal catalogo Windows Update." -ForegroundColor White
+Write-Host "Vendor-neutral: niente tool del produttore. Puo' richiedere qualche minuto" -ForegroundColor White
+Write-Host "e talvolta un riavvio. Opzionale, ultimo passo." -ForegroundColor White
 Write-Host ""
 
-$vuoiConfig = Read-Host "Applicare queste impostazioni? (S/N)"
-if ($vuoiConfig -match "^[Ss]") {
+$vuoiDriver = Read-Host "Cercare e installare i driver ora? (S/N)"
+if ($vuoiDriver -match "^[Ss]") {
     try {
-        $adv = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-        Set-ItemProperty -Path $adv -Name "HideFileExt" -Value 0 -Type DWord -ErrorAction SilentlyContinue   # mostra estensioni
-        Set-ItemProperty -Path $adv -Name "LaunchTo"    -Value 1 -Type DWord -ErrorAction SilentlyContinue   # Esplora su "Questo PC"
-
-        # Disattiva l'avvio automatico di OneDrive (toglie la voce di avvio)
-        $run = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-        if (Get-ItemProperty -Path $run -Name "OneDrive" -ErrorAction SilentlyContinue) {
-            Remove-ItemProperty -Path $run -Name "OneDrive" -ErrorAction SilentlyContinue
+        Write-Info "Ricerca driver su Windows Update (puo' richiedere qualche minuto)..."
+        $sess = New-Object -ComObject Microsoft.Update.Session
+        $searcher = $sess.CreateUpdateSearcher()
+        # Solo aggiornamenti di tipo driver non ancora installati
+        $result = $searcher.Search("Type='Driver' and IsInstalled=0")
+        if ($result.Updates.Count -eq 0) {
+            Write-OK "Nessun driver da installare: risultano gia' tutti aggiornati."
+            Add-Report "Driver (Windows Update)" "OK"
+        } else {
+            $daInstallare = New-Object -ComObject Microsoft.Update.UpdateColl
+            foreach ($u in $result.Updates) {
+                Write-Info "Driver trovato: $($u.Title)"
+                $daInstallare.Add($u) | Out-Null
+            }
+            Write-Info "Download driver..."
+            $downloader = $sess.CreateUpdateDownloader()
+            $downloader.Updates = $daInstallare
+            $downloader.Download() | Out-Null
+            Write-Info "Installazione driver..."
+            $installer = $sess.CreateUpdateInstaller()
+            $installer.Updates = $daInstallare
+            $esito = $installer.Install()
+            if ($esito.ResultCode -eq 2) {
+                Write-OK "Driver installati ($($daInstallare.Count))."
+                Add-Report "Driver installati ($($daInstallare.Count))" "OK"
+            } else {
+                Write-Info "Installazione driver conclusa (codice $($esito.ResultCode)): alcuni potrebbero richiedere riavvio."
+                Add-Report "Driver (Windows Update)" "AVVISO"
+            }
+            if ($esito.RebootRequired) { Write-Info "Alcuni driver richiedono un RIAVVIO per completare." }
         }
-
-        Write-OK "Impostazioni applicate (attive al prossimo riavvio di Esplora file)."
-        Add-Report "Configurazione Windows base" "OK"
     } catch {
-        Write-Errore "Impossibile applicare alcune impostazioni: $_"
-        Add-Report "Configurazione Windows base" "ERRORE"
+        Write-Errore "Ricerca/installazione driver non riuscita: $_"
+        Add-Report "Driver (Windows Update)" "ERRORE"
     }
 } else {
-    Write-Info "Configurazione Windows base saltata."
-    Add-Report "Configurazione Windows base" "SALTATO"
+    Write-Info "Installazione driver saltata."
+    Add-Report "Driver (Windows Update)" "SALTATO"
 }
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
