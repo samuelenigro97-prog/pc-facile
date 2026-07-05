@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "3.3 (2026-07-04)"
+$SCRIPT_VERSION = "3.4 (2026-07-05)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -47,6 +47,10 @@ $THEME_TXT = "White"    # testo dei titoli (bianco, come il payoff del logo)
 try {
     if (-not (Test-Path 'HKCU:\Console')) { New-Item -Path 'HKCU:\Console' -Force | Out-Null }
     Set-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -Value 1 -Type DWord -ErrorAction Stop
+    # Rimappa lo slot "DarkBlue" (indice 1) al navy scuro Unieuro #10142E, cosi'
+    # lo sfondo blu e' un navy vero e non il DarkBlue acceso di default. DWORD in
+    # formato 0x00BBGGRR = 0x002E1410. Vale dalle finestre aperte dopo.
+    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -Value 0x002E1410 -Type DWord -ErrorAction SilentlyContinue
 } catch {}
 
 # Rileva se il VT e' attivo per QUESTA finestra (chiave gia' presente al lancio).
