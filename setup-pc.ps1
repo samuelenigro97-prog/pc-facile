@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "3.8 (2026-07-06)"
+$SCRIPT_VERSION = "3.9 (2026-07-06)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -123,6 +123,32 @@ function Beep-Completato {
     if ($RunReale) { try { [console]::Beep(784, 160); [console]::Beep(1047, 260) } catch {} }
 }
 
+# Genera una password forte ma leggibile a partire dal nome cliente. Lo SCRIPT
+# la crea (quindi la conosce e la puo' scrivere nel riepilogo): NON legge nulla
+# dal browser. Formato es. "Rossi-482k": maiuscola iniziale + minuscole + cifre
+# + trattino -> soddisfa i requisiti Microsoft. Niente 0/o/1/l/i per non
+# confonderle a mano.
+function New-PasswordCliente {
+    param([string]$Base)
+    $b = ($Base -replace '[^A-Za-z]', '')
+    if ($b.Length -lt 2) { $b = "Cliente" }
+    $b = $b.Substring(0, 1).ToUpper() + $b.Substring(1).ToLower()
+    if ($b.Length -gt 10) { $b = $b.Substring(0, 10) }
+    $cifre = -join (1..3 | ForEach-Object { Get-Random -Minimum 2 -Maximum 10 })
+    $set = 'abcdefghjkmnpqrstuvwxyz'
+    $l = $set[(Get-Random -Maximum $set.Length)]
+    return "$b-$cifre$l"
+}
+
+# Email suggerita per un nuovo account (outlook.com) dal nome cliente + numero.
+function New-EmailCliente {
+    param([string]$Base)
+    $e = ($Base -replace '[^A-Za-z0-9]', '').ToLower()
+    if (-not $e) { $e = "cliente" }
+    if ($e.Length -gt 15) { $e = $e.Substring(0, 15) }
+    return "$e$(Get-Random -Minimum 10 -Maximum 999)@outlook.com"
+}
+
 # Menu iniziale: se non e' stata scelta una modalita' via parametro, la chiedo.
 # Un solo tasto, senza INVIO: D=diagnostica, T=test, C/INVIO/altro=configura.
 if (-not $Test -and -not $Diagnostica) {
@@ -179,6 +205,11 @@ if ($Test -or $Diagnostica) {
 # Run "reale" = Configura (non Test, non Diagnostica): solo qui si creano i
 # file su Desktop (log/report/scheda/batteria), per non sporcare coi controlli.
 $RunReale = (-not $Test -and -not $Diagnostica)
+
+# Credenziali del nuovo account, generate dallo script allo step Account
+# Microsoft e scritte nel riepilogo. Init qui cosi' esistono anche se quel
+# passo viene saltato (restano vuote nel file).
+$credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
 
 # =============================================================================
 # CATALOGO PACCHETTI - UNICA FONTE (usato da STEP 3/5/6 e dalla Diagnostica)
@@ -908,6 +939,21 @@ $vuoiMs = Read-Host "Aprire il login account Microsoft ora? (S/N)"
 if ($vuoiMs -match "^[Ss]") {
     Start-Process "https://account.microsoft.com"
     Write-OK "Aperto account.microsoft.com nel browser."
+
+    # Credenziali SUGGERITE dallo script (le genera lui -> le conosce -> le
+    # scrive nel riepilogo): niente da digitare, niente lette dal browser.
+    if ($RunReale) {
+        $credMsAccount  = New-EmailCliente -Base $nomeCliente
+        $credMsPassword = New-PasswordCliente -Base $nomeCliente
+        try { Set-Clipboard -Value $credMsPassword; $inAppunti = " (copiata negli appunti)" } catch { $inAppunti = "" }
+        Write-Host ""
+        Write-Host "  Credenziali SUGGERITE per il nuovo account (gia' nel riepilogo):" -ForegroundColor White
+        Write-Info  "Email suggerita : $credMsAccount"
+        Write-Info  "Password        : $credMsPassword$inAppunti"
+        Write-Host "  Usa queste in fase di registrazione. Se ne usi altre, correggi il file." -ForegroundColor Gray
+        Write-Host ""
+    }
+
     Write-Info "Accedi o crea l'account, poi torna qui. Usa lo stesso browser per i login dopo."
     Add-Report "Account Microsoft" "OK"
 } else {
@@ -1679,10 +1725,9 @@ if ($Report.Count -eq 0) {
 
 # UN SOLO file riepilogo, ordinato - solo run reale (Configura)
 if ($RunReale) {
-    # Nessuna domanda sulle credenziali: il riepilogo lascia dei campi VUOTI da
-    # compilare (il PC resta al cliente, tiene lui i suoi account). Non chiediamo
-    # nulla all'operatore e non leggiamo password dal browser.
-    $credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
+    # Le credenziali del nuovo account le ha GENERATE lo script allo step Account
+    # Microsoft ($credMsAccount / $credMsPassword). Se quel passo e' stato saltato
+    # restano vuote. Niente domande all'operatore, niente password dal browser.
     try {
         $winOk   = @($Report | Where-Object { $_.Voce -eq 'Windows attivato' -and $_.Esito -eq 'OK' }).Count -gt 0
         $diskBad = @($Report | Where-Object { $_.Voce -eq 'Salute disco' -and $_.Esito -eq 'ERRORE' }).Count -gt 0
