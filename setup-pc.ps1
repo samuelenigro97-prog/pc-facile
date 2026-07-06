@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "3.5 (2026-07-06)"
+$SCRIPT_VERSION = "3.6 (2026-07-06)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -907,18 +907,31 @@ switch ($sceltaAtt) {
 if ($sceltaAtt -match "^[12]$") { Pausa }
 
 # =============================================================================
-# RIMOZIONE ANTIVIRUS DI PROVA (all'inizio: evita conflitti e blocchi)
+# PULIZIA E OTTIMIZZAZIONE INIZIALE - un solo passaggio, una sola domanda:
+#   1/3 rimuove gli antivirus di PROVA (evita conflitti e blocchi)
+#   2/3 rimuove il bloatware + pulisce l'avvio automatico (boot piu' veloce)
+#   3/3 applica piccole comodita' di Windows (estensioni, Questo PC, OneDrive)
 # =============================================================================
 
-Write-Titolo "Rimozione Antivirus di Prova"
+Write-Titolo "Pulizia e Ottimizzazione Iniziale"
 
-Write-Host "I PC nuovi hanno spesso McAfee/Norton/Avast di PROVA preinstallati." -ForegroundColor White
-Write-Host "Meglio rimuoverli ORA: scadono, disturbano, vanno in conflitto con quello" -ForegroundColor White
-Write-Host "che installi, e a volte bloccano lo script stesso." -ForegroundColor White
+Write-Host "In un colpo solo, consigliato sui PC nuovi:" -ForegroundColor White
+Write-Host "  - toglie gli antivirus di PROVA (McAfee/Norton/Avast: scadono e vanno" -ForegroundColor White
+Write-Host "    in conflitto con quello che installi, a volte bloccano lo script)" -ForegroundColor White
+Write-Host "  - rimuove il bloatware del produttore (HP/Lenovo/Dell/Asus/Acer) e le" -ForegroundColor White
+Write-Host "    app consumer inutili, e alleggerisce l'avvio automatico" -ForegroundColor White
+Write-Host "  - applica piccole comodita' (estensioni file, Esplora su 'Questo PC'," -ForegroundColor White
+Write-Host "    OneDrive fuori dall'avvio)" -ForegroundColor White
+Write-Host "NON tocca: Xbox, Spotify, Store, Foto, driver, ne' i programmi del setup." -ForegroundColor White
 Write-Host ""
 
-$vuoiRimAV = Read-Host "Cercare e rimuovere gli antivirus di prova preinstallati? (consigliato) (S/N)"
-if ($vuoiRimAV -match "^[Ss]") {
+$vuoiPulizia = Read-Host "Eseguire ora la pulizia e ottimizzazione iniziale? (consigliato) (S/N)"
+if ($vuoiPulizia -match "^[Ss]") {
+
+    # ---------------------------------------------------------------------
+    # 1/3 - ANTIVIRUS DI PROVA
+    # ---------------------------------------------------------------------
+    Write-Info "1/3 - Rimozione antivirus di prova preinstallati..."
     if (Confirm-Winget) {
         $avTrial = @(
             "McAfee LiveSafe", "McAfee Total Protection", "McAfee Personal Security",
@@ -972,25 +985,11 @@ if ($vuoiRimAV -match "^[Ss]") {
         Write-Errore "winget non disponibile: rimuovi gli AV di prova a mano da Impostazioni > App."
         Add-Report "Antivirus di prova" "ERRORE"
     }
-} else {
-    Write-Info "Rimozione antivirus di prova saltata."
-    Add-Report "Antivirus di prova" "SALTATO"
-}
 
-if ($vuoiRimAV -match "^[Ss]") { Pausa }
-
-# =============================================================================
-# RIMOZIONE BLOATWARE + PULIZIA AVVIO (all'inizio, subito dopo gli AV di prova)
-# =============================================================================
-
-Write-Titolo "Rimozione App Superflue (Bloatware)"
-
-Write-Host "Rimuove il bloatware del produttore (HP/Lenovo/Dell/Asus/Acer) e le app" -ForegroundColor White
-Write-Host "consumer Microsoft/terze parti inutili, e toglie gli updater/helper dall'avvio" -ForegroundColor White
-Write-Host "automatico (boot piu' veloce). Elenca ogni app che rimuove." -ForegroundColor White
-Write-Host "NON tocca: Xbox, Spotify, Store, Foto, ne' i programmi installati dopo nel setup." -ForegroundColor White
-Write-Host "(Gli antivirus di prova li ha gia' gestiti il passo precedente.)" -ForegroundColor Gray
-Write-Host ""
+    # ---------------------------------------------------------------------
+    # 2/3 - BLOATWARE + PULIZIA AVVIO AUTOMATICO
+    # ---------------------------------------------------------------------
+    Write-Info "2/3 - Rimozione bloatware e pulizia dell'avvio automatico..."
 
 # App Store (Appx) superflue. Wildcard sul nome. NON include Xbox ne' Spotify,
 # ne' driver/stampante (pattern mirati sul bloatware, non l'intero publisher).
@@ -1021,8 +1020,6 @@ $bloatwareAppx = @(
     "*AcerCollection*", "*AcerRegistration*", "*AcerJumpstart*", "*AcerCareCenter*"
 )
 
-$vuoiDebloat = Read-Host "Rimuovere il bloatware elencato? (S/N)"
-if ($vuoiDebloat -match "^[Ss]") {
     $rimosse = 0
     foreach ($pkg in $bloatwareAppx) {
         try {
@@ -1039,8 +1036,8 @@ if ($vuoiDebloat -match "^[Ss]") {
         } catch {}
     }
 
-    # Utility/trial Win32 via winget. NIENTE antivirus: li gestisce gia' il passo
-    # "Rimozione Antivirus di Prova" qui sopra (nessuna duplicazione).
+    # Utility/trial Win32 via winget. NIENTE antivirus: li gestisce gia' il
+    # blocco 1/3 qui sopra (nessuna duplicazione).
     $trialWin32 = @("HP Support Assistant", "HP Documentation", "HP Sure Recover",
                     "WildTangent Games", "ExpressVPN", "Dropbox Promotion")
     if (Confirm-Winget) {
@@ -1122,25 +1119,11 @@ if ($vuoiDebloat -match "^[Ss]") {
     Write-OK "Bloatware: rimosse $rimosse app; tolti $avvioTolti elementi dall'avvio automatico."
     Add-Report "Rimozione bloatware ($rimosse app)" "OK"
     Add-Report "Pulizia avvio automatico ($avvioTolti)" "OK"
-} else {
-    Write-Info "Rimozione bloatware saltata."
-    Add-Report "Rimozione bloatware" "SALTATO"
-}
 
-if ($vuoiDebloat -match "^[Ss]") { Pausa }
-
-# =============================================================================
-# CONFIGURAZIONE WINDOWS BASE (insieme al debloat: pulizia + comodita')
-# =============================================================================
-
-Write-Titolo "Configurazione Windows Base"
-
-Write-Host "Piccole comodita': mostra le estensioni dei file, apre Esplora file su" -ForegroundColor White
-Write-Host "'Questo PC' e disattiva l'avvio automatico di OneDrive." -ForegroundColor White
-Write-Host ""
-
-$vuoiConfig = Read-Host "Applicare queste impostazioni? (S/N)"
-if ($vuoiConfig -match "^[Ss]") {
+    # ---------------------------------------------------------------------
+    # 3/3 - CONFIGURAZIONE WINDOWS BASE (piccole comodita')
+    # ---------------------------------------------------------------------
+    Write-Info "3/3 - Applico piccole comodita' di Windows..."
     try {
         $adv = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
         Set-ItemProperty -Path $adv -Name "HideFileExt" -Value 0 -Type DWord -ErrorAction SilentlyContinue   # mostra estensioni
@@ -1158,12 +1141,15 @@ if ($vuoiConfig -match "^[Ss]") {
         Write-Errore "Impossibile applicare alcune impostazioni: $_"
         Add-Report "Configurazione Windows base" "ERRORE"
     }
+
+    Write-OK "Pulizia e ottimizzazione iniziale completata."
+    Pausa
 } else {
-    Write-Info "Configurazione Windows base saltata."
+    Write-Info "Pulizia e ottimizzazione iniziale saltata."
+    Add-Report "Antivirus di prova" "SALTATO"
+    Add-Report "Rimozione bloatware" "SALTATO"
     Add-Report "Configurazione Windows base" "SALTATO"
 }
-
-if ($vuoiConfig -match "^[Ss]") { Pausa }
 
 # =============================================================================
 # PASSI DI CONFIGURAZIONE (dopo ogni scelta si avanza; B al prompt = indietro)
