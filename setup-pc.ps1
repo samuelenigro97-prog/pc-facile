@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "4.1 (2026-07-06)"
+$SCRIPT_VERSION = "4.2 (2026-07-06)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -244,6 +244,7 @@ $CatalogoApp = @(
     @{ Nome = "WhatsApp";             Id = "9NKSQGP7F2NH";                 Profili = @("BASE","UFFICIO","GAMING") },
     @{ Nome = "GIMP";                 Id = "GIMP.GIMP";                    Profili = @("UFFICIO") },
     @{ Nome = "Steam";                Id = "Valve.Steam";                  Profili = @("GAMING") },
+    @{ Nome = "Epic Games Launcher";  Id = "EpicGames.EpicGamesLauncher";  Profili = @("GAMING") },
     @{ Nome = "AnyDesk";              Id = "AnyDesk.AnyDesk";              Profili = @("BASE","UFFICIO","GAMING") },
     @{ Nome = "TeamViewer";           Id = "TeamViewer.TeamViewer";        Profili = @("BASE","UFFICIO","GAMING") },
     @{ Nome = "qBittorrent";          Id = "qBittorrent.qBittorrent";      Profili = @("GAMING") },
@@ -1548,7 +1549,7 @@ function Installa-Set {
 Write-Host "Scegli come installare le applicazioni:" -ForegroundColor White
 Write-Host "  1) PROFILO BASE     (VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk, TeamViewer)"
 Write-Host "  2) PROFILO UFFICIO  (BASE + Zoom, Spotify, GIMP, Sumatra PDF)"
-Write-Host "  3) PROFILO GAMING   (BASE + Steam, Discord, qBittorrent; +GeForce se NVIDIA)"
+Write-Host "  3) PROFILO GAMING   (BASE + Steam, Epic, Discord, qBittorrent; +GeForce se NVIDIA)"
 Write-Host "  4) COMPLETO         (tutte le app in lista)"
 Write-Host "  5) MANUALE          (scelgo io i singoli numeri)"
 Write-Host "  S) Salta"
