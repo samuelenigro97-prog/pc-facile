@@ -8,7 +8,7 @@
 # da installare a parte Homebrew (che lo script installa da solo).
 # =============================================================================
 
-SCRIPT_VERSION="0.3 (2026-07-06)"
+SCRIPT_VERSION="0.4 (2026-07-06)"
 
 # ---- Modalita' (come su Windows): -Test / -Diagnostica / -Veloce -------------
 MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST
@@ -277,6 +277,19 @@ else
     command -v brew >/dev/null 2>&1 && ok "Homebrew installato." || errore "Installazione Homebrew non riuscita."
   else
     dim "(test/salta) installerei Homebrew"
+  fi
+fi
+# Apple Silicon (arm64): Rosetta 2 serve a far girare le app solo-Intel.
+if [[ "$(uname -m)" == "arm64" ]]; then
+  if $RUN_REALE; then
+    if /usr/bin/pgrep -q oahd; then
+      ok "Rosetta 2 gia' presente."
+    else
+      info "Apple Silicon: installo Rosetta 2..."
+      softwareupdate --install-rosetta --agree-to-license >/dev/null 2>&1 && ok "Rosetta 2 installata." || dim "Rosetta non installata (forse non serve)."
+    fi
+  else
+    dim "(test) su Apple Silicon installerei Rosetta 2 se manca"
   fi
 fi
 pausa

@@ -23,7 +23,11 @@ allineati come flusso e funzioni.
 | Credenziali (esist./gen.)   | `Nome123!` + `Set-Clipboard`              | `Nome123!` + `pbcopy`                         | pari |
 | Report finale .txt          | Desktop `Riepilogo-PC_*.txt`              | Desktop `Riepilogo-Mac_*.txt`                 | pari |
 
-## Cosa NON si porta su Mac (di proposito)
+## Solo Windows (non esiste su Mac)
 - **Debloat OEM**: macOS non ha crapware del produttore.
 - **Rimozione antivirus di prova**: quasi mai preinstallato su Mac.
-- **Attivazione Office/driver**: gestione diversa (Office da web, driver inclusi in macOS).
+- **Attivazione Office/driver**: Office da web, driver inclusi in macOS.
+- **GeForce se NVIDIA**: i Mac recenti non hanno GPU NVIDIA.
+
+## Solo Mac (non esiste su Windows)
+- **Rosetta 2** su Apple Silicon (arm64): serve a far girare le app solo-Intel.
