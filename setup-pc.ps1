@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "3.7 (2026-07-06)"
+$SCRIPT_VERSION = "3.8 (2026-07-06)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -109,6 +109,18 @@ function Write-Errore {
 function Pausa {
     Write-Host ""
     Read-Host "Premi INVIO per continuare"
+}
+
+# Avviso sonoro a fine passo (utile se ti distrai durante installazioni/download).
+# [console]::Beep e' un metodo .NET gestito: NON e' P/Invoke, l'antivirus non lo
+# segnala. Solo nel run reale (niente bip durante Test/Diagnostica/CI headless).
+function Beep-Fine {
+    param([int]$Freq = 880, [int]$Dur = 180)
+    if ($RunReale) { try { [console]::Beep($Freq, $Dur) } catch {} }
+}
+# Melodia breve di "tutto finito" (due toni), distinta dal bip di fine passo.
+function Beep-Completato {
+    if ($RunReale) { try { [console]::Beep(784, 160); [console]::Beep(1047, 260) } catch {} }
 }
 
 # Menu iniziale: se non e' stata scelta una modalita' via parametro, la chiedo.
@@ -1209,6 +1221,7 @@ $bloatwareAppx = @(
     }
 
     Write-OK "Pulizia e ottimizzazione iniziale completata."
+    Beep-Fine
     Pausa
 } else {
     Write-Info "Pulizia e ottimizzazione iniziale saltata."
@@ -1630,6 +1643,7 @@ if ($vuoiDriver -match "^[Ss]") {
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 }
+Beep-Fine   # avviso sonoro: passo del wizard completato
 if ($passo -lt 2) { $passo = 2 }
 }
 
@@ -1759,6 +1773,7 @@ if ($linguaCambiata) {
 }
 
 Write-Host ""
+Beep-Completato   # melodia "tutto finito" (utile se ti sei allontanato)
 Write-Host "${AON}Buon lavoro!$AOFF" -ForegroundColor $THEME_COL
 # Niente Pausa qui: l'unico "premi un tasto" e' quello finale del launcher .bat
 # ("Operazione terminata"), cosi' non si preme INVIO due volte.
