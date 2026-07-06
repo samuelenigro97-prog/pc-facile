@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "3.6 (2026-07-06)"
+$SCRIPT_VERSION = "3.7 (2026-07-06)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -47,10 +47,10 @@ $THEME_TXT = "White"    # testo dei titoli (bianco, come il payoff del logo)
 try {
     if (-not (Test-Path 'HKCU:\Console')) { New-Item -Path 'HKCU:\Console' -Force | Out-Null }
     Set-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -Value 1 -Type DWord -ErrorAction Stop
-    # Rimappa lo slot "DarkBlue" (indice 1) al navy scuro Unieuro #10142E, cosi'
-    # lo sfondo blu e' un navy vero e non il DarkBlue acceso di default. DWORD in
-    # formato 0x00BBGGRR = 0x002E1410. Vale dalle finestre aperte dopo.
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -Value 0x002E1410 -Type DWord -ErrorAction SilentlyContinue
+    # Rimappa lo slot "DarkBlue" (indice 1) al navy SCURO #0A0E24, cosi' lo
+    # sfondo blu e' un navy vero e non il DarkBlue acceso di default. DWORD in
+    # formato 0x00BBGGRR = 0x00240E0A. Vale dalle finestre aperte dopo.
+    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -Value 0x00240E0A -Type DWord -ErrorAction SilentlyContinue
 } catch {}
 
 # Rileva se il VT e' attivo per QUESTA finestra (chiave gia' presente al lancio).
@@ -786,6 +786,72 @@ if ($impostaLingua -match "^[Ss]") {
 if ($impostaLingua -match "^[Ss]") { Pausa }
 
 # =============================================================================
+# NOME CLIENTE E PC (prima voce dopo la lingua: la prima cosa da impostare)
+# Un solo nome: vale sia per l'account Windows sia per il nome del PC.
+# =============================================================================
+
+Write-Titolo "Nome Cliente e PC"
+
+# Legge il nome visualizzato attuale: prima LocalAccounts, poi ADSI (che
+# funziona anche in PowerShell x86, dove il modulo LocalAccounts non c'e').
+$adsiUser = 'WinNT://./' + $env:USERNAME + ',user'
+$nomeAttuale = $null
+try {
+    $nomeAttuale = (Get-LocalUser -Name $env:USERNAME -ErrorAction Stop).FullName
+} catch {
+    try { $nomeAttuale = ([ADSI]$adsiUser).FullName } catch {}
+}
+Write-Info "Utente corrente: $env:USERNAME"
+Write-Info "Nome visualizzato attuale: $(if ($nomeAttuale) { $nomeAttuale } else { '(non impostato)' })"
+Write-Host ""
+Write-Info "Nome PC attuale: $env:COMPUTERNAME"
+Write-Host ""
+$nomeCliente = (Read-Host "Nome del cliente (account E nome PC) - INVIO per saltare").Trim()
+
+if ($nomeCliente -ne "") {
+    $nomeOk = $false
+    # 1) Metodo moderno (modulo LocalAccounts, disponibile solo in PowerShell 64-bit)
+    try {
+        Set-LocalUser -Name $env:USERNAME -FullName $nomeCliente -ErrorAction Stop
+        $nomeOk = $true
+    } catch {
+        # 2) Fallback ADSI/WinNT: funziona anche in x86 e senza il modulo LocalAccounts
+        try {
+            $u = [ADSI]$adsiUser
+            $u.FullName = $nomeCliente
+            $u.SetInfo()
+            $nomeOk = $true
+        } catch {}
+    }
+    if ($nomeOk) {
+        Write-OK "Nome account aggiornato a: $nomeCliente"
+        Add-Report "Nome cliente" "OK"
+    } else {
+        Write-Errore "Impossibile aggiornare il nome visualizzato dell'account $env:USERNAME."
+        Add-Report "Nome cliente" "ERRORE"
+    }
+
+    # Stesso nome anche per il PC (hostname): solo A-Z 0-9 e trattino, max 15 char.
+    $pcNuovo = ($nomeCliente -replace '[^A-Za-z0-9-]', '')
+    if ($pcNuovo.Length -gt 15) { $pcNuovo = $pcNuovo.Substring(0, 15) }
+    if ($pcNuovo -ne "" -and $pcNuovo -ne $env:COMPUTERNAME) {
+        try {
+            Rename-Computer -NewName $pcNuovo -Force -ErrorAction Stop
+            Write-OK "PC rinominato in '$pcNuovo' (attivo dopo il riavvio)."
+            Add-Report "Rinomina PC ($pcNuovo)" "OK"
+        } catch {
+            Write-Errore "Impossibile rinominare il PC: $_"
+            Add-Report "Rinomina PC" "ERRORE"
+        }
+    }
+} else {
+    Write-Info "Nome non modificato (account e PC invariati)."
+    Add-Report "Nome cliente" "SALTATO"
+}
+
+if ($nomeCliente -ne "") { Pausa }
+
+# =============================================================================
 # PUNTO DI RIPRISTINO (rete di sicurezza prima delle modifiche)
 # =============================================================================
 
@@ -1160,84 +1226,19 @@ $bloatwareAppx = @(
 # anche da dentro lo switch, saltando il $passo++ di fine passo.
 function Test-Indietro { param([string]$v) return ($v -match '^\s*[Bb]\s*$') }
 
-$passo = 1
-:wizard while ($passo -ge 1 -and $passo -le 8) {
+# Il wizard parte dal passo 2: il passo 1 "Nome" e' stato spostato prima (dopo
+# la lingua). Non rinumero i case dello switch: nella barra mostro (passo-1) su 7.
+$passo = 2
+:wizard while ($passo -ge 2 -and $passo -le 8) {
 Write-Host ""
 $barLen = 20
-$pieni = [int]($barLen * $passo / 8)
+$totPassi = 7
+$passoMostrato = $passo - 1
+$pieni = [int]($barLen * $passoMostrato / $totPassi)
 if ($pieni -gt $barLen) { $pieni = $barLen }
 $bar = (([string]$BOX_FULL) * $pieni) + (([string]$BOX_EMPTY) * ($barLen - $pieni))
-Write-Host ("$AON  Passo $passo/8  [$bar]$AOFF") -ForegroundColor $THEME_COL
+Write-Host ("$AON  Passo $passoMostrato/$totPassi  [$bar]$AOFF") -ForegroundColor $THEME_COL
 switch ($passo) {
-1 {
-# =============================================================================
-# STEP 1 - NOME CLIENTE
-# =============================================================================
-
-Write-Titolo "Nome Cliente e PC"
-
-# Legge il nome visualizzato attuale: prima LocalAccounts, poi ADSI (che
-# funziona anche in PowerShell x86, dove il modulo LocalAccounts non c'e').
-$adsiUser = 'WinNT://./' + $env:USERNAME + ',user'
-$nomeAttuale = $null
-try {
-    $nomeAttuale = (Get-LocalUser -Name $env:USERNAME -ErrorAction Stop).FullName
-} catch {
-    try { $nomeAttuale = ([ADSI]$adsiUser).FullName } catch {}
-}
-Write-Info "Utente corrente: $env:USERNAME"
-Write-Info "Nome visualizzato attuale: $(if ($nomeAttuale) { $nomeAttuale } else { '(non impostato)' })"
-Write-Host ""
-
-Write-Info "Nome PC attuale: $env:COMPUTERNAME"
-Write-Host ""
-# UN SOLO nome: vale sia per l'account Windows sia per il nome del PC.
-$nomeCliente = (Read-Host "Nome del cliente (account E nome PC) - INVIO salta, B indietro").Trim()
-if (Test-Indietro $nomeCliente) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
-
-if ($nomeCliente -ne "") {
-    $nomeOk = $false
-    # 1) Metodo moderno (modulo LocalAccounts, disponibile solo in PowerShell 64-bit)
-    try {
-        Set-LocalUser -Name $env:USERNAME -FullName $nomeCliente -ErrorAction Stop
-        $nomeOk = $true
-    } catch {
-        # 2) Fallback ADSI/WinNT: funziona anche in x86 e senza il modulo LocalAccounts
-        try {
-            $u = [ADSI]$adsiUser
-            $u.FullName = $nomeCliente
-            $u.SetInfo()
-            $nomeOk = $true
-        } catch {}
-    }
-    if ($nomeOk) {
-        Write-OK "Nome account aggiornato a: $nomeCliente"
-        Add-Report "Nome cliente" "OK"
-    } else {
-        Write-Errore "Impossibile aggiornare il nome visualizzato dell'account $env:USERNAME."
-        Add-Report "Nome cliente" "ERRORE"
-    }
-
-    # Stesso nome anche per il PC (hostname): solo A-Z 0-9 e trattino, max 15 char.
-    $pcNuovo = ($nomeCliente -replace '[^A-Za-z0-9-]', '')
-    if ($pcNuovo.Length -gt 15) { $pcNuovo = $pcNuovo.Substring(0, 15) }
-    if ($pcNuovo -ne "" -and $pcNuovo -ne $env:COMPUTERNAME) {
-        try {
-            Rename-Computer -NewName $pcNuovo -Force -ErrorAction Stop
-            Write-OK "PC rinominato in '$pcNuovo' (attivo dopo il riavvio)."
-            Add-Report "Rinomina PC ($pcNuovo)" "OK"
-        } catch {
-            Write-Errore "Impossibile rinominare il PC: $_"
-            Add-Report "Rinomina PC" "ERRORE"
-        }
-    }
-} else {
-    Write-Info "Nome non modificato (account e PC invariati)."
-    Add-Report "Nome cliente" "SALTATO"
-}
-
-$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
-}
 2 {
 # =============================================================================
 # STEP 2 - INSTALLA SUITE OFFICE GRATUITA (OpenOffice / LibreOffice)
@@ -1253,7 +1254,7 @@ Write-Host "  3) Salta" -ForegroundColor White
 Write-Host ""
 
 $sceltaSuite = Read-Host "Scelta (1-3, B=indietro)"
-if (Test-Indietro $sceltaSuite) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
+if (Test-Indietro $sceltaSuite) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
 switch ($sceltaSuite) {
     "1" {
         if (Confirm-Winget) { Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice" }
@@ -1284,7 +1285,7 @@ Write-Host "  3) Salta"
 Write-Host ""
 
 $sceltaAV = Read-Host "Scelta (1-3, B=indietro)"
-if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
+if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
 
 function Installa-Antivirus {
     param(
@@ -1392,7 +1393,7 @@ Write-Host "Servizio venduto solo su richiesta: salta se il cliente non l'ha acq
 Write-Host ""
 
 $vuoiUnieuro = Read-Host "Attivare Unieuro Cyber Protection? (S/N, B=indietro)"
-if (Test-Indietro $vuoiUnieuro) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
+if (Test-Indietro $vuoiUnieuro) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
 if ($vuoiUnieuro -match "^[Ss]") {
     Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it"
 } else {
@@ -1421,7 +1422,7 @@ Write-Host "  S) Salta"
 Write-Host ""
 
 $sceltaBrowser = Read-Host "Scelta (es: 1,2 - T tutti - S salta - B indietro)"
-if (Test-Indietro $sceltaBrowser) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
+if (Test-Indietro $sceltaBrowser) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
 
 if ($sceltaBrowser -match "^[Ss]$") {
     Write-Info "Browser saltati."
@@ -1490,7 +1491,7 @@ Write-Host "  S) Salta"
 Write-Host ""
 
 $sceltaApps = Read-Host "Scelta (1-5 - S salta - B indietro)"
-if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
+if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
 
 switch ($sceltaApps) {
     "1" { Installa-Set -Ids $profili["BASE"] }
@@ -1552,7 +1553,7 @@ Write-Host "Puo' richiedere diversi minuti. (I driver hanno il loro passo dedica
 Write-Host ""
 
 $vuoiUpgrade = Read-Host "Aggiornare ora tutte le app installate? (S/N, B=indietro)"
-if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
+if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
 if ($vuoiUpgrade -match "^[Ss]") {
     if (Confirm-Winget) {
         Write-Info "Aggiornamento in corso (puo' richiedere diversi minuti)..."
@@ -1583,7 +1584,7 @@ Write-Host "e talvolta un riavvio. Opzionale, ultimo passo." -ForegroundColor Wh
 Write-Host ""
 
 $vuoiDriver = Read-Host "Cercare e installare i driver ora? (S/N, B=indietro)"
-if (Test-Indietro $vuoiDriver) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
+if (Test-Indietro $vuoiDriver) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
 if ($vuoiDriver -match "^[Ss]") {
     try {
         Write-Info "Ricerca driver su Windows Update (puo' richiedere qualche minuto)..."
@@ -1629,7 +1630,7 @@ if ($vuoiDriver -match "^[Ss]") {
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 }
-if ($passo -lt 1) { $passo = 1 }
+if ($passo -lt 2) { $passo = 2 }
 }
 
 # =============================================================================
@@ -1664,20 +1665,10 @@ if ($Report.Count -eq 0) {
 
 # UN SOLO file riepilogo, ordinato - solo run reale (Configura)
 if ($RunReale) {
-    # --- Dati cliente + credenziali da inserire nel riepilogo (opzionale) ---
+    # Nessuna domanda sulle credenziali: il riepilogo lascia dei campi VUOTI da
+    # compilare (il PC resta al cliente, tiene lui i suoi account). Non chiediamo
+    # nulla all'operatore e non leggiamo password dal browser.
     $credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
-    Write-Host ""
-    Write-Titolo "Dati Cliente e Credenziali (riepilogo)"
-    Write-Host "Puoi annotare account e credenziali da consegnare al cliente nel file riepilogo." -ForegroundColor White
-    Write-Host "ATTENZIONE: finiscono IN CHIARO nel file sul Desktop. Consegnale al cliente e" -ForegroundColor Yellow
-    Write-Host "poi ELIMINA il file dal PC." -ForegroundColor Yellow
-    Write-Host ""
-    $vuoiCred = Read-Host "Annotare account/credenziali nel riepilogo? (S/N)"
-    if ($vuoiCred -match "^[Ss]") {
-        $credMsAccount  = (Read-Host "Account Microsoft / email (INVIO per saltare)").Trim()
-        $credMsPassword = (Read-Host "Password account (in chiaro nel file; INVIO per saltare)").Trim()
-        $credAltro      = (Read-Host "Altre note/credenziali (INVIO per saltare)").Trim()
-    }
     try {
         $winOk   = @($Report | Where-Object { $_.Voce -eq 'Windows attivato' -and $_.Esito -eq 'OK' }).Count -gt 0
         $diskBad = @($Report | Where-Object { $_.Voce -eq 'Salute disco' -and $_.Esito -eq 'ERRORE' }).Count -gt 0
@@ -1744,7 +1735,6 @@ if ($RunReale) {
         $f += "  Altro             : $(if ($credAltro) { $credAltro } else { $blank })"
         $f += ""
         $f += "============================================================"
-        $f += "PC Facile - versione $SCRIPT_VERSION"
 
         $riepFile = Join-Path (Get-DesktopDir) ("Riepilogo-PC_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmm"))
         $f | Set-Content -Path $riepFile -Encoding UTF8

@@ -2,6 +2,7 @@
 title PC Facile
 REM ============================================================
 REM  PC Facile.bat - launcher doppio-click per setup-pc.ps1
+REM  - Imposta i colori (registro) e RIAPRE in una finestra nuova
 REM  - Si auto-eleva ad amministratore (UAC)
 REM  - Parte SEMPRE con ExecutionPolicy Bypass (niente errori di blocco)
 REM  - Scarica SEMPRE l'ultima versione da GitHub; la copia accanto al .bat
@@ -9,22 +10,28 @@ REM    e' solo il fallback offline (cosi' si aggiorna da solo, niente USB stale)
 REM  Il MENU (Configura/Diagnostica/Test) e' nello script, prima schermata.
 REM ============================================================
 
-REM --- Abilita il Virtual Terminal della console (colori ANSI truecolor:
-REM     arancione Unieuro esatto). Solo una chiave di registro, niente P/Invoke.
-REM     In cima cosi' la finestra elevata (nuova) parte gia' coi colori veri. ---
+REM --- PRIMA PASSATA: imposto i colori nel registro, poi RIAPRO in una finestra
+REM     NUOVA. conhost legge il registro SOLO all'apertura della finestra: se
+REM     l'account e' gia' admin (es. "oem") non c'e' rilancio UAC, quindi la
+REM     finestra corrente e' nata prima del reg e resterebbe col blu chiaro.
+REM     La sentinella "run" evita di ripetere all'infinito. ---
+if /i "%~1"=="run" goto :run
+
+REM Virtual Terminal ON (colori ANSI truecolor: arancione Unieuro esatto)
 reg add "HKCU\Console" /v VirtualTerminalLevel /t REG_DWORD /d 1 /f >nul 2>&1
+REM Slot "DarkBlue" (indice 1) rimappato al navy SCURO #0A0E24.
+REM DWORD = 0x00BBGGRR = 0x00240E0A.
+reg add "HKCU\Console" /v ColorTable01 /t REG_DWORD /d 0x00240E0A /f >nul 2>&1
+start "PC Facile" "%~f0" run
+exit /b
 
-REM --- Rimappa lo slot colore "DarkBlue" (indice 1) al navy scuro Unieuro
-REM     #10142E. Formato DWORD = 0x00BBGGRR = 0x002E1410. Cosi' lo sfondo blu
-REM     dello script e' un navy scuro vero, non il DarkBlue acceso di default.
-REM     Anche questa e' solo una chiave di registro (niente P/Invoke). ---
-reg add "HKCU\Console" /v ColorTable01 /t REG_DWORD /d 0x002E1410 /f >nul 2>&1
-
-REM --- Auto-elevazione: se non sono admin, mi rilancio come admin ---
+:run
+REM --- Auto-elevazione: se non sono admin, mi rilancio come admin (nuova
+REM     finestra, gia' post-reg -> colori ok). Passo la sentinella "run". ---
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo Richiesta privilegi di amministratore...
-    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -ArgumentList 'run' -Verb RunAs"
     exit /b
 )
 
