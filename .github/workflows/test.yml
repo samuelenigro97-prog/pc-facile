@@ -1,4 +1,4 @@
-name: Test setup-pc.ps1 su Windows
+name: Test PC Facile (Windows + Mac)
 
 on:
   push:
@@ -101,3 +101,24 @@ jobs:
           } else {
             Write-Host "[OK] Nessun problema rilevato." -ForegroundColor Green
           }
+
+  test-mac:
+    runs-on: macos-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verifica sintassi zsh
+        run: |
+          echo "=== VERIFICA SINTASSI (zsh -n) ==="
+          zsh -n setup-mac.sh && echo "[OK] Sintassi zsh valida"
+
+      # Smoke test: --test rende lo script non interattivo e non distruttivo.
+      # </dev/null garantisce che non resti bloccato su eventuali input.
+      - name: Smoke test (--test, non distruttivo)
+        run: |
+          echo "=== SMOKE TEST (--test) ==="
+          zsh setup-mac.sh --test </dev/null
+          echo "[OK] Flusso Mac completato senza errori di runtime"
