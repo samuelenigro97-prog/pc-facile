@@ -32,9 +32,13 @@ Tasto destro → **Salva con nome** → `PC Facile.bat`.
 `PC Facile.bat` da solo scarica ed esegue l'ultima versione dello script da GitHub
 (serve Internet — sui PC da configurare c'è, serve anche per winget).
 
-**Uso OFFLINE (opzionale):** se vuoi lavorare senza Internet, scarica anche
-`setup-pc.ps1` e mettilo **nella stessa cartella** di `PC Facile.bat`. Il launcher, se
-lo trova accanto, usa quello invece di scaricarlo.
+Il launcher scarica **sempre l'ultima versione** da GitHub, così è aggiornato da
+solo (niente copie vecchie sulla chiavetta).
+
+**Uso OFFLINE (fallback):** se vuoi poter lavorare senza Internet, scarica anche
+`setup-pc.ps1` e mettilo **nella stessa cartella** di `PC Facile.bat`. Serve solo
+se il download fallisce: in quel caso il launcher usa la copia accanto. Ricordati
+di rinfrescarla ogni tanto, altrimenti offline resti a una versione vecchia.
 ```
 https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1
 ```
@@ -45,10 +49,14 @@ https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps
 
 **Doppio click su `PC Facile.bat`.** Fa tutto da solo:
 - chiede i privilegi di amministratore (UAC → *Sì*)
-- usa `setup-pc.ps1` accanto se c'è, altrimenti scarica l'ultima versione
+- scarica ed esegue l'ultima versione da GitHub (copia accanto = fallback offline)
 - avvia con ExecutionPolicy Bypass
 
 Niente comandi da digitare.
+
+> **Durante la configurazione:** all'inizio scegli **C** (Configura) / **D**
+> (Diagnostica) / **T** (Test). Dentro un passo, digita **B** al prompt per
+> tornare al passo precedente; altrimenti dopo ogni scelta si avanza da solo.
 
 > Se Windows/SmartScreen avvisa sul `.bat`: *Ulteriori info → Esegui comunque*.
 > Se **Smart App Control** blocca tutto → vedi punto 3.
