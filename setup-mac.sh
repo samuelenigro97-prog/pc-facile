@@ -8,7 +8,7 @@
 # da installare a parte Homebrew (che lo script installa da solo).
 # =============================================================================
 
-SCRIPT_VERSION="0.1 (2026-07-06)"
+SCRIPT_VERSION="0.2 (2026-07-06)"
 
 # ---- Modalita' (come su Windows): -Test / -Diagnostica / -Veloce -------------
 MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST
@@ -43,11 +43,20 @@ RUN_REALE=false
 [[ "$MODO" == "CONFIGURA" || "$MODO" == "VELOCE" ]] && RUN_REALE=true
 beep_fine(){ $RUN_REALE && printf '\a'; }
 
-# ---- Chiedi: in Veloce risponde da solo (come l'helper Chiedi su Windows) ----
-VELOCE=false
-[[ "$MODO" == "VELOCE" ]] && VELOCE=true
+# ---- Chiedi / chiedi_sempre --------------------------------------------------
+VELOCE=false;  [[ "$MODO" == "VELOCE" ]] && VELOCE=true
+MODO_TEST=false; [[ "$MODO" == "TEST" ]] && MODO_TEST=true
+# chiedi: domanda automatizzabile. In Veloce risponde con $2; in Test risponde
+# in modo NON distruttivo (N ai S/N, vuoto ai menu). Come l'helper Chiedi Windows.
 chiedi(){   # $1=prompt  $2=auto(Veloce)
-  if $VELOCE; then dim "$1  [Veloce => '$2']"; REPLY="$2"; return; fi
+  if $VELOCE;   then REPLY="$2"; dim "$1  [Veloce => '$REPLY']"; return; fi
+  if $MODO_TEST; then [[ "$1" == *"S/N"* ]] && REPLY="N" || REPLY=""; dim "$1  [test => '$REPLY']"; return; fi
+  print -n -- "   $1 "; read -r REPLY
+}
+# chiedi_sempre: domanda che va SEMPRE posta (nome, app, account) anche in
+# Veloce; solo in Test non blocca e ritorna vuoto.
+chiedi_sempre(){  # $1=prompt
+  if $MODO_TEST; then REPLY=""; dim "$1  [test => vuoto]"; return; fi
   print -n -- "   $1 "; read -r REPLY
 }
 
@@ -156,10 +165,10 @@ pausa
 # =============================================================================
 titolo "Nome Cliente e Mac"
 info "Nome Mac attuale: $(scutil --get ComputerName 2>/dev/null)"
-print -n -- "   Nome del cliente (nome Mac) - INVIO per saltare: "; read -r NOME_CLIENTE
+chiedi_sempre "Nome del cliente (nome Mac) - INVIO per saltare:"; NOME_CLIENTE="$REPLY"
 NOME_CLIENTE="${NOME_CLIENTE## }"; NOME_CLIENTE="${NOME_CLIENTE%% }"
 if [[ -n "$NOME_CLIENTE" ]]; then
-  local host="${NOME_CLIENTE//[^A-Za-z0-9-]/}"
+  host="${NOME_CLIENTE//[^A-Za-z0-9-]/}"
   if $RUN_REALE; then
     sudo scutil --set ComputerName "$NOME_CLIENTE" 2>/dev/null
     sudo scutil --set HostName "$host" 2>/dev/null
@@ -177,6 +186,23 @@ fi
 pausa
 
 # =============================================================================
+# PUNTO DI RIPRISTINO - snapshot APFS (equivalente del Restore Point Windows)
+# =============================================================================
+titolo "Punto di Ripristino (snapshot)"
+chiedi "Creare uno snapshot di ripristino ora? (consigliato) (S/N)" "S"
+if [[ "$REPLY" == [Ss]* ]]; then
+  if $RUN_REALE; then
+    if sudo tmutil localsnapshot >/dev/null 2>&1; then ok "Snapshot APFS creato."; add_report "Punto di ripristino (snapshot)" "OK"
+    else errore "Snapshot non riuscito (Time Machine/APFS?)."; add_report "Punto di ripristino (snapshot)" "ERRORE"; fi
+  else
+    dim "(test) creerei uno snapshot APFS con tmutil localsnapshot"; add_report "Punto di ripristino (snapshot)" "SALTATO"
+  fi
+else
+  add_report "Punto di ripristino (snapshot)" "SALTATO"
+fi
+pausa
+
+# =============================================================================
 # ACCOUNT / CREDENZIALI (Apple ID via GUI; qui prepariamo le credenziali)
 # =============================================================================
 titolo "Account e Credenziali"
@@ -186,7 +212,7 @@ if [[ "$REPLY" == [Ss]* ]]; then
   $RUN_REALE && open "https://appleid.apple.com" 2>/dev/null
   ok "Pagina Apple ID aperta."
   if $RUN_REALE; then
-    print -n -- "   Il cliente ha GIA' una sua email/password? (S = le inserisco / N = ne genero una): "; read -r ha
+    chiedi_sempre "Il cliente ha GIA' una sua email/password? (S=inserisco / N=genero):"; ha="$REPLY"
     if [[ "$ha" == [Ss]* ]]; then
       print -n -- "   Email del cliente: "; read -r CRED_ACCOUNT
       print -n -- "   Password del cliente: "; read -r CRED_PASSWORD
@@ -202,6 +228,37 @@ if [[ "$REPLY" == [Ss]* ]]; then
   add_report "Account Apple ID" "OK"
 else
   add_report "Account Apple ID" "SALTATO"
+fi
+pausa
+
+# =============================================================================
+# OTTIMIZZAZIONE macOS - comodita' via defaults (equivalente Config Windows).
+# Niente debloat OEM: macOS non ha crapware del produttore da rimuovere.
+# =============================================================================
+titolo "Ottimizzazione macOS"
+print -r -- "   Comodita': estensioni file visibili, path bar nel Finder, vista lista,"
+print -r -- "   cartella screenshot dedicata, Dock che si nasconde."
+print -r -- ""
+chiedi "Applicare queste impostazioni? (S/N)" "S"
+if [[ "$REPLY" == [Ss]* ]]; then
+  if $RUN_REALE; then
+    defaults write NSGlobalDomain AppleShowAllExtensions -bool true 2>/dev/null
+    defaults write com.apple.finder ShowPathbar -bool true 2>/dev/null
+    defaults write com.apple.finder ShowStatusBar -bool true 2>/dev/null
+    defaults write com.apple.finder FXPreferredViewStyle -string "Nlsv" 2>/dev/null
+    defaults write com.apple.dock autohide -bool true 2>/dev/null
+    defaults write com.apple.dock show-recents -bool false 2>/dev/null
+    mkdir -p "$HOME/Desktop/Screenshot" 2>/dev/null
+    defaults write com.apple.screencapture location -string "$HOME/Desktop/Screenshot" 2>/dev/null
+    killall Finder Dock 2>/dev/null
+    ok "Impostazioni applicate."
+    add_report "Ottimizzazione macOS" "OK"
+  else
+    dim "(test) applicherei impostazioni Finder/Dock/screenshot"
+    add_report "Ottimizzazione macOS" "SALTATO"
+  fi
+else
+  add_report "Ottimizzazione macOS" "SALTATO"
 fi
 pausa
 
@@ -232,7 +289,7 @@ print -r -- "   1) BASE     (VLC, Reader, Unarchiver, WhatsApp, AnyDesk, TeamVie
 print -r -- "   2) UFFICIO  (BASE + Firefox, Zoom, Spotify, GIMP, LibreOffice)"
 print -r -- "   3) GAMING   (BASE + Steam, Epic, Discord)"
 print -r -- "   S) Salta"
-print -n -- "   Scelta (1-3 o S): "; read -r prof
+chiedi_sempre "Scelta (1-3 o S):"; prof="$REPLY"
 PROFILO=""
 case "$prof" in 1) PROFILO="BASE";; 2) PROFILO="UFFICIO";; 3) PROFILO="GAMING";; esac
 if [[ -n "$PROFILO" ]]; then
