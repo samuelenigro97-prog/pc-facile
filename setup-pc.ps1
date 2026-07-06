@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "4.3 (2026-07-06)"
+$SCRIPT_VERSION = "4.4 (2026-07-06)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -169,6 +169,70 @@ function Chiedi {
         return $Auto
     }
     return Read-Host $Prompt
+}
+
+# Recupera la chiave di ripristino BitLocker del volume di sistema.
+# ATTENZIONE - DATO SENSIBILE: la recovery key da' accesso COMPLETO al disco
+# cifrato. Finisce nel file riepilogo che RESTA con la macchina/cliente: e'
+# voluto e necessario (Windows 11 attiva da solo la crittografia del dispositivo;
+# senza questa chiave, dopo un reset o un cambio hardware il cliente resta
+# chiuso fuori dai suoi dati). Non va mai pubblicata/condivisa altrove.
+# Ritorna un oggetto: Volume, Cifrato, Stato, KeyId, RecoveryKey, Esito, Messaggio.
+function Get-BitLockerRecovery {
+    param([string]$Volume = $env:SystemDrive)   # es. "C:"
+
+    $r = [ordered]@{
+        Volume = $Volume; Cifrato = $false; Stato = "sconosciuto"
+        KeyId = ""; RecoveryKey = ""; Esito = "SALTATO"; Messaggio = ""
+    }
+
+    # 1) Cmdlet BitLocker (Windows Pro/Enterprise): oggetti puliti, niente parsing.
+    try {
+        if (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue) {
+            $blv = Get-BitLockerVolume -MountPoint $Volume -ErrorAction Stop
+            $r.Stato   = "$($blv.VolumeStatus) / Protezione: $($blv.ProtectionStatus)"
+            $r.Cifrato = ($blv.VolumeStatus -ne 'FullyDecrypted')
+            # Anche se la protezione e' SOSPESA, il RecoveryPassword protector c'e'
+            # ancora: lo prendiamo comunque.
+            $rp = $blv.KeyProtector | Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } | Select-Object -First 1
+            if ($rp) {
+                $r.KeyId       = "$($rp.KeyProtectorId)".Trim('{', '}')
+                $r.RecoveryKey = "$($rp.RecoveryPassword)".Trim()
+            }
+        }
+    } catch {
+        $r.Messaggio = "cmdlet BitLocker non riusciti: $_"
+    }
+
+    # 2) Fallback manage-bde (Windows Home: niente cmdlet BitLocker). NON parso le
+    #    stringhe localizzate: estraggo con REGEX il GUID e la chiave a 48 cifre,
+    #    che sono uguali in ogni lingua.
+    if (-not $r.RecoveryKey) {
+        try {
+            $out = & manage-bde -protectors -get $Volume -Type RecoveryPassword 2>$null | Out-String
+            if ($out) {
+                $mKey = [regex]::Match($out, '\d{6}(?:-\d{6}){7}')
+                $mId  = [regex]::Match($out, '\{?([0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12})\}?')
+                if ($mKey.Success) { $r.RecoveryKey = $mKey.Value; $r.Cifrato = $true }
+                if ($mId.Success)  { $r.KeyId = $mId.Groups[1].Value }
+                if ($r.Stato -eq 'sconosciuto') { $r.Stato = "rilevato via manage-bde" }
+            }
+        } catch {
+            $r.Messaggio = "manage-bde non riuscito: $_"
+        }
+    }
+
+    # Esito coerente con Add-Report (OK / AVVISO / SALTATO):
+    if ($r.RecoveryKey) {
+        $r.Esito = "OK"; $r.Messaggio = "chiave trovata e salvata nel riepilogo"
+    } elseif (-not $r.Cifrato) {
+        $r.Esito = "SALTATO"; $r.Messaggio = "volume non cifrato: nessuna chiave da salvare"
+    } else {
+        $r.Esito = "AVVISO"
+        if (-not $r.Messaggio) { $r.Messaggio = "volume cifrato ma nessuna RecoveryPassword rilevata" }
+    }
+
+    return [pscustomobject]$r
 }
 
 # Menu iniziale: se non e' stata scelta una modalita' via parametro, la chiedo.
@@ -1782,6 +1846,24 @@ if ($Report.Count -eq 0) {
 
 # UN SOLO file riepilogo, ordinato - solo run reale (Configura)
 if ($RunReale) {
+    # -------------------------------------------------------------------------
+    # CHIAVE DI RIPRISTINO BITLOCKER (il piu' TARDI possibile: se la device
+    # encryption di Windows 11 si e' attivata durante il setup, ora la chiave
+    # esiste). Usa la funzione di log Add-Report come gli altri passi.
+    # DATO SENSIBILE: la chiave finisce nel riepilogo che resta col PC (voluto).
+    # -------------------------------------------------------------------------
+    Write-Titolo "Chiave di Ripristino BitLocker"
+    Write-Host "Salvo la chiave di ripristino nel riepilogo: senza, se Windows attiva la" -ForegroundColor White
+    Write-Host "crittografia da solo, dopo un reset o un cambio hardware si perde l'accesso." -ForegroundColor White
+    Write-Host ""
+    $bitlocker = Get-BitLockerRecovery -Volume $env:SystemDrive
+    switch ($bitlocker.Esito) {
+        "OK"      { Write-OK "Chiave di ripristino BitLocker salvata (volume $($bitlocker.Volume))." }
+        "SALTATO" { Write-Info $bitlocker.Messaggio }
+        default   { Write-Info $bitlocker.Messaggio }   # AVVISO
+    }
+    Add-Report "Chiave di ripristino BitLocker" $bitlocker.Esito
+
     # Le credenziali del nuovo account le ha GENERATE lo script allo step Account
     # Microsoft ($credMsAccount / $credMsPassword). Se quel passo e' stato saltato
     # restano vuote. Niente domande all'operatore, niente password dal browser.
@@ -1824,6 +1906,26 @@ if ($RunReale) {
         $f += "ANTIVIRUS / PROTEZIONE"
         $f += $sep
         if ($av.Count -gt 0) { foreach ($a in $av) { $f += "  - $($a.Voce)" } } else { $f += "  (da verificare)" }
+        $f += ""
+        $f += $sep
+        # DATO SENSIBILE: la recovery key da' accesso completo al disco. Sta qui
+        # apposta, cosi' resta col PC del cliente e non si perde.
+        $f += "CHIAVE DI RIPRISTINO BITLOCKER  (DATO SENSIBILE: accesso al disco)"
+        $f += $sep
+        if ($bitlocker) {
+            $f += "  Volume        : $($bitlocker.Volume)"
+            $f += "  Cifratura     : $($bitlocker.Stato)"
+            if ($bitlocker.RecoveryKey) {
+                $f += "  ID chiave     : $($bitlocker.KeyId)"
+                $f += "  Recovery key  : $($bitlocker.RecoveryKey)"
+                $f += "  >> CONSERVA questa chiave: senza, dopo un reset o un cambio"
+                $f += "     hardware il disco cifrato NON e' piu' accessibile."
+            } else {
+                $f += "  $($bitlocker.Messaggio)"
+            }
+        } else {
+            $f += "  (controllo non eseguito)"
+        }
         $f += ""
         $f += $sep
         $f += "ALTRE OPERAZIONI"
