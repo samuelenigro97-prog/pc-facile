@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "3.9 (2026-07-06)"
+$SCRIPT_VERSION = "4.0 (2026-07-06)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -123,21 +123,16 @@ function Beep-Completato {
     if ($RunReale) { try { [console]::Beep(784, 160); [console]::Beep(1047, 260) } catch {} }
 }
 
-# Genera una password forte ma leggibile a partire dal nome cliente. Lo SCRIPT
-# la crea (quindi la conosce e la puo' scrivere nel riepilogo): NON legge nulla
-# dal browser. Formato es. "Rossi-482k": maiuscola iniziale + minuscole + cifre
-# + trattino -> soddisfa i requisiti Microsoft. Niente 0/o/1/l/i per non
-# confonderle a mano.
+# Password = nome cliente + "123!" (sempre, cosi' e' prevedibile e facile da
+# dettare). Es. "Rossi" -> "Rossi123!". Ha maiuscola, minuscole, cifre e simbolo
+# -> soddisfa i requisiti Microsoft. Lo SCRIPT la costruisce (quindi la conosce
+# e la scrive nel riepilogo): NON legge nulla dal browser.
 function New-PasswordCliente {
     param([string]$Base)
     $b = ($Base -replace '[^A-Za-z]', '')
-    if ($b.Length -lt 2) { $b = "Cliente" }
+    if ($b.Length -lt 1) { $b = "Cliente" }
     $b = $b.Substring(0, 1).ToUpper() + $b.Substring(1).ToLower()
-    if ($b.Length -gt 10) { $b = $b.Substring(0, 10) }
-    $cifre = -join (1..3 | ForEach-Object { Get-Random -Minimum 2 -Maximum 10 })
-    $set = 'abcdefghjkmnpqrstuvwxyz'
-    $l = $set[(Get-Random -Maximum $set.Length)]
-    return "$b-$cifre$l"
+    return "${b}123!"
 }
 
 # Email suggerita per un nuovo account (outlook.com) dal nome cliente + numero.
