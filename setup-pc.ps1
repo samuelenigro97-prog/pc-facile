@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "4.0 (2026-07-06)"
+$SCRIPT_VERSION = "4.1 (2026-07-06)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -142,6 +142,16 @@ function New-EmailCliente {
     if (-not $e) { $e = "cliente" }
     if ($e.Length -gt 15) { $e = $e.Substring(0, 15) }
     return "$e$(Get-Random -Minimum 10 -Maximum 999)@outlook.com"
+}
+
+# Rileva una GPU NVIDIA: serve a capire se e' un PC da gaming e installare l'app
+# GeForce (che tiene aggiornati i driver video). Get-CimInstance e' standard,
+# niente P/Invoke.
+function Test-GpuNvidia {
+    try {
+        return @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match 'NVIDIA|GeForce|RTX|GTX' }).Count -gt 0
+    } catch { return $false }
 }
 
 # Menu iniziale: se non e' stata scelta una modalita' via parametro, la chiedo.
@@ -1538,7 +1548,7 @@ function Installa-Set {
 Write-Host "Scegli come installare le applicazioni:" -ForegroundColor White
 Write-Host "  1) PROFILO BASE     (VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk, TeamViewer)"
 Write-Host "  2) PROFILO UFFICIO  (BASE + Zoom, Spotify, GIMP, Sumatra PDF)"
-Write-Host "  3) PROFILO GAMING   (BASE + Steam, Discord, qBittorrent)"
+Write-Host "  3) PROFILO GAMING   (BASE + Steam, Discord, qBittorrent; +GeForce se NVIDIA)"
 Write-Host "  4) COMPLETO         (tutte le app in lista)"
 Write-Host "  5) MANUALE          (scelgo io i singoli numeri)"
 Write-Host "  S) Salta"
@@ -1550,10 +1560,22 @@ if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(2, $passo - 1); continue w
 switch ($sceltaApps) {
     "1" { Installa-Set -Ids $profili["BASE"] }
     "2" { Installa-Set -Ids $profili["UFFICIO"] }
-    "3" { Installa-Set -Ids $profili["GAMING"] }
+    "3" {
+        Installa-Set -Ids $profili["GAMING"]
+        # PC da gaming: se c'e' una GPU NVIDIA installo l'app GeForce (driver video)
+        if ((Test-GpuNvidia) -and (Confirm-Winget)) {
+            Write-Info "GPU NVIDIA rilevata (PC da gaming): installo l'app GeForce per i driver."
+            Installa-Pacchetto -Nome "NVIDIA GeForce Experience" -WingetId "Nvidia.GeForceExperience"
+        }
+    }
     "4" {
         if (Confirm-Winget) {
             foreach ($app in $appsDisponibili) { Installa-Pacchetto -Nome $app.Nome -WingetId $app.Id }
+            # Completo: aggiungo l'app GeForce solo se c'e' davvero una GPU NVIDIA
+            if (Test-GpuNvidia) {
+                Write-Info "GPU NVIDIA rilevata: installo anche l'app GeForce per i driver."
+                Installa-Pacchetto -Nome "NVIDIA GeForce Experience" -WingetId "Nvidia.GeForceExperience"
+            }
         } else {
             Write-Errore "Winget non disponibile."
         }
@@ -1775,13 +1797,21 @@ if ($RunReale) {
         $f += $sep
         $f += "  Account Microsoft : $(if ($credMsAccount) { $credMsAccount } else { $blank })"
         $f += "  Password          : $(if ($credMsPassword) { $credMsPassword } else { $blank })"
-        # Campi dedicati per ogni antivirus/protezione attivato in questa sessione
+        # Campi dedicati per ogni antivirus/protezione attivato in questa sessione.
+        # Antivirus (McAfee/Norton): stesse credenziali dell'account Microsoft.
+        # Cyber protection (Unieuro): la password la CREA il sito e la manda via
+        # email dopo la registrazione, quindi non la conosciamo in anticipo.
         foreach ($a in $av) {
             $nomeSvc = ($a.Voce -replace ' \(antivirus\)', '' -replace ' \(protezione\)', '').Trim()
+            $isProtezione = $a.Voce -like '*protezione*'
             $f += ""
             $f += "  [$nomeSvc]"
-            $f += "  Email/utente account : $blank"
-            $f += "  Password account     : $blank"
+            $f += "  Email/utente account : $(if ($credMsAccount) { $credMsAccount } else { $blank })"
+            if ($isProtezione) {
+                $f += "  Password account     : (creata dal sito, arriva via email dopo la registrazione)"
+            } else {
+                $f += "  Password account     : $(if ($credMsPassword) { $credMsPassword } else { $blank })"
+            }
             $f += "  Codice/PIN licenza   : $blank"
             $f += "  Credenziali app      : $blank"
         }
