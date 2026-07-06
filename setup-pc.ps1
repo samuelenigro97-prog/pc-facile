@@ -8,7 +8,11 @@ param(
     [switch]$Test,
     # Diagnostica: controlla ambiente e valida gli ID pacchetti (winget show),
     # senza installare nulla, e mostra cosa e' OK/KO. -File setup-pc.ps1 -Diagnostica
-    [switch]$Diagnostica
+    [switch]$Diagnostica,
+    # Veloce: Configura automatica col profilo tipico del negozio. Chiede SOLO
+    # le 3 cose che cambiano per cliente (nome, antivirus, profilo app); tutto
+    # il resto risponde in automatico. -File setup-pc.ps1 -Veloce
+    [switch]$Veloce
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -16,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "4.2 (2026-07-06)"
+$SCRIPT_VERSION = "4.3 (2026-07-06)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -154,6 +158,19 @@ function Test-GpuNvidia {
     } catch { return $false }
 }
 
+# Chiede un valore all'operatore, MA in modalita' Veloce risponde da solo con
+# $Auto (senza fermarsi): cosi' il preset Veloce salta le domande che non
+# cambiano da PC a PC. Le 3 domande che restano sempre interattive (nome,
+# antivirus, profilo app) usano Read-Host normale, non questa.
+function Chiedi {
+    param([string]$Prompt, [string]$Auto = "S")
+    if ($Veloce) {
+        Write-Host "  $Prompt  [Veloce => '$Auto']" -ForegroundColor Gray
+        return $Auto
+    }
+    return Read-Host $Prompt
+}
+
 # Menu iniziale: se non e' stata scelta una modalita' via parametro, la chiedo.
 # Un solo tasto, senza INVIO: D=diagnostica, T=test, C/INVIO/altro=configura.
 if (-not $Test -and -not $Diagnostica) {
@@ -168,7 +185,8 @@ if (-not $Test -and -not $Diagnostica) {
     Write-Host ""
     Write-Host "  Premi un tasto:" -ForegroundColor White
     Write-Host ""
-    Write-Host "$AON    [C]$AOFF" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Configura il PC   (installa e imposta)" -ForegroundColor White
+    Write-Host "$AON    [C]$AOFF" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Configura il PC   (installa e imposta, chiede tutto)" -ForegroundColor White
+    Write-Host "$AON    [V]$AOFF" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Veloce            (automatico: chiede solo nome, antivirus, app)" -ForegroundColor White
     Write-Host "$AON    [D]$AOFF" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Diagnostica       (controlla, NON installa)" -ForegroundColor White
     Write-Host "$AON    [T]$AOFF" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Test a vuoto      (percorre tutto, NON installa)" -ForegroundColor White
     Write-Host ""
@@ -189,6 +207,7 @@ if (-not $Test -and -not $Diagnostica) {
     }
     if ($tasto -eq "D" -or $tasto -eq "2") { $Diagnostica = $true; Write-Host "$AON  -> Diagnostica$AOFF" -ForegroundColor $THEME_COL }
     elseif ($tasto -eq "T" -or $tasto -eq "3") { $Test = $true; Write-Host "$AON  -> Test a vuoto$AOFF" -ForegroundColor $THEME_COL }
+    elseif ($tasto -eq "V" -or $tasto -eq "4") { $Veloce = $true; Write-Host "$AON  -> Veloce (automatico)$AOFF" -ForegroundColor $THEME_COL }
     else { Write-Host "$AON  -> Configura il PC$AOFF" -ForegroundColor $THEME_COL }
     Write-Host ""
 }
@@ -204,6 +223,14 @@ if ($Test -or $Diagnostica) {
         Write-Host "$Prompt [AUTO => '$risposta']" -ForegroundColor Gray
         return $risposta
     }
+    function Pausa { }
+}
+
+# Modalita' VELOCE: e' una Configura reale (installa davvero), ma NON si ferma
+# alle pause tra le sezioni, cosi' scorre da sola. Le domande le gestisce
+# 'Chiedi' (auto) tranne nome/antivirus/app, che restano vere Read-Host.
+if ($Veloce -and -not $Test -and -not $Diagnostica) {
+    Write-Host "*** MODALITA' VELOCE: automatica, chiede solo nome, antivirus e app ***" -ForegroundColor Magenta
     function Pausa { }
 }
 
@@ -740,7 +767,7 @@ Write-Host ""
 $culturaAttuale = (Get-Culture).Name
 Write-Info "Lingua/regione attuale: $culturaAttuale"
 
-$impostaLingua = Read-Host "Impostare il sistema in Italiano (it-IT)? (S/N)"
+$impostaLingua = Chiedi "Impostare il sistema in Italiano (it-IT)? (S/N)" "S"
 if ($impostaLingua -match "^[Ss]") {
 
     # --- 1) Impostazioni BASE (locali, sempre applicabili anche senza rete) ---
@@ -818,7 +845,7 @@ if ($impostaLingua -match "^[Ss]") {
     # --- 5) Windows 10: il pacchetto lingua (display) va aggiunto a mano ---
     if ($packDaAggiungere) {
         Write-Info "Su Windows 10 il pacchetto della lingua di visualizzazione va aggiunto a mano."
-        $apriImp = Read-Host "Aprire ora Impostazioni lingua per aggiungere/verificare l'Italiano? (S/N)"
+        $apriImp = Chiedi "Aprire ora Impostazioni lingua per aggiungere/verificare l'Italiano? (S/N)" "N"
         if ($apriImp -match "^[Ss]") {
             Start-Process "ms-settings:regionlanguage"
             Write-Info "In Impostazioni: aggiungi 'Italiano (Italia)', impostalo come lingua di"
@@ -909,7 +936,7 @@ Write-Titolo "Punto di Ripristino"
 Write-Host "Crea un punto di ripristino: se qualcosa va storto puoi tornare indietro." -ForegroundColor White
 Write-Host ""
 
-$vuoiRestore = Read-Host "Creare un punto di ripristino ora? (consigliato) (S/N)"
+$vuoiRestore = Chiedi "Creare un punto di ripristino ora? (consigliato) (S/N)" "S"
 if ($vuoiRestore -match "^[Ss]") {
     try {
         Enable-ComputerRestore -Drive "$env:SystemDrive\" -ErrorAction SilentlyContinue
@@ -941,22 +968,34 @@ Write-Host "Accedi (o crea) l'account Microsoft ORA: la sessione resta attiva ne
 Write-Host "browser, cosi' dopo su Office e antivirus fai 'Accedi con Microsoft' al volo." -ForegroundColor White
 Write-Host ""
 
-$vuoiMs = Read-Host "Aprire il login account Microsoft ora? (S/N)"
+$vuoiMs = Chiedi "Aprire il login account Microsoft ora? (S/N)" "S"
 if ($vuoiMs -match "^[Ss]") {
     Start-Process "https://account.microsoft.com"
     Write-OK "Aperto account.microsoft.com nel browser."
 
-    # Credenziali SUGGERITE dallo script (le genera lui -> le conosce -> le
-    # scrive nel riepilogo): niente da digitare, niente lette dal browser.
+    # Credenziali per il riepilogo. Due casi:
+    #  - il cliente ha GIA' una sua email/password che usa -> le inserisci tu
+    #    (le detta lui) e finiscono nel riepilogo;
+    #  - account NUOVO -> le genera lo script (email + Nome123!).
+    # In entrambi i casi niente lette dal browser. Questa domanda resta anche in
+    # Veloce perche' cambia da cliente a cliente.
     if ($RunReale) {
-        $credMsAccount  = New-EmailCliente -Base $nomeCliente
-        $credMsPassword = New-PasswordCliente -Base $nomeCliente
-        try { Set-Clipboard -Value $credMsPassword; $inAppunti = " (copiata negli appunti)" } catch { $inAppunti = "" }
-        Write-Host ""
-        Write-Host "  Credenziali SUGGERITE per il nuovo account (gia' nel riepilogo):" -ForegroundColor White
-        Write-Info  "Email suggerita : $credMsAccount"
-        Write-Info  "Password        : $credMsPassword$inAppunti"
-        Write-Host "  Usa queste in fase di registrazione. Se ne usi altre, correggi il file." -ForegroundColor Gray
+        $haAccount = Read-Host "Il cliente ha GIA' una sua email/password che usa? (S = le inserisco io / N = ne genero una nuova)"
+        if ($haAccount -match "^[Ss]") {
+            $credMsAccount  = (Read-Host "  Email del cliente").Trim()
+            $credMsPassword = (Read-Host "  Password del cliente").Trim()
+            Write-OK "Uso le credenziali del cliente (finiscono nel riepilogo)."
+        } else {
+            $credMsAccount  = New-EmailCliente -Base $nomeCliente
+            $credMsPassword = New-PasswordCliente -Base $nomeCliente
+            Write-Host ""
+            Write-Host "  Credenziali SUGGERITE per il nuovo account (gia' nel riepilogo):" -ForegroundColor White
+            Write-Info  "Email suggerita : $credMsAccount"
+            Write-Info  "Password        : $credMsPassword"
+            Write-Host "  Se in registrazione ne usi altre, correggi il file." -ForegroundColor Gray
+        }
+        # In tutti e due i casi copio la password negli appunti (Ctrl+V veloce).
+        if ($credMsPassword) { try { Set-Clipboard -Value $credMsPassword; Write-Info "Password copiata negli appunti." } catch {} }
         Write-Host ""
     }
 
@@ -990,7 +1029,7 @@ function Get-OsppPath {
     return $null
 }
 
-$sceltaAtt = Read-Host "Scelta (1-3)"
+$sceltaAtt = Chiedi "Scelta (1-3)" "1"
 switch ($sceltaAtt) {
     "1" {
         Start-Process "https://setup.office.com"
@@ -1055,7 +1094,7 @@ Write-Host "    OneDrive fuori dall'avvio)" -ForegroundColor White
 Write-Host "NON tocca: Xbox, Spotify, Store, Foto, driver, ne' i programmi del setup." -ForegroundColor White
 Write-Host ""
 
-$vuoiPulizia = Read-Host "Eseguire ora la pulizia e ottimizzazione iniziale? (consigliato) (S/N)"
+$vuoiPulizia = Chiedi "Eseguire ora la pulizia e ottimizzazione iniziale? (consigliato) (S/N)" "S"
 if ($vuoiPulizia -match "^[Ss]") {
 
     # ---------------------------------------------------------------------
@@ -1087,7 +1126,7 @@ if ($vuoiPulizia -match "^[Ss]") {
             # Pulizia COMPLETA coi tool ufficiali (winget lascia residui)
             if ($mcafeeTrovato) {
                 Write-Info "McAfee lascia residui: MCPR (tool ufficiale McAfee) pulisce tutto."
-                $r = Read-Host "Scaricare e avviare MCPR per rimuovere McAfee del tutto? (S/N)"
+                $r = Chiedi "Scaricare e avviare MCPR per rimuovere McAfee del tutto? (S/N)" "N"
                 if ($r -match "^[Ss]") {
                     try {
                         $mcpr = "$env:TEMP\MCPR.exe"
@@ -1101,7 +1140,7 @@ if ($vuoiPulizia -match "^[Ss]") {
             }
             if ($nortonTrovato) {
                 Write-Info "Norton lascia residui: 'Norton Remove and Reinstall' pulisce tutto."
-                $r = Read-Host "Aprire la pagina del tool di rimozione Norton? (S/N)"
+                $r = Chiedi "Aprire la pagina del tool di rimozione Norton? (S/N)" "N"
                 if ($r -match "^[Ss]") {
                     Start-Process "https://norton.com/nrnr"
                     Write-OK "Pagina aperta: scarica ed esegui il tool, poi RIAVVIA il PC."
@@ -1318,7 +1357,7 @@ Write-Host "  2) LibreOffice" -ForegroundColor White
 Write-Host "  3) Salta" -ForegroundColor White
 Write-Host ""
 
-$sceltaSuite = Read-Host "Scelta (1-3, B=indietro)"
+$sceltaSuite = Chiedi "Scelta (1-3, B=indietro)" "3"
 if (Test-Indietro $sceltaSuite) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
 switch ($sceltaSuite) {
     "1" {
@@ -1376,7 +1415,7 @@ function Installa-Antivirus {
 
     if ($recente) {
         Write-OK "Installer recente trovato: $($recente.Name)"
-        $avvia = Read-Host "Avviare questo installer? (S/N)"
+        $avvia = Chiedi "Avviare questo installer? (S/N)" "S"
         if ($avvia -match "^[Ss]") {
             Start-Process -FilePath $recente.FullName
             Write-OK "Installer $Nome avviato."
@@ -1457,7 +1496,7 @@ Write-Titolo "Unieuro Cyber Protection"
 Write-Host "Servizio venduto solo su richiesta: salta se il cliente non l'ha acquistato." -ForegroundColor White
 Write-Host ""
 
-$vuoiUnieuro = Read-Host "Attivare Unieuro Cyber Protection? (S/N, B=indietro)"
+$vuoiUnieuro = Chiedi "Attivare Unieuro Cyber Protection? (S/N, B=indietro)" "N"
 if (Test-Indietro $vuoiUnieuro) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
 if ($vuoiUnieuro -match "^[Ss]") {
     Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it"
@@ -1486,7 +1525,7 @@ Write-Host "  T) Installa tutti"
 Write-Host "  S) Salta"
 Write-Host ""
 
-$sceltaBrowser = Read-Host "Scelta (es: 1,2 - T tutti - S salta - B indietro)"
+$sceltaBrowser = Chiedi "Scelta (es: 1,2 - T tutti - S salta - B indietro)" "S"
 if (Test-Indietro $sceltaBrowser) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
 
 if ($sceltaBrowser -match "^[Ss]$") {
@@ -1629,7 +1668,7 @@ Write-Host "Aggiorna all'ultima versione le app gestite da winget (incluse molte
 Write-Host "Puo' richiedere diversi minuti. (I driver hanno il loro passo dedicato dopo.)" -ForegroundColor White
 Write-Host ""
 
-$vuoiUpgrade = Read-Host "Aggiornare ora tutte le app installate? (S/N, B=indietro)"
+$vuoiUpgrade = Chiedi "Aggiornare ora tutte le app installate? (S/N, B=indietro)" "S"
 if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
 if ($vuoiUpgrade -match "^[Ss]") {
     if (Confirm-Winget) {
@@ -1660,7 +1699,7 @@ Write-Host "Vendor-neutral: niente tool del produttore. Puo' richiedere qualche 
 Write-Host "e talvolta un riavvio. Opzionale, ultimo passo." -ForegroundColor White
 Write-Host ""
 
-$vuoiDriver = Read-Host "Cercare e installare i driver ora? (S/N, B=indietro)"
+$vuoiDriver = Chiedi "Cercare e installare i driver ora? (S/N, B=indietro)" "S"
 if (Test-Indietro $vuoiDriver) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
 if ($vuoiDriver -match "^[Ss]") {
     try {
@@ -1834,7 +1873,7 @@ $linguaCambiata = @($Report | Where-Object { $_.Voce -like "Lingua italiana*" -a
 Write-Host ""
 if ($linguaCambiata) {
     Write-Info "La lingua e' stata cambiata: serve un RIAVVIO per applicarla del tutto."
-    $riavvia = Read-Host "Riavviare il PC ora? (S/N)"
+    $riavvia = Chiedi "Riavviare il PC ora? (S/N)" "N"
     if ($riavvia -match "^[Ss]") {
         Write-Info "Riavvio in corso..."
         Restart-Computer -Force
