@@ -16,7 +16,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "3.4 (2026-07-05)"
+$SCRIPT_VERSION = "3.5 (2026-07-06)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -1166,11 +1166,16 @@ if ($vuoiConfig -match "^[Ss]") {
 if ($vuoiConfig -match "^[Ss]") { Pausa }
 
 # =============================================================================
-# PASSI DI CONFIGURAZIONE (dopo ogni scelta si avanza automaticamente)
+# PASSI DI CONFIGURAZIONE (dopo ogni scelta si avanza; B al prompt = indietro)
 # =============================================================================
 
+# Torna al passo precedente quando l'utente digita B al prompt principale di un
+# passo. Uso 'continue wizard' (loop etichettato) per rifare il giro del while
+# anche da dentro lo switch, saltando il $passo++ di fine passo.
+function Test-Indietro { param([string]$v) return ($v -match '^\s*[Bb]\s*$') }
+
 $passo = 1
-while ($passo -ge 1 -and $passo -le 8) {
+:wizard while ($passo -ge 1 -and $passo -le 8) {
 Write-Host ""
 $barLen = 20
 $pieni = [int]($barLen * $passo / 8)
@@ -1201,7 +1206,8 @@ Write-Host ""
 Write-Info "Nome PC attuale: $env:COMPUTERNAME"
 Write-Host ""
 # UN SOLO nome: vale sia per l'account Windows sia per il nome del PC.
-$nomeCliente = (Read-Host "Nome del cliente (usato per l'account E per il nome del PC) - INVIO per saltare").Trim()
+$nomeCliente = (Read-Host "Nome del cliente (account E nome PC) - INVIO salta, B indietro").Trim()
+if (Test-Indietro $nomeCliente) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
 
 if ($nomeCliente -ne "") {
     $nomeOk = $false
@@ -1260,7 +1266,8 @@ Write-Host "  2) LibreOffice" -ForegroundColor White
 Write-Host "  3) Salta" -ForegroundColor White
 Write-Host ""
 
-$sceltaSuite = Read-Host "Scelta (1-3)"
+$sceltaSuite = Read-Host "Scelta (1-3, B=indietro)"
+if (Test-Indietro $sceltaSuite) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
 switch ($sceltaSuite) {
     "1" {
         if (Confirm-Winget) { Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice" }
@@ -1290,7 +1297,8 @@ Write-Host "  2) Norton"
 Write-Host "  3) Salta"
 Write-Host ""
 
-$sceltaAV = Read-Host "Scelta (1-3)"
+$sceltaAV = Read-Host "Scelta (1-3, B=indietro)"
+if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
 
 function Installa-Antivirus {
     param(
@@ -1397,7 +1405,8 @@ Write-Titolo "Unieuro Cyber Protection"
 Write-Host "Servizio venduto solo su richiesta: salta se il cliente non l'ha acquistato." -ForegroundColor White
 Write-Host ""
 
-$vuoiUnieuro = Read-Host "Attivare Unieuro Cyber Protection? (S/N)"
+$vuoiUnieuro = Read-Host "Attivare Unieuro Cyber Protection? (S/N, B=indietro)"
+if (Test-Indietro $vuoiUnieuro) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
 if ($vuoiUnieuro -match "^[Ss]") {
     Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it"
 } else {
@@ -1425,7 +1434,8 @@ Write-Host "  T) Installa tutti"
 Write-Host "  S) Salta"
 Write-Host ""
 
-$sceltaBrowser = Read-Host "Scelta (es: 1,2 oppure T per tutti oppure S per saltare)"
+$sceltaBrowser = Read-Host "Scelta (es: 1,2 - T tutti - S salta - B indietro)"
+if (Test-Indietro $sceltaBrowser) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
 
 if ($sceltaBrowser -match "^[Ss]$") {
     Write-Info "Browser saltati."
@@ -1493,7 +1503,8 @@ Write-Host "  5) MANUALE          (scelgo io i singoli numeri)"
 Write-Host "  S) Salta"
 Write-Host ""
 
-$sceltaApps = Read-Host "Scelta (1-5 oppure S)"
+$sceltaApps = Read-Host "Scelta (1-5 - S salta - B indietro)"
+if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
 
 switch ($sceltaApps) {
     "1" { Installa-Set -Ids $profili["BASE"] }
@@ -1554,7 +1565,8 @@ Write-Host "Aggiorna all'ultima versione le app gestite da winget (incluse molte
 Write-Host "Puo' richiedere diversi minuti. (I driver hanno il loro passo dedicato dopo.)" -ForegroundColor White
 Write-Host ""
 
-$vuoiUpgrade = Read-Host "Aggiornare ora tutte le app installate? (S/N)"
+$vuoiUpgrade = Read-Host "Aggiornare ora tutte le app installate? (S/N, B=indietro)"
+if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
 if ($vuoiUpgrade -match "^[Ss]") {
     if (Confirm-Winget) {
         Write-Info "Aggiornamento in corso (puo' richiedere diversi minuti)..."
@@ -1584,7 +1596,8 @@ Write-Host "Vendor-neutral: niente tool del produttore. Puo' richiedere qualche 
 Write-Host "e talvolta un riavvio. Opzionale, ultimo passo." -ForegroundColor White
 Write-Host ""
 
-$vuoiDriver = Read-Host "Cercare e installare i driver ora? (S/N)"
+$vuoiDriver = Read-Host "Cercare e installare i driver ora? (S/N, B=indietro)"
+if (Test-Indietro $vuoiDriver) { $passo = [Math]::Max(1, $passo - 1); continue wizard }
 if ($vuoiDriver -match "^[Ss]") {
     try {
         Write-Info "Ricerca driver su Windows Update (puo' richiedere qualche minuto)..."
