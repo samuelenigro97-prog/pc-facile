@@ -8,7 +8,7 @@
 # da installare a parte Homebrew (che lo script installa da solo).
 # =============================================================================
 
-SCRIPT_VERSION="0.2 (2026-07-06)"
+SCRIPT_VERSION="0.3 (2026-07-06)"
 
 # ---- Modalita' (come su Windows): -Test / -Diagnostica / -Veloce -------------
 MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST
@@ -35,7 +35,7 @@ errore(){ print -r -- "${C_ERR}   [X] $1${C_RST}"; }
 dim(){   print -r -- "${C_DIM}   $1${C_RST}"; }
 
 # ---- Report (equivalente di Add-Report: voce + OK/ERRORE/SALTATO/AVVISO) -----
-typeset -a REPORT_VOCI REPORT_ESITI
+typeset -a REPORT_VOCI REPORT_ESITI INSTALLATE
 add_report(){ REPORT_VOCI+=("$1"); REPORT_ESITI+=("$2"); }
 
 # ---- Avviso sonoro a fine passo (equivalente [console]::Beep) ----------------
@@ -299,7 +299,7 @@ if [[ -n "$PROFILO" ]]; then
     if [[ " $profili " == *" $PROFILO "* ]]; then
       if $RUN_REALE && command -v brew >/dev/null 2>&1; then
         info "Installo $nome..."
-        if brew install --cask "$cask" >/dev/null 2>&1; then ok "$nome"; ((n_ok++)); else errore "$nome (installazione fallita)"; fi
+        if brew install --cask "$cask" >/dev/null 2>&1; then ok "$nome"; ((n_ok++)); INSTALLATE+=("$nome"); else errore "$nome (installazione fallita)"; fi
       else
         dim "(test) installerei $nome ($cask)"
       fi
@@ -311,6 +311,20 @@ else
   add_report "App" "SALTATO"
 fi
 beep_fine; pausa
+
+# =============================================================================
+# UNIEURO CYBER PROTECTION (opzionale, come su Windows: solo portale web)
+# =============================================================================
+titolo "Unieuro Cyber Protection"
+chiedi "Attivare Unieuro Cyber Protection? (S/N)" "N"
+if [[ "$REPLY" == [Ss]* ]]; then
+  $RUN_REALE && open "https://unieuro-cyber-protection.covercare.it" 2>/dev/null
+  ok "Portale aperto: inserisci il codice e annota le credenziali dell'app."
+  add_report "Unieuro Cyber Protection" "OK"
+else
+  add_report "Unieuro Cyber Protection" "SALTATO"
+fi
+pausa
 
 # =============================================================================
 # AGGIORNAMENTI (app brew + macOS = equivalente driver/Windows Update)
@@ -373,6 +387,18 @@ if $RUN_REALE; then
     print -r -- "Cliente  : ${NOME_CLIENTE:-(non impostato)}"
     print -r -- "Nome Mac : $(scutil --get ComputerName 2>/dev/null)"
     print -r -- "macOS    : $(sw_vers -productVersion 2>/dev/null)"
+    print -r -- ""
+    print -r -- "------------------------------------------------------------"
+    print -r -- "STATO SISTEMA"
+    print -r -- "------------------------------------------------------------"
+    print -r -- "  Chip        : $(sysctl -n machdep.cpu.brand_string 2>/dev/null)"
+    print -r -- "  Disco       : $(df -h / | awk 'NR==2{print $4" liberi"}')"
+    print -r -- "  FileVault   : $(fdesetup status 2>/dev/null | head -1)"
+    print -r -- ""
+    print -r -- "------------------------------------------------------------"
+    print -r -- "SOFTWARE INSTALLATO"
+    print -r -- "------------------------------------------------------------"
+    if (( ${#INSTALLATE} )); then for a in "${INSTALLATE[@]}"; do print -r -- "  - $a"; done; else print -r -- "  (nessuno)"; fi
     print -r -- ""
     print -r -- "------------------------------------------------------------"
     print -r -- "OPERAZIONI"
