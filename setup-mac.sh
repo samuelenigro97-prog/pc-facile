@@ -8,7 +8,7 @@
 # da installare a parte Homebrew (che lo script installa da solo).
 # =============================================================================
 
-SCRIPT_VERSION="0.8 (2026-07-07)"
+SCRIPT_VERSION="0.9 (2026-07-07)"
 
 # ---- Modalita' (come su Windows): -Test / -Diagnostica / -Veloce -------------
 MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST
@@ -460,6 +460,14 @@ if $RUN_REALE; then
     print -r -- "OPERAZIONI"
     print -r -- "------------------------------------------------------------"
     for i in {1..${#REPORT_VOCI}}; do printf "  [%-8s] %s\n" "${REPORT_ESITI[$i]}" "${REPORT_VOCI[$i]}"; done
+    print -r -- ""
+    print -r -- "------------------------------------------------------------"
+    print -r -- "DA COMPLETARE A MANO"
+    print -r -- "------------------------------------------------------------"
+    print -r -- "  [ ] Fare LOGOUT/riavvio: serve per applicare la lingua italiana."
+    [[ -n "$FV_KEY" ]] && print -r -- "  [ ] Consegnare/conservare la recovery key FileVault (qui sotto)."
+    print -r -- "  [ ] Verificare accesso Apple ID / iCloud del cliente."
+    print -r -- "  [ ] Controllare eventuali voci in ERRORE qui sopra."
     print -r -- ""
     print -r -- "------------------------------------------------------------"
     print -r -- "CHIAVE DI RIPRISTINO FILEVAULT  (DATO SENSIBILE: accesso al disco)"

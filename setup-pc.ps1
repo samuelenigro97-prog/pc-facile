@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "5.1 (2026-07-07)"
+$SCRIPT_VERSION = "5.2 (2026-07-07)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -884,6 +884,27 @@ if ($RunReale) {
         else { Write-Info "Proseguo SENZA Internet: lingua, app e aggiornamenti potrebbero saltare." }
     } else {
         Write-OK "Connessione a Internet OK."
+    }
+}
+
+# =============================================================================
+# AVVISO ANTIVIRUS ATTIVO - un AV attivo puo' mettere in quarantena lo script
+# (si difende quando prova a rimuovere gli AV di prova). Avviso PRIMA di agire,
+# cosi' l'operatore lo whitelista/consente ed evita che il setto venga ucciso.
+# =============================================================================
+if ($RunReale) {
+    $avAttivi = @(Get-AntivirusInstallati)
+    if ($avAttivi.Count -gt 0) {
+        Write-Titolo "ATTENZIONE: Antivirus attivo rilevato"
+        Write-Errore "Presente: $(($avAttivi.Nome | Select-Object -Unique) -join ', ')."
+        Write-Host "Un antivirus attivo puo' BLOCCARE questo script (quarantena) quando prova a" -ForegroundColor White
+        Write-Host "togliere gli AV di prova. Se succede, lingua/pulizia/driver NON vengono fatti." -ForegroundColor White
+        Write-Host ""
+        Write-Host "PRIMA di continuare, fai UNA di queste:" -ForegroundColor Yellow
+        Write-Host "  - aggiungi la chiavetta/cartella alle ESCLUSIONI dell'antivirus, oppure" -ForegroundColor White
+        Write-Host "  - tieni pronto a dare ALLOW/CONSENTI se compare 'Threat blocked'." -ForegroundColor White
+        Write-Host ""
+        Read-Host "Quando sei pronto premi INVIO per continuare"
     }
 }
 
@@ -2053,6 +2074,32 @@ if ($RunReale) {
         $f += "ALTRE OPERAZIONI"
         $f += $sep
         foreach ($r in $altre) { $f += ("  [{0,-8}] {1}" -f $r.Esito, $r.Voce) }
+
+        # --- Checklist DA COMPLETARE A MANO: costruita da cio' che e' successo ---
+        $daFare = @()
+        if (@($Report | Where-Object { $_.Voce -like 'Lingua italiana*' -and $_.Esito -eq 'OK' }).Count -gt 0) {
+            $daFare += "RIAVVIARE il PC: serve per vedere l'interfaccia in italiano."
+        }
+        if (@($Report | Where-Object { $_.Voce -like 'Ridimensionamento schermo*' }).Count -gt 0) {
+            $daFare += "Il ridimensionamento schermo si attiva dopo il logout/riavvio."
+        }
+        if (@($Report | Where-Object { $_.Voce -like 'McAfee*' }).Count -gt 0) {
+            $daFare += "Completare la rimozione di McAfee con MCPR (finestra/pagina aperta), poi riavviare."
+        }
+        if (@($Report | Where-Object { $_.Voce -like 'Norton*' }).Count -gt 0) {
+            $daFare += "Completare la rimozione di Norton con NRnR, poi riavviare."
+        }
+        if (@($Report | Where-Object { $_.Esito -eq 'ERRORE' }).Count -gt 0) {
+            $daFare += "Controllare le voci in ERRORE del report."
+        }
+        $daFare += "Installare/attivare l'antivirus definitivo del cliente."
+        $daFare += "Verificare l'attivazione di Windows e di Office."
+        $f += ""
+        $f += $sep
+        $f += "DA COMPLETARE A MANO"
+        $f += $sep
+        foreach ($d in $daFare) { $f += "  [ ] $d" }
+
         $f += ""
         $f += $sep
         $blank = "______________________________"
