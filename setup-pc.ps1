@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "4.9 (2026-07-07)"
+$SCRIPT_VERSION = "5.0 (2026-07-07)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -72,12 +72,18 @@ if ($vtOn) {
     $THEME_COL = "DarkYellow"   # ambra: fallback quando l'arancione vero non e' disponibile
 }
 
-# Sfondo blu navy come nel logo Unieuro. La console dipinge lo sfondo col
-# colore NOMINATO (l'RGB esatto non e' impostabile senza P/Invoke): 'DarkBlue'
-# e' il navy della palette. Il testo di default va su grigio chiaro cosi' resta
-# leggibile. Impostato una volta qui: ogni Clear-Host successivo ridipinge navy.
+# Sfondo scuro. ATTENZIONE: su Windows 11 la console di default e' Windows
+# Terminal, che IGNORA il registro (ColorTable) e rende 'DarkBlue' come un blu
+# ACCESO (brutto). Il trucco navy col registro vale solo sulla vecchia console
+# (conhost). Percio': se sono in Windows Terminal ($env:WT_SESSION c'e') uso
+# NERO (scuro e pulito, il navy pieno non e' forzabile da script in WT); su
+# conhost uso 'DarkBlue' che col ColorTable rimappato diventa navy vero.
 try {
-    $Host.UI.RawUI.BackgroundColor = 'DarkBlue'
+    if ($env:WT_SESSION) {
+        $Host.UI.RawUI.BackgroundColor = 'Black'
+    } else {
+        $Host.UI.RawUI.BackgroundColor = 'DarkBlue'
+    }
     $Host.UI.RawUI.ForegroundColor = 'Gray'
     Clear-Host
 } catch {}
@@ -1229,10 +1235,27 @@ if ($vuoiPulizia -match "^[Ss]") {
         # script finisce in quarantena. Apro invece la PAGINA del tool: l'operatore
         # lo scarica e lo lancia a mano (Avanti -> Avanti), poi RIAVVIO.
         if ($mcafeeResta) {
-            Start-Process "https://www.mcafee.com/support/?articleId=TS101331"
-            Write-Info "McAfee ancora presente: aperta la pagina di MCPR (tool ufficiale)."
-            Write-Info "Scaricalo, eseguilo (Avanti -> Avanti), poi RIAVVIA. Toglie McAfee del tutto."
-            Add-Report "McAfee (MCPR da eseguire a mano)" "AVVISO"
+            if ($nortonResta) {
+                # Con Norton presente NON scarico l'exe: Norton lo blocca come
+                # IDP.Generic. Apro la pagina, MCPR lo esegue l'operatore.
+                Start-Process "https://www.mcafee.com/support/?articleId=TS101331"
+                Write-Info "McAfee resiste: aperta la pagina di MCPR. Scaricalo ed eseguilo a mano, poi RIAVVIA."
+                Add-Report "McAfee (MCPR a mano)" "AVVISO"
+            } else {
+                # Solo McAfee: MCPR e' il tool UFFICIALE McAfee, non blocca se stesso.
+                try {
+                    Write-Info "McAfee resiste: scarico e avvio MCPR (tool ufficiale McAfee)..."
+                    $mcpr = "$env:TEMP\MCPR.exe"
+                    irm "https://download.mcafee.com/molbin/iss-loc/SupportTools/MCPR/MCPR.exe" -OutFile $mcpr -ErrorAction Stop
+                    Start-Process -FilePath $mcpr
+                    Write-Info "MCPR avviato: completalo (Avanti), poi RIAVVIA. Toglie McAfee del tutto."
+                    Add-Report "McAfee (MCPR avviato: completare a mano)" "AVVISO"
+                } catch {
+                    Start-Process "https://www.mcafee.com/support/?articleId=TS101331"
+                    Write-Info "Download MCPR fallito: aperta la pagina, scaricalo a mano."
+                    Add-Report "McAfee (MCPR a mano)" "AVVISO"
+                }
+            }
         }
         # Norton: come McAfee, serve il tool ufficiale (Norton Remove and Reinstall).
         if ($nortonResta) {
@@ -1895,6 +1918,34 @@ if ($Report.Count -eq 0) {
 
 # UN SOLO file riepilogo, ordinato - solo run reale (Configura)
 if ($RunReale) {
+    # -------------------------------------------------------------------------
+    # LEGGIBILITA' SCHERMO: imposta il ridimensionamento (scaling) in base alla
+    # risoluzione, cosi' il PC non esce con tutto microscopico sugli schermi ad
+    # alta risoluzione. Via registro (Win8DpiScaling + LogPixels), niente
+    # P/Invoke. Si applica del tutto dopo il logout/riavvio. Fatto qui (dopo i
+    # driver) perche' la risoluzione ormai e' quella nativa/definitiva.
+    # -------------------------------------------------------------------------
+    try {
+        $hres = (Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+                 Where-Object { $_.CurrentHorizontalResolution } |
+                 Sort-Object CurrentHorizontalResolution -Descending |
+                 Select-Object -First 1).CurrentHorizontalResolution
+        if ($hres) {
+            $logPixels = if ($hres -ge 3800) { 192 }        # 4K      -> 200%
+                         elseif ($hres -ge 2500) { 144 }    # ~1440p  -> 150%
+                         elseif ($hres -ge 1900) { 120 }    # 1080p   -> 125%
+                         else { 96 }                        # sotto   -> 100%
+            $perc = [int]($logPixels / 96 * 100)
+            $desk = "HKCU:\Control Panel\Desktop"
+            Set-ItemProperty -Path $desk -Name "Win8DpiScaling" -Value 1 -Type DWord -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $desk -Name "LogPixels" -Value $logPixels -Type DWord -ErrorAction SilentlyContinue
+            Write-OK "Ridimensionamento schermo a $perc% (risoluzione ${hres}px): attivo dopo il logout."
+            Add-Report "Ridimensionamento schermo ($perc%)" "OK"
+        }
+    } catch {
+        Write-Info "Ridimensionamento schermo non impostato: proseguo."
+    }
+
     # -------------------------------------------------------------------------
     # CHIAVE DI RIPRISTINO BITLOCKER (il piu' TARDI possibile: se la device
     # encryption di Windows 11 si e' attivata durante il setup, ora la chiave
