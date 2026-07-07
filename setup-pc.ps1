@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "5.2 (2026-07-07)"
+$SCRIPT_VERSION = "5.3 (2026-07-07)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -924,6 +924,15 @@ Write-Info "Lingua/regione attuale: $culturaAttuale"
 $impostaLingua = Chiedi "Impostare il sistema in Italiano (it-IT)? (S/N)" "S"
 if ($impostaLingua -match "^[Ss]") {
 
+    # Skip intelligente: se il PC e' GIA' in italiano (interfaccia + pacchetto),
+    # non rifaccio nulla e vado avanti.
+    $giaItaliano = $false
+    try { $giaItaliano = ((Get-UICulture).Name -like 'it*') -and ((Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId -contains 'it-IT') } catch {}
+    if ($giaItaliano) {
+        Write-OK "Il PC risulta gia' in italiano: salto questo passo (niente da rifare)."
+        Add-Report "Lingua italiana (gia' impostata)" "OK"
+    } else {
+
     # --- 1) LANGUAGE PACK it-IT PRIMA di tutto (Windows 11 22H2+). E' QUESTO che
     #     rende l'INTERFACCIA in italiano; senza, cambiano solo tastiera/formati e
     #     l'UI resta inglese. -CopyToSettings applica il pack a utente + login +
@@ -995,6 +1004,7 @@ if ($impostaLingua -match "^[Ss]") {
             Write-Info "  visualizzazione e scarica il pacchetto lingua. Poi torna qui."
             Pausa
         }
+    }
     }
 } else {
     Write-Info "Impostazione lingua saltata."
@@ -2021,10 +2031,30 @@ if ($RunReale) {
         $av = @($Report | Where-Object { ($_.Voce -like '*antivirus*' -or $_.Voce -like '*protezione*') -and $_.Esito -eq 'OK' })
         $altre = @($Report | Where-Object { $_.Voce -notlike '*installazione*' -and $_.Voce -notlike '*antivirus*' -and $_.Voce -notlike '*protezione*' })
 
+        # --- VERIFICA FINALE: le cose importanti sono andate DAVVERO? (ricontrollo
+        #     lo stato vero, non mi fido degli esiti dei singoli passi). ---
+        $verifica = @()
+        try { $vLang = ((Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId -contains 'it-IT') } catch { $vLang = $null }
+        if ($null -ne $vLang) { $verifica += [pscustomobject]@{ N = 'Pacchetto lingua italiano'; Ok = $vLang } }
+        $verifica += [pscustomobject]@{ N = 'OneDrive rimosso'; Ok = (-not (Test-Path "$env:LOCALAPPDATA\Microsoft\OneDrive\OneDrive.exe")) }
+        $verifica += [pscustomobject]@{ N = 'Antivirus di prova rimossi'; Ok = (@(Get-AntivirusInstallati).Count -eq 0) }
+        $verifica += [pscustomobject]@{ N = 'Windows attivato'; Ok = $winOk }
+
+        # Mostro la verifica anche a schermo (oltre che nel file).
+        Write-Titolo "Verifica finale"
+        foreach ($v in $verifica) { if ($v.Ok) { Write-OK $v.N } else { Write-Errore "$($v.N): DA RIFARE" } }
+
+        # --- Dettagli tecnici per l'assistenza (troubleshooting nello stesso file) ---
+        $osInfo = $null; try { $osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue } catch {}
+        $wgVer = "n/d"; try { $wgVer = (winget --version) 2>$null } catch {}
+        $resTxt = "n/d"; try { $resTxt = ($hres) } catch {}
+        $avTxt = try { (@(Get-AntivirusInstallati).Nome | Select-Object -Unique) -join ', ' } catch { '' }
+        if (-not $avTxt) { $avTxt = 'nessuno' }
+
         $sep = "------------------------------------------------------------"
         $f = @()
         $f += "============================================================"
-        $f += "   RIEPILOGO CONFIGURAZIONE PC"
+        $f += "   IL TUO NUOVO PC E' PRONTO"
         $f += "============================================================"
         $f += ""
         $f += "Data     : $(Get-Date -Format 'dd/MM/yyyy HH:mm')"
@@ -2039,6 +2069,11 @@ if ($RunReale) {
         if ($freeTxt) { $f += "  Spazio disco C:  : $freeTxt" }
         $f += "  Salute dischi    : $(if ($diskBad) { 'ATTENZIONE: un disco non Healthy' } else { 'OK' })"
         if ($Global:HaBatteria) { $f += "  Batteria         : presente (laptop)" }
+        $f += ""
+        $f += $sep
+        $f += "VERIFICA FINALE (ricontrollo automatico)"
+        $f += $sep
+        foreach ($v in $verifica) { $f += ("  [{0}] {1}" -f $(if ($v.Ok) { 'OK       ' } else { 'DA RIFARE' }), $v.N) }
         $f += ""
         $f += $sep
         $f += "SOFTWARE INSTALLATO"
@@ -2129,9 +2164,23 @@ if ($RunReale) {
         $f += ""
         $f += "  Altro             : $(if ($credAltro) { $credAltro } else { $blank })"
         $f += ""
+        $f += $sep
+        $f += "DETTAGLI TECNICI (per l'assistenza, se il PC torna in negozio)"
+        $f += $sep
+        $f += "  Windows      : $(if ($osInfo) { "$($osInfo.Caption) build $($osInfo.BuildNumber)" } else { 'n/d' })"
+        $f += "  PowerShell   : $($PSVersionTable.PSVersion)"
+        $f += "  winget       : $wgVer"
+        $f += "  Risoluzione  : $resTxt px"
+        $f += "  Antivirus    : $avTxt"
+        $f += "  Versione tool: $SCRIPT_VERSION"
+        $f += "  Data setup   : $(Get-Date -Format 'dd/MM/yyyy HH:mm')"
+        $f += ""
         $f += "============================================================"
 
-        $riepFile = Join-Path (Get-DesktopDir) ("Riepilogo-PC_{0}.txt" -f (Get-Date -Format "yyyyMMdd_HHmm"))
+        # Nome file "carino" per il cliente (non piu' Riepilogo-PC_data).
+        $nomeFile = if ($nomeCliente) { "Il tuo nuovo PC - $nomeCliente" } else { "Il tuo nuovo PC" }
+        $nomeFile = ($nomeFile -replace '[\\/:*?"<>|]', '').Trim()
+        $riepFile = Join-Path (Get-DesktopDir) ("$nomeFile.txt")
         $f | Set-Content -Path $riepFile -Encoding UTF8
         Write-OK "Riepilogo salvato sul Desktop: $riepFile"
     } catch {

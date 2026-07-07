@@ -8,7 +8,7 @@
 # da installare a parte Homebrew (che lo script installa da solo).
 # =============================================================================
 
-SCRIPT_VERSION="0.9 (2026-07-07)"
+SCRIPT_VERSION="1.0 (2026-07-07)"
 
 # ---- Modalita' (come su Windows): -Test / -Diagnostica / -Veloce -------------
 MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST
@@ -173,10 +173,16 @@ titolo "Lingua e Regione (Italiano)"
 chiedi "Impostare macOS in Italiano (it-IT)? (S/N)" "S"
 if [[ "$REPLY" == [Ss]* ]]; then
   if $RUN_REALE; then
-    defaults write NSGlobalDomain AppleLanguages -array "it-IT" "en-IT" 2>/dev/null
-    defaults write NSGlobalDomain AppleLocale -string "it_IT" 2>/dev/null
-    ok "Lingua/regione impostate su Italiano (attive dopo il logout)."
-    add_report "Lingua italiana" "OK"
+    # Skip intelligente: se e' gia' in italiano non rifaccio nulla.
+    if defaults read NSGlobalDomain AppleLocale 2>/dev/null | grep -qi 'it_IT'; then
+      ok "Il Mac risulta gia' in italiano: salto (niente da rifare)."
+      add_report "Lingua italiana (gia' impostata)" "OK"
+    else
+      defaults write NSGlobalDomain AppleLanguages -array "it-IT" "en-IT" 2>/dev/null
+      defaults write NSGlobalDomain AppleLocale -string "it_IT" 2>/dev/null
+      ok "Lingua/regione impostate su Italiano (attive dopo il logout)."
+      add_report "Lingua italiana" "OK"
+    fi
   else
     dim "(test) imposterei AppleLanguages/AppleLocale su it-IT"
     add_report "Lingua italiana" "SALTATO"
@@ -433,10 +439,13 @@ beep_fine; pausa
 # =============================================================================
 if $RUN_REALE; then
   DESKTOP="$HOME/Desktop"
-  FILE="$DESKTOP/Riepilogo-Mac_$(date +%Y%m%d_%H%M).txt"
+  nomefile="Il tuo nuovo Mac"
+  [[ -n "$NOME_CLIENTE" ]] && nomefile="Il tuo nuovo Mac - $NOME_CLIENTE"
+  nomefile="${nomefile//[\/:]/}"
+  FILE="$DESKTOP/${nomefile}.txt"
   {
     print -r -- "$LINEA"
-    print -r -- "   RIEPILOGO CONFIGURAZIONE MAC"
+    print -r -- "   IL TUO NUOVO MAC E' PRONTO"
     print -r -- "$LINEA"
     print -r -- ""
     print -r -- "Data     : $(date '+%d/%m/%Y %H:%M')"
@@ -450,6 +459,13 @@ if $RUN_REALE; then
     print -r -- "  Chip        : $(sysctl -n machdep.cpu.brand_string 2>/dev/null)"
     print -r -- "  Disco       : $(df -h / | awk 'NR==2{print $4" liberi"}')"
     print -r -- "  FileVault   : $(fdesetup status 2>/dev/null | head -1)"
+    print -r -- ""
+    print -r -- "------------------------------------------------------------"
+    print -r -- "VERIFICA FINALE (ricontrollo automatico)"
+    print -r -- "------------------------------------------------------------"
+    if defaults read NSGlobalDomain AppleLocale 2>/dev/null | grep -qi 'it'; then print -r -- "  [OK       ] Lingua italiana impostata"; else print -r -- "  [DA RIFARE] Lingua italiana"; fi
+    if (( ${#INSTALLATE} )); then print -r -- "  [OK       ] App installate (${#INSTALLATE})"; else print -r -- "  [--       ] Nessuna app installata"; fi
+    if fdesetup status 2>/dev/null | grep -q On; then print -r -- "  [OK       ] FileVault attivo"; else print -r -- "  [--       ] FileVault non attivo"; fi
     print -r -- ""
     print -r -- "------------------------------------------------------------"
     print -r -- "SOFTWARE INSTALLATO"
@@ -484,6 +500,14 @@ if $RUN_REALE; then
     print -r -- "------------------------------------------------------------"
     print -r -- "  Account Apple ID : ${CRED_ACCOUNT:-______________________________}"
     print -r -- "  Password         : ${CRED_PASSWORD:-______________________________}"
+    print -r -- ""
+    print -r -- "------------------------------------------------------------"
+    print -r -- "DETTAGLI TECNICI (per l'assistenza)"
+    print -r -- "------------------------------------------------------------"
+    print -r -- "  macOS        : $(sw_vers -productVersion 2>/dev/null) ($(sw_vers -buildVersion 2>/dev/null))"
+    print -r -- "  Chip         : $(sysctl -n machdep.cpu.brand_string 2>/dev/null)"
+    print -r -- "  Homebrew     : $(brew --version 2>/dev/null | head -1)"
+    print -r -- "  Versione tool: $SCRIPT_VERSION"
     print -r -- ""
     print -r -- "$LINEA"
   } > "$FILE"
