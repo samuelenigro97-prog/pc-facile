@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "4.6 (2026-07-07)"
+$SCRIPT_VERSION = "4.7 (2026-07-07)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -156,6 +156,34 @@ function Test-GpuNvidia {
         return @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -match 'NVIDIA|GeForce|RTX|GTX' }).Count -gt 0
     } catch { return $false }
+}
+
+# Trova gli antivirus di PROVA installati leggendo le chiavi di disinstallazione
+# (ARP) del registro: piu' affidabile di 'winget list', becca anche i
+# preinstallati che winget non gestisce. Ritorna nome + stringhe di uninstall.
+function Get-AntivirusInstallati {
+    $chiavi = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    $pattern = 'McAfee|Norton|Avast|AVG'
+    $trovati = @()
+    foreach ($k in $chiavi) {
+        try {
+            Get-ItemProperty $k -ErrorAction SilentlyContinue |
+                Where-Object { $_.DisplayName -and $_.DisplayName -match $pattern } |
+                ForEach-Object {
+                    $trovati += [pscustomobject]@{
+                        Nome           = $_.DisplayName
+                        Uninstall      = $_.UninstallString
+                        QuietUninstall = $_.QuietUninstallString
+                    }
+                }
+        } catch {}
+    }
+    # dedup per nome
+    return $trovati | Sort-Object Nome -Unique
 }
 
 # Chiede un valore all'operatore, MA in modalita' Veloce risponde da solo con
@@ -1145,7 +1173,7 @@ if ($sceltaAtt -match "^[12]$") { Pausa }
 # PULIZIA E OTTIMIZZAZIONE INIZIALE - un solo passaggio, una sola domanda:
 #   1/3 rimuove gli antivirus di PROVA (evita conflitti e blocchi)
 #   2/3 rimuove il bloatware + pulisce l'avvio automatico (boot piu' veloce)
-#   3/3 applica piccole comodita' di Windows (estensioni, Questo PC, OneDrive)
+#   3/3 comodita' Windows (estensioni, Questo PC) + disinstalla OneDrive
 # =============================================================================
 
 Write-Titolo "Pulizia e Ottimizzazione Iniziale"
@@ -1156,7 +1184,7 @@ Write-Host "    in conflitto con quello che installi, a volte bloccano lo script
 Write-Host "  - rimuove il bloatware del produttore (HP/Lenovo/Dell/Asus/Acer) e le" -ForegroundColor White
 Write-Host "    app consumer inutili, e alleggerisce l'avvio automatico" -ForegroundColor White
 Write-Host "  - applica piccole comodita' (estensioni file, Esplora su 'Questo PC'," -ForegroundColor White
-Write-Host "    OneDrive fuori dall'avvio)" -ForegroundColor White
+Write-Host "    OneDrive rimosso)" -ForegroundColor White
 Write-Host "NON tocca: Xbox, Spotify, Store, Foto, driver, ne' i programmi del setup." -ForegroundColor White
 Write-Host ""
 
@@ -1167,58 +1195,58 @@ if ($vuoiPulizia -match "^[Ss]") {
     # 1/3 - ANTIVIRUS DI PROVA
     # ---------------------------------------------------------------------
     Write-Info "1/3 - Rimozione antivirus di prova preinstallati..."
-    if (Confirm-Winget) {
-        $avTrial = @(
-            "McAfee LiveSafe", "McAfee Total Protection", "McAfee Personal Security",
-            "McAfee Security", "McAfee WebAdvisor", "McAfee Safe Connect", "McAfee",
-            "Norton 360", "Norton Security", "Norton AntiVirus", "Norton",
-            "Avast Free Antivirus", "AVG Antivirus"
-        )
-        $tolti = 0; $mcafeeTrovato = $false; $nortonTrovato = $false
-        foreach ($n in $avTrial) {
-            winget list --name $n --accept-source-agreements 2>$null | Out-Null
-            if ($LASTEXITCODE -eq 0) {
-                Write-Info "Rimozione $n..."
-                winget uninstall --name $n --silent --accept-source-agreements --disable-interactivity 2>$null | Out-Null
-                $tolti++
-                if ($n -like "McAfee*") { $mcafeeTrovato = $true }
-                if ($n -like "Norton*") { $nortonTrovato = $true }
-            }
-        }
-        if ($tolti -gt 0) {
-            Write-OK "Rimossi/avviata rimozione di $tolti antivirus di prova."
-            Add-Report "Antivirus di prova rimossi ($tolti)" "OK"
-
-            # Pulizia COMPLETA coi tool ufficiali (winget lascia residui)
-            if ($mcafeeTrovato) {
-                Write-Info "McAfee lascia residui: MCPR (tool ufficiale McAfee) pulisce tutto."
-                $r = Chiedi "Scaricare e avviare MCPR per rimuovere McAfee del tutto? (S/N)" "N"
-                if ($r -match "^[Ss]") {
-                    try {
-                        $mcpr = "$env:TEMP\MCPR.exe"
-                        irm "https://download.mcafee.com/molbin/iss-loc/SupportTools/MCPR/MCPR.exe" -OutFile $mcpr -ErrorAction Stop
-                        Start-Process -FilePath $mcpr
-                        Write-OK "MCPR avviato: segui la procedura a schermo, poi RIAVVIA il PC."
-                    } catch {
-                        Write-Info "Download MCPR non riuscito. Scaricalo da: https://www.mcafee.com/support/?articleId=TS101331"
-                    }
-                }
-            }
-            if ($nortonTrovato) {
-                Write-Info "Norton lascia residui: 'Norton Remove and Reinstall' pulisce tutto."
-                $r = Chiedi "Aprire la pagina del tool di rimozione Norton? (S/N)" "N"
-                if ($r -match "^[Ss]") {
-                    Start-Process "https://norton.com/nrnr"
-                    Write-OK "Pagina aperta: scarica ed esegui il tool, poi RIAVVIA il PC."
-                }
-            }
-        } else {
-            Write-Info "Nessun antivirus di prova trovato."
-            Add-Report "Antivirus di prova" "SALTATO"
-        }
+    # Detection via REGISTRO (non 'winget list': becca anche i preinstallati).
+    $avInstallati  = @(Get-AntivirusInstallati)
+    if ($avInstallati.Count -eq 0) {
+        Write-Info "Nessun antivirus di prova trovato."
+        Add-Report "Antivirus di prova" "SALTATO"
     } else {
-        Write-Errore "winget non disponibile: rimuovi gli AV di prova a mano da Impostazioni > App."
-        Add-Report "Antivirus di prova" "ERRORE"
+        foreach ($av in $avInstallati) {
+            Write-Info "Provo a rimuovere: $($av.Nome)..."
+            # winget toglie Avast/AVG e i pochi McAfee che gestisce; non bloccante,
+            # non fatale. McAfee/Norton spesso resistono: sotto ci pensano i tool
+            # ufficiali (MCPR / NRnR).
+            if (Confirm-Winget) {
+                winget uninstall --name $av.Nome --silent --accept-source-agreements --disable-interactivity 2>$null | Out-Null
+            }
+        }
+
+        # VERIFICO davvero cosa e' rimasto (non mi fido dell'esito di winget).
+        Start-Sleep -Seconds 2
+        $rimasti      = @(Get-AntivirusInstallati)
+        $mcafeeResta  = @($rimasti | Where-Object { $_.Nome -match 'McAfee' }).Count -gt 0
+        $nortonResta  = @($rimasti | Where-Object { $_.Nome -match 'Norton' }).Count -gt 0
+        if ($rimasti.Count -eq 0) {
+            Write-OK "Antivirus di prova rimossi."
+            Add-Report "Antivirus di prova rimossi" "OK"
+        } else {
+            Write-Info "Resistono ai metodi standard: $(($rimasti.Nome) -join ', '). Uso i tool ufficiali."
+            Add-Report "Antivirus di prova (residui: tool ufficiale)" "AVVISO"
+        }
+
+        # McAfee: winget non lo toglie del tutto. MCPR (tool ufficiale) e' l'unico
+        # che pulisce davvero. Lo scarico e lo AVVIO sempre se McAfee resta (anche
+        # in Veloce: lasciare McAfee sarebbe peggio). E' una GUI: Avanti -> Avanti,
+        # poi RIAVVIO.
+        if ($mcafeeResta) {
+            try {
+                Write-Info "McAfee ancora presente: scarico e avvio MCPR (tool ufficiale)..."
+                $mcpr = "$env:TEMP\MCPR.exe"
+                irm "https://download.mcafee.com/molbin/iss-loc/SupportTools/MCPR/MCPR.exe" -OutFile $mcpr -ErrorAction Stop
+                Start-Process -FilePath $mcpr
+                Write-Info "MCPR avviato: completalo a schermo (Avanti), poi RIAVVIA il PC."
+                Add-Report "McAfee (MCPR avviato: completare a mano)" "AVVISO"
+            } catch {
+                Write-Errore "Download MCPR fallito. Scaricalo da: https://www.mcafee.com/support/?articleId=TS101331"
+                Add-Report "McAfee (da rimuovere con MCPR a mano)" "AVVISO"
+            }
+        }
+        # Norton: come McAfee, serve il tool ufficiale (Norton Remove and Reinstall).
+        if ($nortonResta) {
+            Start-Process "https://norton.com/nrnr"
+            Write-Info "Norton ancora presente: aperto il tool ufficiale NRnR. Eseguilo, poi RIAVVIA."
+            Add-Report "Norton (NRnR aperto: completare a mano)" "AVVISO"
+        }
     }
 
     # ---------------------------------------------------------------------
@@ -1363,18 +1391,38 @@ $bloatwareAppx = @(
         $adv = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
         Set-ItemProperty -Path $adv -Name "HideFileExt" -Value 0 -Type DWord -ErrorAction SilentlyContinue   # mostra estensioni
         Set-ItemProperty -Path $adv -Name "LaunchTo"    -Value 1 -Type DWord -ErrorAction SilentlyContinue   # Esplora su "Questo PC"
-
-        # Disattiva l'avvio automatico di OneDrive (toglie la voce di avvio)
-        $run = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-        if (Get-ItemProperty -Path $run -Name "OneDrive" -ErrorAction SilentlyContinue) {
-            Remove-ItemProperty -Path $run -Name "OneDrive" -ErrorAction SilentlyContinue
-        }
-
-        Write-OK "Impostazioni applicate (attive al prossimo riavvio di Esplora file)."
+        Write-OK "Impostazioni Esplora file applicate."
         Add-Report "Configurazione Windows base" "OK"
     } catch {
         Write-Errore "Impossibile applicare alcune impostazioni: $_"
         Add-Report "Configurazione Windows base" "ERRORE"
+    }
+
+    # DISINSTALLA OneDrive (non solo l'avvio automatico): molti clienti non lo
+    # vogliono. Chiudo il processo, lancio il disinstallatore ufficiale, tolgo la
+    # versione Store (Appx) e il provisioning (i nuovi utenti non lo riavranno).
+    try {
+        Write-Info "Disinstallazione OneDrive..."
+        taskkill /f /im OneDrive.exe 2>$null | Out-Null
+        $odSetup = @("$env:SystemRoot\SysWOW64\OneDriveSetup.exe", "$env:SystemRoot\System32\OneDriveSetup.exe") |
+            Where-Object { Test-Path $_ } | Select-Object -First 1
+        if ($odSetup) { Start-Process $odSetup -ArgumentList "/uninstall" -Wait -ErrorAction SilentlyContinue }
+        Get-AppxPackage -AllUsers *OneDrive* -ErrorAction SilentlyContinue | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
+        Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -like "*OneDrive*" } |
+            ForEach-Object { Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction SilentlyContinue | Out-Null }
+        $run = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+        if (Get-ItemProperty -Path $run -Name "OneDrive" -ErrorAction SilentlyContinue) { Remove-ItemProperty -Path $run -Name "OneDrive" -ErrorAction SilentlyContinue }
+        if (Test-Path "$env:LOCALAPPDATA\Microsoft\OneDrive\OneDrive.exe") {
+            Write-Info "OneDrive forse non rimosso del tutto (riprova dopo il riavvio)."
+            Add-Report "Rimozione OneDrive" "AVVISO"
+        } else {
+            Write-OK "OneDrive disinstallato."
+            Add-Report "Rimozione OneDrive" "OK"
+        }
+    } catch {
+        Write-Info "Rimozione OneDrive non riuscita: $_"
+        Add-Report "Rimozione OneDrive" "AVVISO"
     }
 
     Write-OK "Pulizia e ottimizzazione iniziale completata."
