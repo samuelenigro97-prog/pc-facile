@@ -8,7 +8,7 @@
 # da installare a parte Homebrew (che lo script installa da solo).
 # =============================================================================
 
-SCRIPT_VERSION="0.6 (2026-07-07)"
+SCRIPT_VERSION="0.7 (2026-07-07)"
 
 # ---- Modalita' (come su Windows): -Test / -Diagnostica / -Veloce -------------
 MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST
@@ -60,8 +60,11 @@ chiedi_sempre(){  # $1=prompt
   print -n -- "   $1 "; read -r REPLY
 }
 
-# ---- Pausa (no-op in Veloce/Test/Diagnostica, come su Windows) ---------------
-pausa(){ { $VELOCE || [[ "$MODO" == "TEST" || "$MODO" == "DIAGNOSTICA" ]]; } && return; print -n -- "   Premi INVIO per continuare "; read -r _; }
+# ---- Pausa: auto-avanza SEMPRE (come il wizard Windows: niente "premi INVIO"
+#      dopo ogni operazione). pausa_web si ferma solo dove serve agire nel
+#      browser (account, Unieuro) e solo in Configura. ------------------------
+pausa(){ return 0; }
+pausa_web(){ { $VELOCE || [[ "$MODO" == "TEST" || "$MODO" == "DIAGNOSTICA" ]]; } && return; print -n -- "   Premi INVIO per continuare "; read -r _; }
 
 # ---- Generatori credenziali (come New-PasswordCliente/New-EmailCliente) -----
 password_cliente(){  # $1=nome  ->  Rossi123!
@@ -246,7 +249,7 @@ if [[ "$REPLY" == [Ss]* ]]; then
 else
   add_report "Account Apple ID" "SALTATO"
 fi
-pausa
+pausa_web
 
 # =============================================================================
 # OTTIMIZZAZIONE macOS - comodita' via defaults (equivalente Config Windows).
@@ -354,7 +357,7 @@ if [[ "$REPLY" == [Ss]* ]]; then
 else
   add_report "Unieuro Cyber Protection" "SALTATO"
 fi
-pausa
+pausa_web
 
 # =============================================================================
 # AGGIORNAMENTI (app brew + macOS = equivalente driver/Windows Update)
