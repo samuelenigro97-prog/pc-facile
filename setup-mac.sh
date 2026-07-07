@@ -8,7 +8,7 @@
 # da installare a parte Homebrew (che lo script installa da solo).
 # =============================================================================
 
-SCRIPT_VERSION="0.4 (2026-07-06)"
+SCRIPT_VERSION="0.5 (2026-07-07)"
 
 # ---- Modalita' (come su Windows): -Test / -Diagnostica / -Veloce -------------
 MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST
@@ -437,6 +437,18 @@ if $RUN_REALE; then
     print -r -- "$LINEA"
   } > "$FILE"
   ok "Riepilogo salvato sul Desktop: $FILE"
+fi
+
+# Pulizia finale: PC Facile non lascia tracce di se' sul Mac del cliente. Il
+# launcher scarica lo script in /tmp: lo rimuovo (rm cancella davvero, NON va
+# nel Cestino). Il REPORT sul Desktop resta (serve al cliente). Se lo script
+# gira dalla copia accanto (offline) NON lo tocco.
+if $RUN_REALE; then
+  case "$0" in
+    /tmp/*|/private/tmp/*|/private/var/*)
+      rm -f "$0" 2>/dev/null
+      ok "Pulizia finale: PC Facile rimosso dal Mac (il report resta sul Desktop)." ;;
+  esac
 fi
 
 print -r -- ""

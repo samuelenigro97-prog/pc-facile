@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "4.4 (2026-07-06)"
+$SCRIPT_VERSION = "4.5 (2026-07-07)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -1968,6 +1968,28 @@ if ($RunReale) {
     } catch {
         Write-Info "Impossibile creare il file riepilogo: $_"
     }
+}
+
+# -----------------------------------------------------------------------------
+# PULIZIA FINALE: PC Facile non lascia tracce di se' sul PC del cliente.
+# Cancella la copia dello script scaricata in %TEMP% dal launcher e i due valori
+# di registro dei colori (console riportata allo stato di fabbrica). Remove-Item
+# cancella in modo PERMANENTE, NON passa dal Cestino. Il REPORT sul Desktop
+# resta: serve al cliente. Se lo script gira dalla chiavetta (offline) la copia
+# locale NON viene toccata. Fatto PRIMA dell'eventuale riavvio, cosi' parte sempre.
+# -----------------------------------------------------------------------------
+if ($RunReale) {
+    try {
+        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction SilentlyContinue
+    } catch {}
+    $ioStesso = $MyInvocation.MyCommand.Path
+    if ($ioStesso -and $ioStesso -like "$env:TEMP\*") {
+        # Il file .ps1 in esecuzione NON e' bloccato: lo rimuovo ora, lo script
+        # prosegue dalla memoria. Cosi' non resta nulla sul disco del cliente.
+        try { Remove-Item -LiteralPath $ioStesso -Force -ErrorAction SilentlyContinue } catch {}
+    }
+    Write-OK "Pulizia finale: PC Facile rimosso dal PC (il report resta sul Desktop)."
 }
 
 # Offri il riavvio se la lingua e' stata cambiata (serve reboot per applicarsi)
