@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "4.7 (2026-07-07)"
+$SCRIPT_VERSION = "4.8 (2026-07-07)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -1224,22 +1224,16 @@ if ($vuoiPulizia -match "^[Ss]") {
             Add-Report "Antivirus di prova (residui: tool ufficiale)" "AVVISO"
         }
 
-        # McAfee: winget non lo toglie del tutto. MCPR (tool ufficiale) e' l'unico
-        # che pulisce davvero. Lo scarico e lo AVVIO sempre se McAfee resta (anche
-        # in Veloce: lasciare McAfee sarebbe peggio). E' una GUI: Avanti -> Avanti,
-        # poi RIAVVIO.
+        # McAfee: winget non lo toglie del tutto, serve MCPR (tool ufficiale).
+        # NON lo scarico/eseguo dallo script: scaricare+lanciare un .exe fa
+        # scattare l'euristica comportamentale dell'antivirus (IDP.Generic) e lo
+        # script finisce in quarantena. Apro invece la PAGINA del tool: l'operatore
+        # lo scarica e lo lancia a mano (Avanti -> Avanti), poi RIAVVIO.
         if ($mcafeeResta) {
-            try {
-                Write-Info "McAfee ancora presente: scarico e avvio MCPR (tool ufficiale)..."
-                $mcpr = "$env:TEMP\MCPR.exe"
-                irm "https://download.mcafee.com/molbin/iss-loc/SupportTools/MCPR/MCPR.exe" -OutFile $mcpr -ErrorAction Stop
-                Start-Process -FilePath $mcpr
-                Write-Info "MCPR avviato: completalo a schermo (Avanti), poi RIAVVIA il PC."
-                Add-Report "McAfee (MCPR avviato: completare a mano)" "AVVISO"
-            } catch {
-                Write-Errore "Download MCPR fallito. Scaricalo da: https://www.mcafee.com/support/?articleId=TS101331"
-                Add-Report "McAfee (da rimuovere con MCPR a mano)" "AVVISO"
-            }
+            Start-Process "https://www.mcafee.com/support/?articleId=TS101331"
+            Write-Info "McAfee ancora presente: aperta la pagina di MCPR (tool ufficiale)."
+            Write-Info "Scaricalo, eseguilo (Avanti -> Avanti), poi RIAVVIA. Toglie McAfee del tutto."
+            Add-Report "McAfee (MCPR da eseguire a mano)" "AVVISO"
         }
         # Norton: come McAfee, serve il tool ufficiale (Norton Remove and Reinstall).
         if ($nortonResta) {
