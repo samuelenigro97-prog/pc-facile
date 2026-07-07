@@ -8,7 +8,7 @@
 # da installare a parte Homebrew (che lo script installa da solo).
 # =============================================================================
 
-SCRIPT_VERSION="0.5 (2026-07-07)"
+SCRIPT_VERSION="0.6 (2026-07-07)"
 
 # ---- Modalita' (come su Windows): -Test / -Diagnostica / -Veloce -------------
 MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST
@@ -157,6 +157,23 @@ if [[ "$REPLY" == [Ss]* ]]; then
   fi
 else
   add_report "Lingua italiana" "SALTATO"
+fi
+pausa
+
+# =============================================================================
+# SINCRONIZZAZIONE ORARIO (come su Windows: PC nuovi con ora sballata rompono
+# HTTPS/brew/download). Attiva l'ora automatica di rete + aggiorna l'orologio.
+# =============================================================================
+titolo "Sincronizzazione Orario"
+if $RUN_REALE; then
+  sudo systemsetup -setusingnetworktime on >/dev/null 2>&1
+  sudo systemsetup -setnetworktimeserver time.apple.com >/dev/null 2>&1
+  sudo sntp -sS time.apple.com >/dev/null 2>&1
+  ok "Ora automatica attivata e orologio aggiornato."
+  add_report "Sincronizzazione orario" "OK"
+else
+  dim "(test) attiverei l'ora automatica (systemsetup -setusingnetworktime on)"
+  add_report "Sincronizzazione orario" "SALTATO"
 fi
 pausa
 

@@ -7,7 +7,8 @@ allineati come flusso e funzioni.
 | Passo / funzione            | Windows (`setup-pc.ps1`)                  | Mac (`setup-mac.sh`)                          | Note |
 |-----------------------------|-------------------------------------------|-----------------------------------------------|------|
 | Menu C/Veloce/Diag/Test     | `[Console]::ReadKey` + `-Veloce`          | menu + `--veloce`                             | pari |
-| Lingua italiana             | registro/`Set-WinSystemLocale`            | `defaults write AppleLanguages/AppleLocale`   | pari |
+| Lingua italiana             | `Install-Language it-IT -CopyToSettings`  | `defaults write AppleLanguages/AppleLocale`   | pari |
+| Sincronizzazione orario     | `w32tm` + W32Time auto + tzautoupdate     | `systemsetup -setusingnetworktime on` + sntp  | pari |
 | Nome cliente + host         | `Set-LocalUser` + `Rename-Computer`       | `scutil --set ComputerName/HostName`          | pari |
 | Punto di ripristino         | `Checkpoint-Computer`                     | `tmutil localsnapshot` (Time Machine)         | pari |
 | Account + credenziali       | Apre account.microsoft.com, genera cred   | Apre appleid.apple.com, genera cred           | pari |

@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "4.5 (2026-07-07)"
+$SCRIPT_VERSION = "4.6 (2026-07-07)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -449,13 +449,26 @@ try {
 # ACCORTEZZE PC NUOVO (orologio + anti-sospensione)
 # =============================================================================
 
-# Data/ora sbagliata su un PC nuovo -> errori HTTPS su winget e download.
-# Sincronizzo l'orologio con il time server di Windows.
-try {
-    Set-Service -Name w32time -StartupType Manual -ErrorAction SilentlyContinue
-    Start-Service -Name w32time -ErrorAction SilentlyContinue
-    & w32tm /resync /force 2>$null | Out-Null
-} catch {}
+# Data/ora sbagliata su un PC nuovo -> errori HTTPS su winget/download/attivazioni.
+# ATTIVO la sincronizzazione automatica dell'orario (non solo un resync una-tantum):
+# servizio W32Time in avvio automatico come client NTP + fuso automatico + resync.
+if ($RunReale) {
+    try {
+        Set-Service -Name w32time -StartupType Automatic -ErrorAction SilentlyContinue
+        Start-Service -Name w32time -ErrorAction SilentlyContinue
+        # "Imposta l'ora automaticamente": W32Time come client NTP verso il time server
+        Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters' -Name Type -Value 'NTP' -ErrorAction SilentlyContinue
+        & w32tm /config /manualpeerlist:"time.windows.com,0x9" /syncfromflags:manual /update 2>$null | Out-Null
+        # "Imposta fuso orario automaticamente" (servizio tzautoupdate)
+        Set-Service -Name tzautoupdate -StartupType Automatic -ErrorAction SilentlyContinue
+        & w32tm /resync /force 2>$null | Out-Null
+        Write-OK "Sincronizzazione orario attivata e orologio aggiornato."
+        Add-Report "Sincronizzazione orario" "OK"
+    } catch {
+        Write-Info "Sincronizzazione orario non completata del tutto: proseguo."
+        Add-Report "Sincronizzazione orario" "AVVISO"
+    }
+}
 
 # Evita la sospensione durante le installazioni (solo con alimentatore collegato).
 # Uso powercfg (strumento standard) invece di P/Invoke a kernel32, che gli
@@ -834,77 +847,66 @@ Write-Info "Lingua/regione attuale: $culturaAttuale"
 $impostaLingua = Chiedi "Impostare il sistema in Italiano (it-IT)? (S/N)" "S"
 if ($impostaLingua -match "^[Ss]") {
 
-    # --- 1) Impostazioni BASE (locali, sempre applicabili anche senza rete) ---
-    try {
-        # Lista lingue utente: italiano in cima + tastiera italiana (0410:00000410)
-        $lista = New-WinUserLanguageList it-IT
-        $lista[0].InputMethodTips.Clear()
-        $lista[0].InputMethodTips.Add("0410:00000410")
-        Set-WinUserLanguageList $lista -Force
-
-        Set-WinUILanguageOverride -Language it-IT
-        Set-Culture it-IT
-        Set-WinHomeLocation -GeoId 118    # Italia
-
-        Write-OK "Lingua, tastiera e regione impostate su Italiano (it-IT)."
-        Add-Report "Lingua italiana (it-IT)" "OK"
-    } catch {
-        Write-Errore "Impossibile impostare la lingua base: $_"
-        Add-Report "Lingua italiana (it-IT)" "ERRORE"
-    }
-
-    # Locale di sistema (per programmi non-Unicode): separato, un suo errore
-    # non deve invalidare tastiera/formati gia' applicati sopra.
-    try {
-        Set-WinSystemLocale it-IT
-    } catch {
-        Write-Info "Impostazione locale di sistema non riuscita: proseguo (tastiera/formati restano validi)."
-    }
-
-    # Fuso orario Italia (CET) + orologio sincronizzato
-    try {
-        Set-TimeZone -Id "W. Europe Standard Time" -ErrorAction Stop
-        Write-OK "Fuso orario impostato su Italia (CET)."
-    } catch {
-        Write-Info "Impostazione fuso orario non riuscita: proseguo."
-    }
-
-    # --- 2) Language pack (Windows 11 22H2+): richiede Internet, NON deve bloccare il resto ---
+    # --- 1) LANGUAGE PACK it-IT PRIMA di tutto (Windows 11 22H2+). E' QUESTO che
+    #     rende l'INTERFACCIA in italiano; senza, cambiano solo tastiera/formati e
+    #     l'UI resta inglese. -CopyToSettings applica il pack a utente + login +
+    #     nuovi utenti in un colpo (il modo affidabile). Serve Internet. ---
+    $packOk = $false
     if (Get-Command Install-Language -ErrorAction SilentlyContinue) {
         try {
-            $installate = (Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId
-            if ($installate -notcontains "it-IT") {
-                Write-Info "Installazione language pack it-IT (puo' richiedere qualche minuto)..."
+            Write-Info "Installazione/applicazione language pack it-IT (qualche minuto, serve Internet)..."
+            try {
+                # Modo moderno e affidabile
+                Install-Language it-IT -CopyToSettings -ErrorAction Stop | Out-Null
+            } catch {
+                # -CopyToSettings non c'e' su tutte le build: fallback senza flag
                 Install-Language it-IT -ErrorAction Stop | Out-Null
-            } else {
-                Write-Info "Language pack it-IT gia' presente."
             }
+            $packOk = ((Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId -contains "it-IT")
         } catch {
-            Write-Info "Language pack it-IT non installato (rete assente/bloccata?): le impostazioni base restano valide."
+            Write-Errore "Language pack it-IT NON installato (Internet assente o bloccato)."
         }
     } else {
-        Write-Info "Install-Language non disponibile (Windows 10): il pacchetto lingua va aggiunto a mano."
+        Write-Info "Install-Language non c'e' (Windows 10): il pacchetto lingua di visualizzazione va aggiunto a mano."
         $packDaAggiungere = $true
     }
 
-    # --- 3) Lingua UI di sistema (Windows 11), non fatale ---
+    # --- 2) Lingua UI di sistema + override utente (DOPO il pack, cosi' aggancia) ---
     if (Get-Command Set-SystemPreferredUILanguage -ErrorAction SilentlyContinue) {
-        try { Set-SystemPreferredUILanguage it-IT } catch { Write-Info "Impostazione lingua UI di sistema non riuscita: proseguo." }
+        try { Set-SystemPreferredUILanguage it-IT } catch {}
     }
+    try { Set-WinUILanguageOverride -Language it-IT } catch {}
 
-    # --- 4) Propaga a login + nuovi utenti + sistema (Windows 11), non fatale ---
+    # --- 3) Propaga a login + nuovi utenti (ridondante se -CopyToSettings ha funzionato) ---
     if (Get-Command Copy-UserInternationalSettingsToSystem -ErrorAction SilentlyContinue) {
-        try {
-            Write-Info "Propagazione impostazioni a login e nuovi utenti..."
-            Copy-UserInternationalSettingsToSystem -WelcomeScreen $true -NewUser $true
-        } catch {
-            Write-Info "Propagazione a login/nuovi utenti non riuscita: da sistemare a mano se serve."
-        }
-    } else {
-        Write-Info "Propagazione automatica a login/nuovi utenti non disponibile su questo Windows."
+        try { Copy-UserInternationalSettingsToSystem -WelcomeScreen $true -NewUser $true } catch {}
     }
 
-    Write-Info "La lingua di sistema e del login si applicano del tutto dopo il RIAVVIO del PC."
+    # --- 4) Tastiera italiana, formati, regione, locale di sistema, fuso (sempre) ---
+    try {
+        $lista = New-WinUserLanguageList it-IT
+        $lista[0].InputMethodTips.Clear()
+        $lista[0].InputMethodTips.Add("0410:00000410")   # tastiera italiana
+        Set-WinUserLanguageList $lista -Force
+        Set-Culture it-IT
+        Set-WinHomeLocation -GeoId 118    # Italia
+    } catch { Write-Info "Alcune impostazioni tastiera/formati non applicate: $_" }
+    try { Set-WinSystemLocale it-IT } catch {}
+    try { Set-TimeZone -Id "W. Europe Standard Time" -ErrorAction Stop; Write-OK "Fuso orario Italia (CET)." } catch {}
+
+    # --- Esito CHIARO: se il pack non c'e', l'utente deve sapere PERCHE' resta inglese ---
+    if ($packOk) {
+        Write-OK "Italiano impostato: display, tastiera e formati. Attivo del tutto dopo il RIAVVIO."
+        Add-Report "Lingua italiana (it-IT)" "OK"
+    } elseif ($packDaAggiungere) {
+        Write-Info "Tastiera e formati in italiano OK. L'INTERFACCIA resta inglese: su Windows 10 va aggiunto il pacchetto lingua a mano."
+        Add-Report "Lingua italiana (display da completare)" "AVVISO"
+    } else {
+        Write-Errore "Tastiera/formati OK, ma il LANGUAGE PACK non si e' installato: l'interfaccia resta in INGLESE."
+        Write-Errore "Causa tipica: Internet assente/bloccato durante l'installazione. Controlla la rete e rilancia lo step lingua."
+        Add-Report "Lingua italiana (pack mancante)" "AVVISO"
+    }
+    Write-Info "Display e schermata di login in italiano si vedono dopo il RIAVVIO del PC."
 
     # --- 5) Windows 10: il pacchetto lingua (display) va aggiunto a mano ---
     if ($packDaAggiungere) {
