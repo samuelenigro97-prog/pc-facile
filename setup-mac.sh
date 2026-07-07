@@ -8,7 +8,7 @@
 # da installare a parte Homebrew (che lo script installa da solo).
 # =============================================================================
 
-SCRIPT_VERSION="0.7 (2026-07-07)"
+SCRIPT_VERSION="0.8 (2026-07-07)"
 
 # ---- Modalita' (come su Windows): -Test / -Diagnostica / -Veloce -------------
 MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST
@@ -42,6 +42,9 @@ add_report(){ REPORT_VOCI+=("$1"); REPORT_ESITI+=("$2"); }
 RUN_REALE=false
 [[ "$MODO" == "CONFIGURA" || "$MODO" == "VELOCE" ]] && RUN_REALE=true
 beep_fine(){ $RUN_REALE && printf '\a'; }
+
+# ---- Controllo rete (come Test-Rete su Windows) ------------------------------
+test_rete(){ curl -s --head --max-time 5 https://www.apple.com >/dev/null 2>&1 || ping -c1 -t2 8.8.8.8 >/dev/null 2>&1; }
 
 # ---- Chiedi / chiedi_sempre --------------------------------------------------
 VELOCE=false;  [[ "$MODO" == "VELOCE" ]] && VELOCE=true
@@ -141,6 +144,26 @@ if [[ "$MODO" == "DIAGNOSTICA" ]]; then
     dim "Salto la validazione: manca Homebrew."
   fi
   print -r -- ""; ok "Diagnostica finita."; exit 0
+fi
+
+# =============================================================================
+# CONTROLLO CONNESSIONE - senza Internet Homebrew, app e aggiornamenti non vanno
+# =============================================================================
+if $RUN_REALE; then
+  if ! test_rete; then
+    titolo "ATTENZIONE: Internet non collegato"
+    errore "Il Mac NON risulta connesso a Internet."
+    print -r -- "   Serve per Homebrew, le app e gli aggiornamenti. Collega il WiFi PRIMA."
+    print -r -- ""
+    while true; do
+      print -n -- "   Collega Internet e premi INVIO per riprovare (o S = prosegui senza): "; read -r rnet
+      [[ "$rnet" == [Ss]* ]] && break
+      test_rete && break
+    done
+    test_rete && ok "Connessione a Internet OK." || info "Proseguo senza Internet: app/aggiornamenti potrebbero saltare."
+  else
+    ok "Connessione a Internet OK."
+  fi
 fi
 
 # =============================================================================

@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "5.0 (2026-07-07)"
+$SCRIPT_VERSION = "5.1 (2026-07-07)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -864,6 +864,28 @@ if ($Diagnostica) {
 try { Clear-Host } catch {}
 # La scelta [C] Configura nel menu iniziale e' gia' la conferma: si parte
 # diretti. Ogni singolo passo chiede comunque S/N, niente modifiche a sorpresa.
+
+# =============================================================================
+# CONTROLLO CONNESSIONE - prima di tutto: senza Internet la lingua (pacchetto),
+# le app e gli aggiornamenti NON funzionano. Avviso e do modo di collegarla.
+# =============================================================================
+if ($RunReale) {
+    if (-not (Test-Rete)) {
+        Write-Titolo "ATTENZIONE: Internet non collegato"
+        Write-Errore "Il PC NON risulta connesso a Internet."
+        Write-Host "Serve per: lingua italiana (pacchetto da scaricare), installazione app," -ForegroundColor White
+        Write-Host "aggiornamenti e driver. Collega il WiFi o il cavo di rete PRIMA di continuare." -ForegroundColor White
+        Write-Host ""
+        do {
+            $rNet = Read-Host "Collega Internet e premi INVIO per riprovare  (oppure S = prosegui senza)"
+            if ($rNet -match '^[Ss]') { break }
+        } while (-not (Test-Rete))
+        if (Test-Rete) { Write-OK "Connessione a Internet OK." }
+        else { Write-Info "Proseguo SENZA Internet: lingua, app e aggiornamenti potrebbero saltare." }
+    } else {
+        Write-OK "Connessione a Internet OK."
+    }
+}
 
 # =============================================================================
 # LINGUA E REGIONE (ITALIANO) - primo passo
