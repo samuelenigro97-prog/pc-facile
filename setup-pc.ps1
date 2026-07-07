@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "4.8 (2026-07-07)"
+$SCRIPT_VERSION = "4.9 (2026-07-07)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -952,8 +952,7 @@ if ($impostaLingua -match "^[Ss]") {
     Add-Report "Lingua italiana (it-IT)" "SALTATO"
 }
 
-# Pausa per leggere l'esito solo se ho impostato la lingua; con N vado dritto.
-if ($impostaLingua -match "^[Ss]") { Pausa }
+# (nessuna pausa: si avanza da solo, come nel wizard)
 
 # =============================================================================
 # NOME CLIENTE E PC (prima voce dopo la lingua: la prima cosa da impostare)
@@ -1019,7 +1018,7 @@ if ($nomeCliente -ne "") {
     Add-Report "Nome cliente" "SALTATO"
 }
 
-if ($nomeCliente -ne "") { Pausa }
+# (nessuna pausa: si avanza da solo)
 
 # =============================================================================
 # PUNTO DI RIPRISTINO (rete di sicurezza prima delle modifiche)
@@ -1050,7 +1049,7 @@ if ($vuoiRestore -match "^[Ss]") {
     Add-Report "Punto di ripristino" "SALTATO"
 }
 
-if ($vuoiRestore -match "^[Ss]") { Pausa }
+# (nessuna pausa: si avanza da solo)
 
 # =============================================================================
 # ACCOUNT MICROSOFT (accedi/crea presto: velocizza Office e antivirus dopo)
@@ -1421,7 +1420,6 @@ $bloatwareAppx = @(
 
     Write-OK "Pulizia e ottimizzazione iniziale completata."
     Beep-Fine
-    Pausa
 } else {
     Write-Info "Pulizia e ottimizzazione iniziale saltata."
     Add-Report "Antivirus di prova" "SALTATO"
@@ -1696,7 +1694,7 @@ function Installa-Set {
 Write-Host "Scegli come installare le applicazioni:" -ForegroundColor White
 Write-Host "  1) PROFILO BASE     (VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk, TeamViewer)"
 Write-Host "  2) PROFILO UFFICIO  (BASE + Zoom, Spotify, GIMP, Sumatra PDF)"
-Write-Host "  3) PROFILO GAMING   (BASE + Steam, Epic, Discord, qBittorrent; +GeForce se NVIDIA)"
+Write-Host "  3) PROFILO GAMING   (BASE + Steam, Epic, Discord, qBittorrent)"
 Write-Host "  4) COMPLETO         (tutte le app in lista)"
 Write-Host "  5) MANUALE          (scelgo io i singoli numeri)"
 Write-Host "  S) Salta"
@@ -1708,22 +1706,10 @@ if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(2, $passo - 1); continue w
 switch ($sceltaApps) {
     "1" { Installa-Set -Ids $profili["BASE"] }
     "2" { Installa-Set -Ids $profili["UFFICIO"] }
-    "3" {
-        Installa-Set -Ids $profili["GAMING"]
-        # PC da gaming: se c'e' una GPU NVIDIA installo l'app GeForce (driver video)
-        if ((Test-GpuNvidia) -and (Confirm-Winget)) {
-            Write-Info "GPU NVIDIA rilevata (PC da gaming): installo l'app GeForce per i driver."
-            Installa-Pacchetto -Nome "NVIDIA GeForce Experience" -WingetId "Nvidia.GeForceExperience"
-        }
-    }
+    "3" { Installa-Set -Ids $profili["GAMING"] }   # l'app NVIDIA la mette il passo Driver
     "4" {
         if (Confirm-Winget) {
             foreach ($app in $appsDisponibili) { Installa-Pacchetto -Nome $app.Nome -WingetId $app.Id }
-            # Completo: aggiungo l'app GeForce solo se c'e' davvero una GPU NVIDIA
-            if (Test-GpuNvidia) {
-                Write-Info "GPU NVIDIA rilevata: installo anche l'app GeForce per i driver."
-                Installa-Pacchetto -Nome "NVIDIA GeForce Experience" -WingetId "Nvidia.GeForceExperience"
-            }
         } else {
             Write-Errore "Winget non disponibile."
         }
@@ -1806,6 +1792,25 @@ Write-Host "Cerca e installa i driver mancanti/aggiornati dal catalogo Windows U
 Write-Host "Vendor-neutral: niente tool del produttore. Puo' richiedere qualche minuto" -ForegroundColor White
 Write-Host "e talvolta un riavvio. Opzionale, ultimo passo." -ForegroundColor White
 Write-Host ""
+
+# GPU NVIDIA: installo l'app NVIDIA (gestisce i driver video meglio della ricerca
+# generica di Windows Update). Provo prima "NVIDIA App" (attuale), poi GeForce
+# Experience come fallback. Va a prescindere dalla scelta su Windows Update.
+if ((Test-GpuNvidia) -and (Confirm-Winget)) {
+    Write-Info "GPU NVIDIA rilevata: installo l'app NVIDIA per i driver..."
+    winget install --exact --id Nvidia.NvidiaApp --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        winget install --exact --id Nvidia.GeForceExperience --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+    }
+    if ($LASTEXITCODE -eq 0) {
+        Write-OK "App NVIDIA installata: aprila per scaricare i driver piu' recenti."
+        Add-Report "App NVIDIA (driver GeForce)" "OK"
+    } else {
+        Write-Info "App NVIDIA non installata (id/rete): scaricala da nvidia.com/it-it/software/nvidia-app/"
+        Add-Report "App NVIDIA (driver GeForce)" "AVVISO"
+    }
+    Write-Host ""
+}
 
 $vuoiDriver = Chiedi "Cercare e installare i driver ora? (S/N, B=indietro)" "S"
 if (Test-Indietro $vuoiDriver) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
