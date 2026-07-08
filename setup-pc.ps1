@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "5.5 (2026-07-08)"
+$SCRIPT_VERSION = "5.6 (2026-07-08)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -1583,45 +1583,38 @@ function Installa-Antivirus {
     Start-Process $UrlRiscatto
     Write-OK "Browser aperto su: $UrlRiscatto"
     Write-Host ""
-    Write-Host "Completa registrazione e attivazione nel browser." -ForegroundColor White
-    Write-Host "Al termine il sito scarica l'installer (di solito nella cartella Download)." -ForegroundColor White
-    Read-Host "Premi INVIO QUANDO IL DOWNLOAD E' FINITO"
+    Write-Host "Completa registrazione/download nel browser." -ForegroundColor White
+    Write-Host "L'installer parte DA SOLO appena finisce di scaricarsi (niente INVIO)." -ForegroundColor White
+    Write-Host ""
 
-    # L'installer ha nome variabile: cerco l'.exe piu' recente in Download e Desktop
-    # (finestra ampia: la registrazione online puo' richiedere tempo)
+    # Sorveglio Download e Desktop: appena compare un .exe NUOVO (creato dopo
+    # ORA) e il download e' finito (dimensione stabile), lo avvio da solo.
     $cartelle = @((Join-Path $env:USERPROFILE "Downloads"), (Get-DesktopDir)) | Select-Object -Unique
-    $recente = Get-ChildItem -Path $cartelle -Filter "*.exe" -ErrorAction SilentlyContinue |
-        Where-Object { $_.LastWriteTime -gt (Get-Date).AddMinutes(-60) } |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
+    $inizio = Get-Date
+    $timeoutMin = 12
+    Write-Info "In attesa dell'installer di $Nome (max $timeoutMin min). CTRL+C per annullare."
+    $installer = $null
+    while (((Get-Date) - $inizio).TotalMinutes -lt $timeoutMin) {
+        $cand = Get-ChildItem -Path $cartelle -Filter "*.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -gt $inizio -and $_.Length -gt 100KB } |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($cand) {
+            # Aspetto che il file smetta di crescere = download completo.
+            $dim1 = $cand.Length
+            Start-Sleep -Seconds 2
+            $cand.Refresh()
+            if ($cand.Length -eq $dim1) { $installer = $cand; break }
+        }
+        Start-Sleep -Seconds 2
+    }
 
-    if ($recente) {
-        Write-OK "Installer recente trovato: $($recente.Name)"
-        $avvia = Chiedi "Avviare questo installer? (S/N)" "S"
-        if ($avvia -match "^[Ss]") {
-            Start-Process -FilePath $recente.FullName
-            Write-OK "Installer $Nome avviato."
-            Add-Report "$Nome (antivirus)" "OK"
-        } else {
-            Write-Info "Avvio installer annullato."
-            Add-Report "$Nome (antivirus)" "SALTATO"
-        }
+    if ($installer) {
+        Start-Process -FilePath $installer.FullName
+        Write-OK "Installer $Nome avviato AUTOMATICAMENTE: $($installer.Name)"
+        Add-Report "$Nome (antivirus)" "OK"
     } else {
-        # Non e' un errore dello script: l'installer non e' ancora stato scaricato.
-        Write-Info "Nessun .exe recente (ultimi 60 min) in Download o Desktop."
-        $percorso = Read-Host "Incolla il percorso completo dell'installer $Nome (INVIO per saltare)"
-        $percorso = ($percorso -replace '"', '').Trim()
-        if ($percorso -ne "" -and (Test-Path $percorso)) {
-            Start-Process -FilePath $percorso
-            Write-OK "Installer $Nome avviato."
-            Add-Report "$Nome (antivirus)" "OK"
-        } elseif ($percorso -ne "") {
-            Write-Errore "Percorso non valido: $percorso"
-            Add-Report "$Nome (antivirus)" "ERRORE"
-        } else {
-            Write-Info "${Nome}: installer da avviare a mano piu' tardi."
-            Add-Report "$Nome (antivirus)" "AVVISO"
-        }
+        Write-Info "Nessun installer rilevato entro $timeoutMin min: avvialo a mano dalla cartella Download."
+        Add-Report "$Nome (antivirus)" "AVVISO"
     }
 }
 
