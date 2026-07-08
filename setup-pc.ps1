@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "5.4 (2026-07-08)"
+$SCRIPT_VERSION = "5.5 (2026-07-08)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -1703,21 +1703,14 @@ for ($i = 0; $i -lt $browserDisponibili.Count; $i++) {
     Write-Host "  $($i + 1)) $($browserDisponibili[$i].Nome)"
 }
 Write-Host ""
-Write-Host "  T) Installa tutti"
 Write-Host "  S) Salta"
 Write-Host ""
 
-$sceltaBrowser = Chiedi "Scelta (es: 1,2 - T tutti - S salta - B indietro)" "S"
+$sceltaBrowser = Chiedi "Scelta (es: 1,2 - S salta - B indietro)" "S"
 if (Test-Indietro $sceltaBrowser) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 
 if ($sceltaBrowser -match "^[Ss]$") {
     Write-Info "Browser saltati."
-} elseif ($sceltaBrowser -match "^[Tt]$") {
-    if (Confirm-Winget) {
-        foreach ($b in $browserDisponibili) { Installa-Pacchetto -Nome $b.Nome -WingetId $b.Id }
-    } else {
-        Write-Errore "Winget non disponibile."
-    }
 } else {
     $indici = $sceltaBrowser -split "," | ForEach-Object { $_.Trim() }
     if (Confirm-Winget) {
