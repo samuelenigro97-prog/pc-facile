@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "5.3 (2026-07-07)"
+$SCRIPT_VERSION = "5.4 (2026-07-08)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -909,6 +909,26 @@ if ($RunReale) {
 }
 
 # =============================================================================
+# EDGE: salta le schermate iniziali (first-run "Benvenuti in Edge", accedi,
+# importa dati...). Cosi' quando apriamo Edge per account/Office non si perde
+# tempo. Policy di registro, impostata PRIMA di aprire Edge.
+# =============================================================================
+if ($RunReale) {
+    try {
+        $edgePol = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
+        if (-not (Test-Path $edgePol)) { New-Item -Path $edgePol -Force | Out-Null }
+        Set-ItemProperty -Path $edgePol -Name 'HideFirstRunExperience'        -Value 1 -Type DWord -ErrorAction SilentlyContinue
+        # Non forzare l'accesso e non mostrare il primo tour/import
+        Set-ItemProperty -Path $edgePol -Name 'BrowserSignin'                 -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'SyncDisabled'                  -Value 1 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'ImportOnEachLaunch'            -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'AutoImportAtFirstRun'          -Value 4 -Type DWord -ErrorAction SilentlyContinue  # 4 = non importare
+        Set-ItemProperty -Path $edgePol -Name 'DefaultBrowserSettingEnabled'  -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Write-OK "Schermate iniziali di Edge disattivate."
+    } catch {}
+}
+
+# =============================================================================
 # LINGUA E REGIONE (ITALIANO) - primo passo
 # =============================================================================
 
@@ -1166,10 +1186,13 @@ if ($vuoiMs -match "^[Ss]") { Pausa }
 
 Write-Titolo "Attivazione Office"
 
-Write-Host "Su quasi tutti i PC nuovi Office/M365 e' GIA' installato: qui ATTIVI la licenza." -ForegroundColor White
+Write-Host "Su quasi tutti i PC nuovi Office/M365 e' GIA' installato: qui ATTIVI la licenza" -ForegroundColor White
+Write-Host "oppure installi una suite gratuita in alternativa." -ForegroundColor White
 Write-Host "  1) Microsoft 365 (abbonamento) - apre setup.office.com per riscatto/attivazione" -ForegroundColor White
 Write-Host "  2) Office perpetuo (2021/2024) - inserisci il product key" -ForegroundColor White
-Write-Host "  3) Salta" -ForegroundColor White
+Write-Host "  3) OpenOffice (suite gratuita)" -ForegroundColor White
+Write-Host "  4) LibreOffice (suite gratuita)" -ForegroundColor White
+Write-Host "  5) Salta" -ForegroundColor White
 Write-Host ""
 
 function Get-OsppPath {
@@ -1181,13 +1204,21 @@ function Get-OsppPath {
     return $null
 }
 
-$sceltaAtt = Chiedi "Scelta (1-3)" "1"
+$sceltaAtt = Chiedi "Scelta (1-5)" "1"
 switch ($sceltaAtt) {
     "1" {
         Start-Process "https://setup.office.com"
         Write-OK "Browser aperto su setup.office.com"
         Write-Info "Accedi con l'account Microsoft del cliente per riscattare e attivare Office 365."
         Add-Report "Office 365 (riscatto/attivazione)" "OK"
+    }
+    "3" {
+        if (Confirm-Winget) { Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice" }
+        else { Write-Errore "Winget non disponibile." ; Add-Report "OpenOffice (installazione)" "ERRORE" }
+    }
+    "4" {
+        if (Confirm-Winget) { Installa-Pacchetto -Nome "LibreOffice" -WingetId "TheDocumentFoundation.LibreOffice" }
+        else { Write-Errore "Winget non disponibile." ; Add-Report "LibreOffice (installazione)" "ERRORE" }
     }
     "2" {
         $osppPath = Get-OsppPath
@@ -1512,51 +1543,20 @@ $bloatwareAppx = @(
 # anche da dentro lo switch, saltando il $passo++ di fine passo.
 function Test-Indietro { param([string]$v) return ($v -match '^\s*[Bb]\s*$') }
 
-# Il wizard parte dal passo 2: il passo 1 "Nome" e' stato spostato prima (dopo
-# la lingua). Non rinumero i case dello switch: nella barra mostro (passo-1) su 7.
-$passo = 2
-:wizard while ($passo -ge 2 -and $passo -le 8) {
+# Il wizard parte dal passo 3: il passo 1 "Nome" e la suite Office (ora nel menu
+# Attivazione Office) sono fuori dal wizard. Non rinumero i case: mostro
+# (passo-2) su 6 nella barra.
+$passo = 3
+:wizard while ($passo -ge 3 -and $passo -le 8) {
 Write-Host ""
 $barLen = 20
-$totPassi = 7
-$passoMostrato = $passo - 1
+$totPassi = 6
+$passoMostrato = $passo - 2
 $pieni = [int]($barLen * $passoMostrato / $totPassi)
 if ($pieni -gt $barLen) { $pieni = $barLen }
 $bar = (([string]$BOX_FULL) * $pieni) + (([string]$BOX_EMPTY) * ($barLen - $pieni))
 Write-Host ("$AON  Passo $passoMostrato/$totPassi  [$bar]$AOFF") -ForegroundColor $THEME_COL
 switch ($passo) {
-2 {
-# =============================================================================
-# STEP 2 - INSTALLA SUITE OFFICE GRATUITA (OpenOffice / LibreOffice)
-# =============================================================================
-
-Write-Titolo "Installa Suite Office (alternativa gratuita)"
-
-Write-Host "Serve solo se vuoi una suite GRATUITA al posto di Microsoft Office." -ForegroundColor White
-Write-Host "(Microsoft 365 lo attivi nel passo 'Attivazione Office', all'inizio.)" -ForegroundColor Gray
-Write-Host "  1) OpenOffice" -ForegroundColor White
-Write-Host "  2) LibreOffice" -ForegroundColor White
-Write-Host "  3) Salta" -ForegroundColor White
-Write-Host ""
-
-$sceltaSuite = Chiedi "Scelta (1-3, B=indietro)" "3"
-if (Test-Indietro $sceltaSuite) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
-switch ($sceltaSuite) {
-    "1" {
-        if (Confirm-Winget) { Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice" }
-        else { Write-Errore "Winget non disponibile." ; Add-Report "OpenOffice (installazione)" "ERRORE" }
-    }
-    "2" {
-        if (Confirm-Winget) { Installa-Pacchetto -Nome "LibreOffice" -WingetId "TheDocumentFoundation.LibreOffice" }
-        else { Write-Errore "Winget non disponibile." ; Add-Report "LibreOffice (installazione)" "ERRORE" }
-    }
-    default {
-        Write-Info "Nessuna suite alternativa installata."
-    }
-}
-
-$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
-}
 3 {
 # =============================================================================
 # STEP 4 - ANTIVIRUS
@@ -1571,7 +1571,7 @@ Write-Host "  3) Salta"
 Write-Host ""
 
 $sceltaAV = Read-Host "Scelta (1-3, B=indietro)"
-if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
+if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 
 function Installa-Antivirus {
     param(
@@ -1679,7 +1679,7 @@ Write-Host "Servizio venduto solo su richiesta: salta se il cliente non l'ha acq
 Write-Host ""
 
 $vuoiUnieuro = Chiedi "Attivare Unieuro Cyber Protection? (S/N, B=indietro)" "N"
-if (Test-Indietro $vuoiUnieuro) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
+if (Test-Indietro $vuoiUnieuro) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 if ($vuoiUnieuro -match "^[Ss]") {
     Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it"
 } else {
@@ -1708,7 +1708,7 @@ Write-Host "  S) Salta"
 Write-Host ""
 
 $sceltaBrowser = Chiedi "Scelta (es: 1,2 - T tutti - S salta - B indietro)" "S"
-if (Test-Indietro $sceltaBrowser) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
+if (Test-Indietro $sceltaBrowser) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 
 if ($sceltaBrowser -match "^[Ss]$") {
     Write-Info "Browser saltati."
@@ -1777,7 +1777,7 @@ Write-Host "  S) Salta"
 Write-Host ""
 
 $sceltaApps = Read-Host "Scelta (1-5 - S salta - B indietro)"
-if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
+if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 
 switch ($sceltaApps) {
     "1" { Installa-Set -Ids $profili["BASE"] }
@@ -1839,7 +1839,7 @@ Write-Host "Puo' richiedere diversi minuti. (I driver hanno il loro passo dedica
 Write-Host ""
 
 $vuoiUpgrade = Chiedi "Aggiornare ora tutte le app installate? (S/N, B=indietro)" "S"
-if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
+if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 if ($vuoiUpgrade -match "^[Ss]") {
     if (Confirm-Winget) {
         Write-Info "Aggiornamento in corso (puo' richiedere diversi minuti)..."
@@ -1889,7 +1889,7 @@ if ((Test-GpuNvidia) -and (Confirm-Winget)) {
 }
 
 $vuoiDriver = Chiedi "Cercare e installare i driver ora? (S/N, B=indietro)" "S"
-if (Test-Indietro $vuoiDriver) { $passo = [Math]::Max(2, $passo - 1); continue wizard }
+if (Test-Indietro $vuoiDriver) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 if ($vuoiDriver -match "^[Ss]") {
     try {
         Write-Info "Ricerca driver su Windows Update (puo' richiedere qualche minuto)..."
@@ -1936,7 +1936,7 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 }
 }
 Beep-Fine   # avviso sonoro: passo del wizard completato
-if ($passo -lt 2) { $passo = 2 }
+if ($passo -lt 3) { $passo = 3 }
 }
 
 # =============================================================================
