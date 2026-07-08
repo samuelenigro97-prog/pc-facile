@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "5.7 (2026-07-08)"
+$SCRIPT_VERSION = "5.8 (2026-07-08)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -366,7 +366,7 @@ $CatalogoApp = @(
     @{ Nome = "Spotify";              Id = "Spotify.Spotify";              Profili = @("UFFICIO") },
     @{ Nome = "AIMP";                 Id = "AIMP.AIMP";                    Profili = @() },
     @{ Nome = "7-Zip";                Id = "7zip.7zip";                    Profili = @("BASE","UFFICIO","GAMING") },
-    @{ Nome = "WhatsApp";             Id = "9NKSQGP7F2NH";                 Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "WhatsApp";             Id = "WhatsApp.WhatsApp";            Profili = @("BASE","UFFICIO","GAMING") },
     @{ Nome = "GIMP";                 Id = "GIMP.GIMP";                    Profili = @("UFFICIO") },
     @{ Nome = "Steam";                Id = "Valve.Steam";                  Profili = @("GAMING") },
     @{ Nome = "Epic Games Launcher";  Id = "EpicGames.EpicGamesLauncher";  Profili = @("GAMING") },
