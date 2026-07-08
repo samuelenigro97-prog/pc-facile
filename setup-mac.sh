@@ -8,7 +8,7 @@
 # da installare a parte Homebrew (che lo script installa da solo).
 # =============================================================================
 
-SCRIPT_VERSION="1.0 (2026-07-07)"
+SCRIPT_VERSION="1.1 (2026-07-08)"
 
 # ---- Modalita' (come su Windows): -Test / -Diagnostica / -Veloce -------------
 MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST
@@ -41,7 +41,7 @@ add_report(){ REPORT_VOCI+=("$1"); REPORT_ESITI+=("$2"); }
 # ---- Avviso sonoro a fine passo (equivalente [console]::Beep) ----------------
 RUN_REALE=false
 [[ "$MODO" == "CONFIGURA" || "$MODO" == "VELOCE" ]] && RUN_REALE=true
-beep_fine(){ $RUN_REALE && printf '\a'; }
+beep_attesa(){ $RUN_REALE && printf '\a'; }   # bip quando serve la TUA azione
 
 # ---- Controllo rete (come Test-Rete su Windows) ------------------------------
 test_rete(){ curl -s --head --max-time 5 https://www.apple.com >/dev/null 2>&1 || ping -c1 -t2 8.8.8.8 >/dev/null 2>&1; }
@@ -54,20 +54,20 @@ MODO_TEST=false; [[ "$MODO" == "TEST" ]] && MODO_TEST=true
 chiedi(){   # $1=prompt  $2=auto(Veloce)
   if $VELOCE;   then REPLY="$2"; dim "$1  [Veloce => '$REPLY']"; return; fi
   if $MODO_TEST; then [[ "$1" == *"S/N"* ]] && REPLY="N" || REPLY=""; dim "$1  [test => '$REPLY']"; return; fi
-  print -n -- "   $1 "; read -r REPLY
+  beep_attesa; print -n -- "   $1 "; read -r REPLY
 }
 # chiedi_sempre: domanda che va SEMPRE posta (nome, app, account) anche in
 # Veloce; solo in Test non blocca e ritorna vuoto.
 chiedi_sempre(){  # $1=prompt
   if $MODO_TEST; then REPLY=""; dim "$1  [test => vuoto]"; return; fi
-  print -n -- "   $1 "; read -r REPLY
+  beep_attesa; print -n -- "   $1 "; read -r REPLY
 }
 
 # ---- Pausa: auto-avanza SEMPRE (come il wizard Windows: niente "premi INVIO"
 #      dopo ogni operazione). pausa_web si ferma solo dove serve agire nel
 #      browser (account, Unieuro) e solo in Configura. ------------------------
 pausa(){ return 0; }
-pausa_web(){ { $VELOCE || [[ "$MODO" == "TEST" || "$MODO" == "DIAGNOSTICA" ]]; } && return; print -n -- "   Premi INVIO per continuare "; read -r _; }
+pausa_web(){ { $VELOCE || [[ "$MODO" == "TEST" || "$MODO" == "DIAGNOSTICA" ]]; } && return; beep_attesa; print -n -- "   Premi INVIO per continuare "; read -r _; }
 
 # ---- Generatori credenziali (come New-PasswordCliente/New-EmailCliente) -----
 password_cliente(){  # $1=nome  ->  Rossi123!
@@ -156,7 +156,7 @@ if $RUN_REALE; then
     print -r -- "   Serve per Homebrew, le app e gli aggiornamenti. Collega il WiFi PRIMA."
     print -r -- ""
     while true; do
-      print -n -- "   Collega Internet e premi INVIO per riprovare (o S = prosegui senza): "; read -r rnet
+      beep_attesa; print -n -- "   Collega Internet e premi INVIO per riprovare (o S = prosegui senza): "; read -r rnet
       [[ "$rnet" == [Ss]* ]] && break
       test_rete && break
     done
@@ -263,7 +263,7 @@ if [[ "$REPLY" == [Ss]* ]]; then
   if $RUN_REALE; then
     chiedi_sempre "Il cliente ha GIA' una sua email/password? (S=inserisco / N=genero):"; ha="$REPLY"
     if [[ "$ha" == [Ss]* ]]; then
-      print -n -- "   Email del cliente: "; read -r CRED_ACCOUNT
+      beep_attesa; print -n -- "   Email del cliente: "; read -r CRED_ACCOUNT
       print -n -- "   Password del cliente: "; read -r CRED_PASSWORD
     else
       CRED_ACCOUNT="$(email_cliente "$NOME_CLIENTE")"
@@ -372,7 +372,7 @@ else
   info "App saltate."
   add_report "App" "SALTATO"
 fi
-beep_fine; pausa
+pausa
 
 # =============================================================================
 # UNIEURO CYBER PROTECTION (opzionale, come su Windows: solo portale web)
@@ -401,7 +401,7 @@ else
   dim "(test/salta) aggiornerei brew + macOS"
   add_report "Aggiornamenti" "SALTATO"
 fi
-beep_fine; pausa
+pausa
 
 # =============================================================================
 # FILEVAULT - CHIAVE DI RIPRISTINO (equivalente di BitLocker)
@@ -432,7 +432,7 @@ else
   dim "(test) leggerei fdesetup status e salverei la recovery key"
   add_report "Chiave di ripristino FileVault" "SALTATO"
 fi
-beep_fine; pausa
+pausa
 
 # =============================================================================
 # REPORT FINALE (.txt sul Desktop, come su Windows)

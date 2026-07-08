@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "5.8 (2026-07-08)"
+$SCRIPT_VERSION = "5.9 (2026-07-08)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -116,21 +116,22 @@ function Write-Errore {
     Write-Host "   $SYM_ERR  $Testo" -ForegroundColor Red
 }
 
-function Pausa {
-    Write-Host ""
-    Read-Host "Premi INVIO per continuare"
+# Avviso sonoro. [console]::Beep e' un metodo .NET gestito: NON e' P/Invoke,
+# l'antivirus non lo segnala. Solo nel run reale (niente bip in Test/Diagnostica).
+# Bip di ATTESA: suona quando lo script si ferma e aspetta una TUA azione
+# (domande, pause). Cosi', se ti allontani, un bip = "serve la tua azione".
+function Beep-Attesa {
+    if ($RunReale) { try { [console]::Beep(1000, 150) } catch {} }
 }
-
-# Avviso sonoro a fine passo (utile se ti distrai durante installazioni/download).
-# [console]::Beep e' un metodo .NET gestito: NON e' P/Invoke, l'antivirus non lo
-# segnala. Solo nel run reale (niente bip durante Test/Diagnostica/CI headless).
-function Beep-Fine {
-    param([int]$Freq = 880, [int]$Dur = 180)
-    if ($RunReale) { try { [console]::Beep($Freq, $Dur) } catch {} }
-}
-# Melodia breve di "tutto finito" (due toni), distinta dal bip di fine passo.
+# Melodia breve di "tutto finito" (due toni), a fine lavoro.
 function Beep-Completato {
     if ($RunReale) { try { [console]::Beep(784, 160); [console]::Beep(1047, 260) } catch {} }
+}
+
+function Pausa {
+    Write-Host ""
+    Beep-Attesa
+    Read-Host "Premi INVIO per continuare"
 }
 
 # Password = nome cliente + "123!" (sempre, cosi' e' prevedibile e facile da
@@ -202,6 +203,7 @@ function Chiedi {
         Write-Host "  $Prompt  [Veloce => '$Auto']" -ForegroundColor Gray
         return $Auto
     }
+    Beep-Attesa   # bip: sto per fermarmi e aspettare la tua risposta
     return Read-Host $Prompt
 }
 
@@ -879,7 +881,7 @@ if ($RunReale) {
         Write-Host "aggiornamenti e driver. Collega il WiFi o il cavo di rete PRIMA di continuare." -ForegroundColor White
         Write-Host ""
         do {
-            $rNet = Read-Host "Collega Internet e premi INVIO per riprovare  (oppure S = prosegui senza)"
+            Beep-Attesa; $rNet = Read-Host "Collega Internet e premi INVIO per riprovare  (oppure S = prosegui senza)"
             if ($rNet -match '^[Ss]') { break }
         } while (-not (Test-Rete))
         if (Test-Rete) { Write-OK "Connessione a Internet OK." }
@@ -906,7 +908,7 @@ if ($RunReale) {
         Write-Host "  - aggiungi la chiavetta/cartella alle ESCLUSIONI dell'antivirus, oppure" -ForegroundColor White
         Write-Host "  - tieni pronto a dare ALLOW/CONSENTI se compare 'Threat blocked'." -ForegroundColor White
         Write-Host ""
-        Read-Host "Quando sei pronto premi INVIO per continuare"
+        Beep-Attesa; Read-Host "Quando sei pronto premi INVIO per continuare"
     }
 }
 
@@ -1056,7 +1058,7 @@ Write-Info "Nome visualizzato attuale: $(if ($nomeAttuale) { $nomeAttuale } else
 Write-Host ""
 Write-Info "Nome PC attuale: $env:COMPUTERNAME"
 Write-Host ""
-$nomeCliente = (Read-Host "Nome del cliente (account E nome PC) - INVIO per saltare").Trim()
+Beep-Attesa; $nomeCliente = (Read-Host "Nome del cliente (account E nome PC) - INVIO per saltare").Trim()
 
 if ($nomeCliente -ne "") {
     $nomeOk = $false
@@ -1154,7 +1156,7 @@ if ($vuoiMs -match "^[Ss]") {
     # In entrambi i casi niente lette dal browser. Questa domanda resta anche in
     # Veloce perche' cambia da cliente a cliente.
     if ($RunReale) {
-        $haAccount = Read-Host "Il cliente ha GIA' una sua email/password che usa? (S = le inserisco io / N = ne genero una nuova)"
+        Beep-Attesa; $haAccount = Read-Host "Il cliente ha GIA' una sua email/password che usa? (S = le inserisco io / N = ne genero una nuova)"
         if ($haAccount -match "^[Ss]") {
             $credMsAccount  = (Read-Host "  Email del cliente").Trim()
             $credMsPassword = (Read-Host "  Password del cliente").Trim()
@@ -1228,7 +1230,7 @@ switch ($sceltaAtt) {
             Write-Errore "ospp.vbs non trovato: Office non risulta installato su questo PC."
             Add-Report "Attivazione Office perpetuo" "ERRORE"
         } else {
-            $chiaveLicenza = (Read-Host "Inserisci il product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)").Trim().ToUpper()
+            Beep-Attesa; $chiaveLicenza = (Read-Host "Inserisci il product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)").Trim().ToUpper()
             if ($chiaveLicenza -notmatch "^([A-Z0-9]{5}-){4}[A-Z0-9]{5}$") {
                 Write-Errore "Formato non valido: 5 gruppi da 5 caratteri separati da trattino."
                 Add-Report "Attivazione Office perpetuo" "ERRORE"
@@ -1528,7 +1530,6 @@ $bloatwareAppx = @(
     }
 
     Write-OK "Pulizia e ottimizzazione iniziale completata."
-    Beep-Fine
 } else {
     Write-Info "Pulizia e ottimizzazione iniziale saltata."
     Add-Report "Antivirus di prova" "SALTATO"
@@ -1572,7 +1573,7 @@ Write-Host "  2) Norton"
 Write-Host "  3) Salta"
 Write-Host ""
 
-$sceltaAV = Read-Host "Scelta (1-3, B=indietro)"
+Beep-Attesa; $sceltaAV = Read-Host "Scelta (1-3, B=indietro)"
 if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 
 function Installa-Antivirus {
@@ -1634,7 +1635,7 @@ function Attiva-ServizioWeb {
     Write-Host ""
     Write-Host "Sul sito: inserisci il codice/PIN e completa i dati richiesti." -ForegroundColor White
     Write-Host "IMPORTANTE: annota le credenziali per l'app mobile e consegnale al cliente." -ForegroundColor Yellow
-    $fatto = Read-Host "Attivazione completata e credenziali annotate? (S/N)"
+    Beep-Attesa; $fatto = Read-Host "Attivazione completata e credenziali annotate? (S/N)"
     if ($fatto -match "^[Ss]") {
         Write-OK "$Nome attivato."
         Add-Report "$Nome (protezione)" "OK"
@@ -1764,7 +1765,7 @@ Write-Host "  5) MANUALE          (scelgo io i singoli numeri)"
 Write-Host "  S) Salta"
 Write-Host ""
 
-$sceltaApps = Read-Host "Scelta (1-5 - S salta - B indietro)"
+Beep-Attesa; $sceltaApps = Read-Host "Scelta (1-5 - S salta - B indietro)"
 if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 
 switch ($sceltaApps) {
@@ -1784,7 +1785,7 @@ switch ($sceltaApps) {
         for ($i = 0; $i -lt $appsDisponibili.Count; $i++) {
             Write-Host "  $($i + 1)) $($appsDisponibili[$i].Nome)"
         }
-        $sceltaManuale = Read-Host "Numeri separati da virgola (es: 1,3,5)"
+        Beep-Attesa; $sceltaManuale = Read-Host "Numeri separati da virgola (es: 1,3,5)"
         $indici = $sceltaManuale -split "," | ForEach-Object { $_.Trim() }
         if (Confirm-Winget) {
             foreach ($indice in $indici) {
@@ -1923,7 +1924,6 @@ if ($vuoiDriver -match "^[Ss]") {
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 }
-Beep-Fine   # avviso sonoro: passo del wizard completato
 if ($passo -lt 3) { $passo = 3 }
 }
 
