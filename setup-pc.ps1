@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "5.6 (2026-07-08)"
+$SCRIPT_VERSION = "5.7 (2026-07-08)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -750,8 +750,10 @@ function Installa-Pacchetto {
     $tentativiFatti = 0
     for ($tentativo = 1; $tentativo -le $maxTentativi; $tentativo++) {
         $tentativiFatti = $tentativo
-        Write-Info "Installazione $Nome in corso (tentativo $tentativo/$maxTentativi)..."
-        winget install --exact --id $WingetId @sorgente --silent --accept-package-agreements --accept-source-agreements
+        Write-Info "Installo $Nome...$(if ($tentativo -gt 1) { " (tentativo $tentativo)" })"
+        # Nascondo l'output tecnico di winget (hash, licenze, progressi): confonde.
+        # Mostro solo il risultato con un messaggio semplice.
+        winget install --exact --id $WingetId @sorgente --silent --accept-package-agreements --accept-source-agreements *> $null
         if ($successo -contains $LASTEXITCODE) {
             if ($LASTEXITCODE -eq 0) {
                 Write-OK "$Nome installato."
@@ -1829,7 +1831,7 @@ if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(3, $passo - 1); continue 
 if ($vuoiUpgrade -match "^[Ss]") {
     if (Confirm-Winget) {
         Write-Info "Aggiornamento in corso (puo' richiedere diversi minuti)..."
-        winget upgrade --all --silent --accept-package-agreements --accept-source-agreements --include-unknown
+        winget upgrade --all --silent --accept-package-agreements --accept-source-agreements --include-unknown *> $null
         Write-OK "Aggiornamento app completato."
         Add-Report "Aggiornamento app installate" "OK"
     } else {
