@@ -128,8 +128,8 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 | —  | **Punto di ripristino** (opzionale, consigliato): rete di sicurezza prima delle modifiche |
 | 0  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
 | 1  | Nome completo del cliente (cambia il "Nome visualizzato" dell'account) |
-| 2  | Riscatto licenza **Office 365 abbonamento** (`setup.office.com`) |
-| 3  | Installazione suite **Office / OpenOffice / LibreOffice** (winget) + subito dopo **attivazione Office perpetuo** con product key (`ospp.vbs`) |
+| 2  | **Installazione app Office** (Office 365, perpetuo, OpenOffice, LibreOffice via winget): la suite scelta si installa se manca |
+| 3  | **Attivazione**: Office 365 apre la pagina web per il **codice di licenza** (`setup.office.com`); perpetuo chiede il **product key** (`ospp.vbs`), proponendo l'installazione di Office se assente |
 | 4  | **Antivirus**: McAfee, Norton, o Salta |
 | 4c | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
 | 5  | Browser: Chrome / Firefox |

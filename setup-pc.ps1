@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "5.9 (2026-07-08)"
+$SCRIPT_VERSION = "6.0 (2026-07-10)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -1185,15 +1185,15 @@ if ($vuoiMs -match "^[Ss]") {
 if ($vuoiMs -match "^[Ss]") { Pausa }
 
 # =============================================================================
-# ATTIVAZIONE OFFICE (subito dopo l'account Microsoft: si riscatta/attiva)
+# INSTALLAZIONE APP OFFICE (subito dopo l'account Microsoft): prima si INSTALLA
+# la suite scelta (se manca), poi la schermata dopo la attiva (codice/key).
 # =============================================================================
 
-Write-Titolo "Attivazione Office"
+Write-Titolo "Installazione App Office"
 
-Write-Host "Su quasi tutti i PC nuovi Office/M365 e' GIA' installato: qui ATTIVI la licenza" -ForegroundColor White
-Write-Host "oppure installi una suite gratuita in alternativa." -ForegroundColor White
-Write-Host "  1) Microsoft 365 (abbonamento) - apre setup.office.com per riscatto/attivazione" -ForegroundColor White
-Write-Host "  2) Office perpetuo (2021/2024) - inserisci il product key" -ForegroundColor White
+Write-Host "Scegli la suite Office da installare (se manca) e attivare:" -ForegroundColor White
+Write-Host "  1) Office 365 / Microsoft 365 - installa, poi pagina web per il codice di licenza" -ForegroundColor White
+Write-Host "  2) Office perpetuo (2021/2024) - installa, poi inserisci il product key" -ForegroundColor White
 Write-Host "  3) OpenOffice (suite gratuita)" -ForegroundColor White
 Write-Host "  4) LibreOffice (suite gratuita)" -ForegroundColor White
 Write-Host "  5) Salta" -ForegroundColor White
@@ -1211,9 +1211,19 @@ function Get-OsppPath {
 $sceltaAtt = Chiedi "Scelta (1-5)" "1"
 switch ($sceltaAtt) {
     "1" {
+        # 1/2: INSTALLAZIONE (se manca). Su molti PC nuovi M365 e' preinstallato:
+        # in quel caso non si tocca nulla e si passa subito all'attivazione.
+        if (Get-OsppPath) {
+            Write-OK "Office gia' installato su questo PC."
+        } elseif (Confirm-Winget) {
+            Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
+        } else {
+            Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
+        }
+        # 2/2: ATTIVAZIONE - la schermata dopo: pagina web per il codice di licenza.
         Start-Process "https://setup.office.com"
         Write-OK "Browser aperto su setup.office.com"
-        Write-Info "Accedi con l'account Microsoft del cliente per riscattare e attivare Office 365."
+        Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice di licenza."
         Add-Report "Office 365 (riscatto/attivazione)" "OK"
     }
     "3" {
@@ -1226,8 +1236,23 @@ switch ($sceltaAtt) {
     }
     "2" {
         $osppPath = Get-OsppPath
+        # Se Office manca NON ci si ferma con l'errore: si propone di installarlo
+        # al volo e poi si prosegue normalmente col product key.
         if (-not $osppPath) {
-            Write-Errore "ospp.vbs non trovato: Office non risulta installato su questo PC."
+            Write-Info "Office non risulta installato su questo PC (ospp.vbs assente)."
+            Beep-Attesa; $insOff = Read-Host "Installare Office ora e poi inserire il product key? (S/N)"
+            if ($insOff -match "^[Ss]") {
+                if (Confirm-Winget) {
+                    Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
+                    $osppPath = Get-OsppPath
+                    if (-not $osppPath) { Write-Errore "Office installato ma ospp.vbs ancora assente: riavvia il PC e ripeti questo passo." }
+                } else {
+                    Write-Errore "Winget non disponibile: impossibile installare Office."
+                }
+            }
+        }
+        if (-not $osppPath) {
+            Write-Errore "Office non installato: attivazione del perpetuo impossibile."
             Add-Report "Attivazione Office perpetuo" "ERRORE"
         } else {
             Beep-Attesa; $chiaveLicenza = (Read-Host "Inserisci il product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)").Trim().ToUpper()
@@ -1255,8 +1280,8 @@ switch ($sceltaAtt) {
         }
     }
     default {
-        Write-Info "Attivazione Office saltata."
-        Add-Report "Attivazione Office" "SALTATO"
+        Write-Info "Installazione app Office saltata."
+        Add-Report "Installazione app Office" "SALTATO"
     }
 }
 
@@ -1547,7 +1572,7 @@ $bloatwareAppx = @(
 function Test-Indietro { param([string]$v) return ($v -match '^\s*[Bb]\s*$') }
 
 # Il wizard parte dal passo 3: il passo 1 "Nome" e la suite Office (ora nel menu
-# Attivazione Office) sono fuori dal wizard. Non rinumero i case: mostro
+# Installazione App Office) sono fuori dal wizard. Non rinumero i case: mostro
 # (passo-2) su 6 nella barra.
 $passo = 3
 :wizard while ($passo -ge 3 -and $passo -le 8) {
