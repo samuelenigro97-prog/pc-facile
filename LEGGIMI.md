@@ -129,7 +129,7 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 | 0  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
 | 1  | Nome completo del cliente (cambia il "Nome visualizzato" dell'account) |
 | 2  | **Installazione app Office** (Office 365, perpetuo, OpenOffice, LibreOffice via winget): la suite scelta si installa se manca |
-| 3  | **Attivazione**: Office 365 apre la pagina web per il **codice di licenza** (`setup.office.com`); perpetuo chiede il **product key** (`ospp.vbs`), proponendo l'installazione di Office se assente |
+| 3  | **Attivazione**: card con PIN da grattare → riscatto web (`microsoft365.com/setup` per M365, `office.com/setup` per il perpetuo) con l'account Microsoft del cliente; `ospp.vbs` resta come ripiego per i product key classici |
 | 4  | **Antivirus**: McAfee, Norton, o Salta |
 | 4c | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
 | 5  | Browser: Chrome / Firefox |

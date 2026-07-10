@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "6.0 (2026-07-10)"
+$SCRIPT_VERSION = "6.1 (2026-07-10)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -1192,8 +1192,8 @@ if ($vuoiMs -match "^[Ss]") { Pausa }
 Write-Titolo "Installazione App Office"
 
 Write-Host "Scegli la suite Office da installare (se manca) e attivare:" -ForegroundColor White
-Write-Host "  1) Office 365 / Microsoft 365 - installa, poi pagina web per il codice di licenza" -ForegroundColor White
-Write-Host "  2) Office perpetuo (2021/2024) - installa, poi inserisci il product key" -ForegroundColor White
+Write-Host "  1) Microsoft 365 (abbonamento, card PIN) - installa, poi riscatto su microsoft365.com/setup" -ForegroundColor White
+Write-Host "  2) Office perpetuo (Home 2024/2021, card PIN) - installa, poi riscatto su office.com/setup" -ForegroundColor White
 Write-Host "  3) OpenOffice (suite gratuita)" -ForegroundColor White
 Write-Host "  4) LibreOffice (suite gratuita)" -ForegroundColor White
 Write-Host "  5) Salta" -ForegroundColor White
@@ -1220,11 +1220,12 @@ switch ($sceltaAtt) {
         } else {
             Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
         }
-        # 2/2: ATTIVAZIONE - la schermata dopo: pagina web per il codice di licenza.
-        Start-Process "https://setup.office.com"
-        Write-OK "Browser aperto su setup.office.com"
-        Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice di licenza."
-        Add-Report "Office 365 (riscatto/attivazione)" "OK"
+        # 2/2: ATTIVAZIONE - la schermata dopo: pagina web per il codice di licenza
+        # (l'indirizzo stampato sulla card Microsoft 365 Personal).
+        Start-Process "https://microsoft365.com/setup"
+        Write-OK "Browser aperto su microsoft365.com/setup"
+        Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice grattato sulla card."
+        Add-Report "Microsoft 365 (riscatto card PIN)" "OK"
     }
     "3" {
         if (Confirm-Winget) { Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice" }
@@ -1235,24 +1236,30 @@ switch ($sceltaAtt) {
         else { Write-Errore "Winget non disponibile." ; Add-Report "LibreOffice (installazione)" "ERRORE" }
     }
     "2" {
-        $osppPath = Get-OsppPath
-        # Se Office manca NON ci si ferma con l'errore: si propone di installarlo
-        # al volo e poi si prosegue normalmente col product key.
-        if (-not $osppPath) {
-            Write-Info "Office non risulta installato su questo PC (ospp.vbs assente)."
-            Beep-Attesa; $insOff = Read-Host "Installare Office ora e poi inserire il product key? (S/N)"
-            if ($insOff -match "^[Ss]") {
-                if (Confirm-Winget) {
-                    Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
-                    $osppPath = Get-OsppPath
-                    if (-not $osppPath) { Write-Errore "Office installato ma ospp.vbs ancora assente: riavvia il PC e ripeti questo passo." }
-                } else {
-                    Write-Errore "Winget non disponibile: impossibile installare Office."
-                }
-            }
+        # 1/2: INSTALLAZIONE (se manca). La suite e' la stessa di Microsoft 365:
+        # cambia solo la licenza. Se e' gia' presente non si tocca nulla.
+        if (Get-OsppPath) {
+            Write-OK "Office gia' installato su questo PC."
+        } elseif (Confirm-Winget) {
+            Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
+        } else {
+            Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
         }
+        # 2/2: ATTIVAZIONE. Le card da negozio (PIN da grattare) vanno RISCATTATE
+        # sul web con l'account Microsoft del cliente: quel codice NON funziona
+        # in ospp.vbs (le chiavi retail moderne sono solo da riscatto). ospp.vbs
+        # resta come ripiego per le chiavi classiche 5x5 non da riscatto.
+        Beep-Attesa; $tipoChiave = Read-Host "Card con PIN da grattare? (S/N: S = riscatto web, il caso normale / N = product key classico)"
+        if ($tipoChiave -notmatch "^[Nn]") {
+            Start-Process "https://office.com/setup"
+            Write-OK "Browser aperto su office.com/setup (l'indirizzo stampato sulla card)."
+            Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice grattato sulla card."
+            Write-Info "Dopo il riscatto: apri Word e accedi con lo stesso account -> Office si attiva da solo."
+            Add-Report "Office perpetuo (riscatto card PIN)" "OK"
+        } else {
+        $osppPath = Get-OsppPath
         if (-not $osppPath) {
-            Write-Errore "Office non installato: attivazione del perpetuo impossibile."
+            Write-Errore "ospp.vbs non trovato: senza Office installato il product key classico non si puo' inserire."
             Add-Report "Attivazione Office perpetuo" "ERRORE"
         } else {
             Beep-Attesa; $chiaveLicenza = (Read-Host "Inserisci il product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)").Trim().ToUpper()
@@ -1277,6 +1284,7 @@ switch ($sceltaAtt) {
                     }
                 }
             }
+        }
         }
     }
     default {
