@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "6.1 (2026-07-10)"
+$SCRIPT_VERSION = "6.2 (2026-07-10)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -851,8 +851,8 @@ if ($Diagnostica) {
         "$env:ProgramFiles\Microsoft Office\Office16\ospp.vbs",
         "${env:ProgramFiles(x86)}\Microsoft Office\Office16\ospp.vbs"
     ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-    if ($ospp) { Write-OK "Office installato (ospp.vbs trovato): attivazione perpetuo possibile." }
-    else { Write-Info "Office non ancora installato (ospp.vbs assente): normale su PC nuovo." }
+    if ($ospp) { Write-OK "Office installato (ospp.vbs trovato)." }
+    else { Write-Info "Office non ancora installato (ospp.vbs assente): normale su PC nuovo, lo installa il passo Office." }
 
     Write-Host ""
     Write-Info "Diagnostica completata. Nessuna modifica effettuata al sistema."
@@ -1245,47 +1245,15 @@ switch ($sceltaAtt) {
         } else {
             Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
         }
-        # 2/2: ATTIVAZIONE. Le card da negozio (PIN da grattare) vanno RISCATTATE
-        # sul web con l'account Microsoft del cliente: quel codice NON funziona
-        # in ospp.vbs (le chiavi retail moderne sono solo da riscatto). ospp.vbs
-        # resta come ripiego per le chiavi classiche 5x5 non da riscatto.
-        Beep-Attesa; $tipoChiave = Read-Host "Card con PIN da grattare? (S/N: S = riscatto web, il caso normale / N = product key classico)"
-        if ($tipoChiave -notmatch "^[Nn]") {
-            Start-Process "https://office.com/setup"
-            Write-OK "Browser aperto su office.com/setup (l'indirizzo stampato sulla card)."
-            Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice grattato sulla card."
-            Write-Info "Dopo il riscatto: apri Word e accedi con lo stesso account -> Office si attiva da solo."
-            Add-Report "Office perpetuo (riscatto card PIN)" "OK"
-        } else {
-        $osppPath = Get-OsppPath
-        if (-not $osppPath) {
-            Write-Errore "ospp.vbs non trovato: senza Office installato il product key classico non si puo' inserire."
-            Add-Report "Attivazione Office perpetuo" "ERRORE"
-        } else {
-            Beep-Attesa; $chiaveLicenza = (Read-Host "Inserisci il product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)").Trim().ToUpper()
-            if ($chiaveLicenza -notmatch "^([A-Z0-9]{5}-){4}[A-Z0-9]{5}$") {
-                Write-Errore "Formato non valido: 5 gruppi da 5 caratteri separati da trattino."
-                Add-Report "Attivazione Office perpetuo" "ERRORE"
-            } else {
-                Write-Info "Inserimento product key..."
-                cscript //nologo $osppPath /inpkey:$chiaveLicenza
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Errore "Inserimento chiave fallito (codice $LASTEXITCODE)."
-                    Add-Report "Attivazione Office perpetuo" "ERRORE"
-                } else {
-                    Write-Info "Attivazione in corso..."
-                    cscript //nologo $osppPath /act
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-OK "Office attivato con successo."
-                        Add-Report "Attivazione Office perpetuo" "OK"
-                    } else {
-                        Write-Errore "Attivazione fallita (codice $LASTEXITCODE). Verifica chiave e connessione."
-                        Add-Report "Attivazione Office perpetuo" "ERRORE"
-                    }
-                }
-            }
-        }
-        }
+        # 2/2: ATTIVAZIONE. Le card vendute in negozio hanno SEMPRE il PIN da
+        # grattare: si riscatta sul web con l'account Microsoft del cliente.
+        # Quel codice NON va inserito in ospp.vbs (le chiavi retail moderne
+        # sono solo da riscatto), quindi niente domande: si apre la pagina.
+        Start-Process "https://office.com/setup"
+        Write-OK "Browser aperto su office.com/setup (l'indirizzo stampato sulla card)."
+        Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice grattato sulla card."
+        Write-Info "Dopo il riscatto: apri Word e accedi con lo stesso account -> Office si attiva da solo."
+        Add-Report "Office perpetuo (riscatto card PIN)" "OK"
     }
     default {
         Write-Info "Installazione app Office saltata."
