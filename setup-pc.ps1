@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "6.6 (2026-07-11)"
+$SCRIPT_VERSION = "6.7 (2026-07-11)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -845,6 +845,80 @@ function Invoke-WingetConBarra {
     return $code
 }
 
+# --- ICONA SUL DESKTOP per ogni app installata (cosi' il cliente vede cosa e'
+#     stato messo). Due nomi "somigliano" se, tolti spazi/punteggiatura, uno
+#     contiene l'altro (es. "Adobe Acrobat Reader" ~ "Adobe Acrobat"). ---
+function Test-NomeSimile {
+    param([string]$A, [string]$B)
+    $na = ($A -replace '[^A-Za-z0-9]', '').ToLower()
+    $nb = ($B -replace '[^A-Za-z0-9]', '').ToLower()
+    if (-not $na -or -not $nb) { return $false }
+    return ($na.Contains($nb) -or $nb.Contains($na))
+}
+
+# Collegamenti "spazzatura" da NON copiare sul Desktop (disinstalla, guida...).
+function Test-LnkJunk {
+    param([string]$Base)
+    $junk = @('*uninstall*', '*disinstall*', '*guida*', '*help*', '*read*me*', '*leggimi*',
+              '*documentation*', '*website*', '*sito*', '*modify*', '*repair*', '*support*',
+              '*aggiorna*', '*update*')
+    foreach ($p in $junk) { if ($Base -like $p) { return $true } }
+    return $false
+}
+
+# Tutti i collegamenti del menu Start (utente + tutti gli utenti, ricorsivo).
+function Get-StartMenuLnks {
+    $roots = @(
+        (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'),
+        (Join-Path $env:APPDATA     'Microsoft\Windows\Start Menu\Programs')
+    )
+    $res = @()
+    foreach ($r in $roots) {
+        if (Test-Path $r) { $res += Get-ChildItem -Path $r -Filter *.lnk -Recurse -ErrorAction SilentlyContinue }
+    }
+    return $res
+}
+
+# Crea sul Desktop l'icona dell'app appena installata. 1) prova a copiare il
+# collegamento vero dal menu Start (icona corretta); 2) se e' un'app dello Store
+# (MSIX, niente .lnk) ripiega su Get-StartApps + shell:AppsFolder. Salta se
+# un'icona simile e' gia' sul Desktop (niente doppioni).
+function Add-IconaDesktop {
+    param([string]$Nome)
+    if (-not $RunReale) { return }
+    try {
+        $desktop = Get-DesktopDir
+        $gia = Get-ChildItem -Path $desktop -Filter *.lnk -ErrorAction SilentlyContinue |
+            Where-Object { Test-NomeSimile $_.BaseName $Nome } | Select-Object -First 1
+        if ($gia) { return }
+
+        # 1) Menu Start: collegamento Win32 con l'icona vera dell'app.
+        $cand = Get-StartMenuLnks |
+            Where-Object { -not (Test-LnkJunk $_.BaseName) -and (Test-NomeSimile $_.BaseName $Nome) } |
+            Sort-Object { $_.BaseName.Length } | Select-Object -First 1
+        if ($cand) {
+            Copy-Item -Path $cand.FullName -Destination (Join-Path $desktop $cand.Name) -Force -ErrorAction SilentlyContinue
+            return
+        }
+
+        # 2) App dello Store (WhatsApp, Spotify...): AppUserModelID via Get-StartApps.
+        $app = Get-StartApps -ErrorAction SilentlyContinue |
+            Where-Object { Test-NomeSimile $_.Name $Nome } | Sort-Object { $_.Name.Length } | Select-Object -First 1
+        if ($app) {
+            $wsh = New-Object -ComObject WScript.Shell
+            $file = ("$($app.Name).lnk" -replace '[\\/:*?"<>|]', '')
+            $sc = $wsh.CreateShortcut((Join-Path $desktop $file))
+            if ($app.AppID -match '\.exe$' -and (Test-Path $app.AppID)) {
+                $sc.TargetPath = $app.AppID
+            } else {
+                $sc.TargetPath = "$env:WINDIR\explorer.exe"
+                $sc.Arguments  = "shell:AppsFolder\$($app.AppID)"
+            }
+            $sc.Save()
+        }
+    } catch {}
+}
+
 function Installa-Pacchetto {
     param(
         [string]$Nome,
@@ -864,6 +938,7 @@ function Installa-Pacchetto {
     if ($LASTEXITCODE -eq 0) {
         Write-OK "$Nome gia' installato. Salto."
         Add-Report "$Nome (installazione)" "OK"
+        Add-IconaDesktop -Nome $Nome
         return
     }
 
@@ -888,6 +963,7 @@ function Installa-Pacchetto {
                 Write-OK "$Nome installato (richiede riavvio)."
             }
             Add-Report "$Nome (installazione)" "OK"
+            Add-IconaDesktop -Nome $Nome
             return
         }
 

@@ -28,6 +28,7 @@ allineati come flusso e funzioni.
 | Pulizia finale (auto-elimina)| rimuove `%TEMP%\setup-pc.ps1` + reg colori + checkpoint | `rm` dello script scaricato in `/tmp` | pari |
 | Ripresa sessione interrotta | checkpoint JSON in `ProgramData\PCFacile` | —                                             | solo Win |
 | Collegamenti Office Desktop | WScript.Shell dopo installazione Office   | —                                             | solo Win |
+| Icona Desktop per ogni app  | copia lnk da Start / shell:AppsFolder     | —                                             | solo Win |
 
 ## Solo Windows (non esiste su Mac)
 - **Debloat OEM**: macOS non ha crapware del produttore.

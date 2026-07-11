@@ -154,7 +154,10 @@ i passi già completati vengono saltati. Il checkpoint si cancella da solo a
 lavoro finito.
 
 **Collegamenti sul Desktop**: dopo l'installazione di Office lo script crea i
-collegamenti a **Word, Excel, PowerPoint, Outlook e OneNote** sul Desktop.
+collegamenti a **Word, Excel, PowerPoint, Outlook e OneNote**; inoltre mette sul
+Desktop l'icona di **ogni app installata** (browser e app dei profili: VLC,
+7-Zip, WhatsApp, TeamViewer, ecc.), così il cliente vede a colpo d'occhio cosa è
+stato installato.
 
 La pulizia toglie anche i **collegamenti promo dal menu Start** (Booking.com,
 "Offerte Adobe", HP Documentation).
