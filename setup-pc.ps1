@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "6.4 (2026-07-11)"
+$SCRIPT_VERSION = "6.5 (2026-07-11)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -128,10 +128,51 @@ function Beep-Completato {
     if ($RunReale) { try { [console]::Beep(784, 160); [console]::Beep(1047, 260) } catch {} }
 }
 
+# BIP RIPETUTO: se ti allontani e non rispondi, un solo bip si perde. Mentre lo
+# script aspetta una risposta faccio ribipare ogni 2 minuti finche' non digiti.
+# Read-Host blocca il thread principale, quindi il bip periodico gira in un
+# RUNSPACE separato (.NET gestito, niente P/Invoke: l'antivirus non lo segnala),
+# che lavora in parallelo mentre il thread principale e' fermo su Read-Host.
+$Global:BipPS = $null
+function Start-BipRipetuto {
+    param([int]$Intervallo = 120)   # secondi tra un bip e l'altro
+    if (-not $RunReale) { return }
+    Stop-BipRipetuto
+    try {
+        $ps = [PowerShell]::Create()
+        [void]$ps.AddScript({
+            param($sec)
+            while ($true) {
+                Start-Sleep -Seconds $sec
+                try { [console]::Beep(1000, 150) } catch {}
+            }
+        }).AddArgument($Intervallo)
+        [void]$ps.BeginInvoke()
+        $Global:BipPS = $ps
+    } catch { $Global:BipPS = $null }
+}
+function Stop-BipRipetuto {
+    if ($Global:BipPS) {
+        try { $Global:BipPS.Stop(); $Global:BipPS.Dispose() } catch {}
+        $Global:BipPS = $null
+    }
+}
+
+# Attesa di una risposta CON bip iniziale + bip ripetuto ogni 2 min se non
+# rispondi. Sostituisce il vecchio schema "Beep-Attesa; Read-Host". Il beeper
+# si ferma SEMPRE appena Read-Host ritorna (anche con Ctrl+C), grazie a finally.
+function Attendi-Risposta {
+    param([string]$Prompt)
+    Beep-Attesa            # primo bip subito
+    Start-BipRipetuto      # poi ogni 2 min finche' non rispondi
+    try { $r = Read-Host $Prompt }
+    finally { Stop-BipRipetuto }
+    return $r
+}
+
 function Pausa {
     Write-Host ""
-    Beep-Attesa
-    Read-Host "Premi INVIO per continuare"
+    [void](Attendi-Risposta "Premi INVIO per continuare")
 }
 
 # Password = nome cliente + "123!" (sempre, cosi' e' prevedibile e facile da
@@ -203,8 +244,7 @@ function Chiedi {
         Write-Host "  $Prompt  [Veloce => '$Auto']" -ForegroundColor Gray
         return $Auto
     }
-    Beep-Attesa   # bip: sto per fermarmi e aspettare la tua risposta
-    return Read-Host $Prompt
+    return Attendi-Risposta $Prompt   # bip subito + ribip ogni 2 min se non rispondi
 }
 
 # Recupera la chiave di ripristino BitLocker del volume di sistema.
@@ -962,7 +1002,7 @@ if ($RunReale) {
             Write-Host "  Ultimo passo completato : $($st.FaseNome)" -ForegroundColor White
             if ($st.NomeCliente) { Write-Host "  Cliente                 : $($st.NomeCliente)" -ForegroundColor White }
             Write-Host ""
-            Beep-Attesa; $rRip = Read-Host "Riprendere da dove eri arrivato? (S = riprendi / N = ricomincia da capo)"
+            $rRip = Attendi-Risposta "Riprendere da dove eri arrivato? (S = riprendi / N = ricomincia da capo)"
             if ($rRip -match '^[Ss]') {
                 $Global:FaseRipresa = [int]$st.Fase
                 if ($st.NomeCliente)  { $nomeCliente    = [string]$st.NomeCliente }
@@ -989,7 +1029,7 @@ if ($RunReale) {
         Write-Host "aggiornamenti e driver. Collega il WiFi o il cavo di rete PRIMA di continuare." -ForegroundColor White
         Write-Host ""
         do {
-            Beep-Attesa; $rNet = Read-Host "Collega Internet e premi INVIO per riprovare  (oppure S = prosegui senza)"
+            $rNet = Attendi-Risposta "Collega Internet e premi INVIO per riprovare  (oppure S = prosegui senza)"
             if ($rNet -match '^[Ss]') { break }
         } while (-not (Test-Rete))
         if (Test-Rete) { Write-OK "Connessione a Internet OK." }
@@ -1016,7 +1056,7 @@ if ($RunReale) {
         Write-Host "  - aggiungi la chiavetta/cartella alle ESCLUSIONI dell'antivirus, oppure" -ForegroundColor White
         Write-Host "  - tieni pronto a dare ALLOW/CONSENTI se compare 'Threat blocked'." -ForegroundColor White
         Write-Host ""
-        Beep-Attesa; Read-Host "Quando sei pronto premi INVIO per continuare"
+        [void](Attendi-Risposta "Quando sei pronto premi INVIO per continuare")
     }
 }
 
@@ -1180,7 +1220,7 @@ Write-Info "Nome visualizzato attuale: $(if ($nomeAttuale) { $nomeAttuale } else
 Write-Host ""
 Write-Info "Nome PC attuale: $env:COMPUTERNAME"
 Write-Host ""
-Beep-Attesa; $nomeCliente = (Read-Host "Nome del cliente (account E nome PC) - INVIO per saltare").Trim()
+$nomeCliente = (Attendi-Risposta "Nome del cliente (account E nome PC) - INVIO per saltare").Trim()
 
 if ($nomeCliente -ne "") {
     $nomeOk = $false
@@ -1290,10 +1330,10 @@ if ($vuoiMs -match "^[Ss]") {
     # In entrambi i casi niente lette dal browser. Questa domanda resta anche in
     # Veloce perche' cambia da cliente a cliente.
     if ($RunReale) {
-        Beep-Attesa; $haAccount = Read-Host "Il cliente ha GIA' una sua email/password che usa? (S = le inserisco io / N = ne genero una nuova)"
+        $haAccount = Attendi-Risposta "Il cliente ha GIA' una sua email/password che usa? (S = le inserisco io / N = ne genero una nuova)"
         if ($haAccount -match "^[Ss]") {
-            $credMsAccount  = (Read-Host "  Email del cliente").Trim()
-            $credMsPassword = (Read-Host "  Password del cliente").Trim()
+            $credMsAccount  = (Attendi-Risposta "  Email del cliente").Trim()
+            $credMsPassword = (Attendi-Risposta "  Password del cliente").Trim()
             Write-OK "Uso le credenziali del cliente (finiscono nel riepilogo)."
         } else {
             $credMsAccount  = New-EmailCliente -Base $nomeCliente
@@ -1798,7 +1838,7 @@ Write-Host "  2) Norton"
 Write-Host "  3) Salta"
 Write-Host ""
 
-Beep-Attesa; $sceltaAV = Read-Host "Scelta (1-3, B=indietro)"
+$sceltaAV = Attendi-Risposta "Scelta (1-3, B=indietro)"
 if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 
 function Installa-Antivirus {
@@ -1860,7 +1900,7 @@ function Attiva-ServizioWeb {
     Write-Host ""
     Write-Host "Sul sito: inserisci il codice/PIN e completa i dati richiesti." -ForegroundColor White
     Write-Host "IMPORTANTE: annota le credenziali per l'app mobile e consegnale al cliente." -ForegroundColor Yellow
-    Beep-Attesa; $fatto = Read-Host "Attivazione completata e credenziali annotate? (S/N)"
+    $fatto = Attendi-Risposta "Attivazione completata e credenziali annotate? (S/N)"
     if ($fatto -match "^[Ss]") {
         Write-OK "$Nome attivato."
         Add-Report "$Nome (protezione)" "OK"
@@ -1990,7 +2030,7 @@ Write-Host "  5) MANUALE          (scelgo io i singoli numeri)"
 Write-Host "  S) Salta"
 Write-Host ""
 
-Beep-Attesa; $sceltaApps = Read-Host "Scelta (1-5 - S salta - B indietro)"
+$sceltaApps = Attendi-Risposta "Scelta (1-5 - S salta - B indietro)"
 if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 
 switch ($sceltaApps) {
@@ -2010,7 +2050,7 @@ switch ($sceltaApps) {
         for ($i = 0; $i -lt $appsDisponibili.Count; $i++) {
             Write-Host "  $($i + 1)) $($appsDisponibili[$i].Nome)"
         }
-        Beep-Attesa; $sceltaManuale = Read-Host "Numeri separati da virgola (es: 1,3,5)"
+        $sceltaManuale = Attendi-Risposta "Numeri separati da virgola (es: 1,3,5)"
         $indici = $sceltaManuale -split "," | ForEach-Object { $_.Trim() }
         if (Confirm-Winget) {
             foreach ($indice in $indici) {
