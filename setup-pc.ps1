@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "6.2 (2026-07-10)"
+$SCRIPT_VERSION = "6.3 (2026-07-11)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -342,6 +342,36 @@ $RunReale = (-not $Test -and -not $Diagnostica)
 # Microsoft e scritte nel riepilogo. Init qui cosi' esistono anche se quel
 # passo viene saltato (restano vuote nel file).
 $credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
+
+# =============================================================================
+# RIPRESA SESSIONE: se lo script viene chiuso a meta' (crash, riavvio, blocco
+# antivirus), al lancio successivo riparte da dove era arrivato. Dopo ogni
+# passo completato lo stato (numero passo + nome cliente + credenziali
+# generate) finisce in un file JSON in ProgramData, ELIMINATO a fine lavoro.
+# Fasi: 1=Lingua 2=Nome 3=Ripristino 4=Account 5=Office 6=Pulizia,
+# 7..12 = passi wizard 3..8 (Antivirus..Driver). Solo nel run reale.
+# =============================================================================
+$Global:StatoFile   = Join-Path $env:ProgramData "PCFacile\stato.json"
+$Global:FaseRipresa = 0
+
+# Segna un passo come completato (sovrascrive il checkpoint precedente).
+function Save-Fase {
+    param([int]$Fase, [string]$Nome)
+    if (-not $RunReale) { return }
+    try {
+        $dir = Split-Path $Global:StatoFile
+        if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
+        [pscustomobject]@{
+            Fase = $Fase; FaseNome = $Nome
+            Data = (Get-Date -Format 'dd/MM/yyyy HH:mm')
+            NomeCliente = $nomeCliente
+            CredAccount = $credMsAccount; CredPassword = $credMsPassword
+        } | ConvertTo-Json | Set-Content -Path $Global:StatoFile -Encoding UTF8
+    } catch {}
+}
+
+# Vero se il passo era gia' stato completato nella sessione ripresa.
+function Test-FaseFatta { param([int]$Fase) return ($Global:FaseRipresa -ge $Fase) }
 
 # =============================================================================
 # CATALOGO PACCHETTI - UNICA FONTE (usato da STEP 3/5/6 e dalla Diagnostica)
@@ -870,6 +900,34 @@ try { Clear-Host } catch {}
 # diretti. Ogni singolo passo chiede comunque S/N, niente modifiche a sorpresa.
 
 # =============================================================================
+# SESSIONE PRECEDENTE INTERROTTA? Se c'e' un checkpoint, proponi di riprendere
+# da dove si era arrivati (i passi gia' completati vengono saltati).
+# =============================================================================
+if ($RunReale) {
+    try {
+        if (Test-Path $Global:StatoFile) {
+            $st = Get-Content $Global:StatoFile -Raw -ErrorAction Stop | ConvertFrom-Json
+            Write-Titolo "Sessione precedente trovata"
+            Write-Host "  Interrotta il           : $($st.Data)" -ForegroundColor White
+            Write-Host "  Ultimo passo completato : $($st.FaseNome)" -ForegroundColor White
+            if ($st.NomeCliente) { Write-Host "  Cliente                 : $($st.NomeCliente)" -ForegroundColor White }
+            Write-Host ""
+            Beep-Attesa; $rRip = Read-Host "Riprendere da dove eri arrivato? (S = riprendi / N = ricomincia da capo)"
+            if ($rRip -match '^[Ss]') {
+                $Global:FaseRipresa = [int]$st.Fase
+                if ($st.NomeCliente)  { $nomeCliente    = [string]$st.NomeCliente }
+                if ($st.CredAccount)  { $credMsAccount  = [string]$st.CredAccount }
+                if ($st.CredPassword) { $credMsPassword = [string]$st.CredPassword }
+                Write-OK "Riprendo: i passi gia' completati verranno saltati."
+            } else {
+                Remove-Item $Global:StatoFile -Force -ErrorAction SilentlyContinue
+                Write-Info "Si ricomincia da capo."
+            }
+        }
+    } catch {}
+}
+
+# =============================================================================
 # CONTROLLO CONNESSIONE - prima di tutto: senza Internet la lingua (pacchetto),
 # le app e gli aggiornamenti NON funzionano. Avviso e do modo di collegarla.
 # =============================================================================
@@ -928,6 +986,11 @@ if ($RunReale) {
         Set-ItemProperty -Path $edgePol -Name 'ImportOnEachLaunch'            -Value 0 -Type DWord -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $edgePol -Name 'AutoImportAtFirstRun'          -Value 4 -Type DWord -ErrorAction SilentlyContinue  # 4 = non importare
         Set-ItemProperty -Path $edgePol -Name 'DefaultBrowserSettingEnabled'  -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        # Meno distrazioni anche DOPO la prima apertura: niente barra laterale/
+        # Copilot, niente Microsoft Rewards, niente assistente acquisti.
+        Set-ItemProperty -Path $edgePol -Name 'HubsSidebarEnabled'            -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'ShowMicrosoftRewards'          -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'EdgeShoppingAssistantEnabled'  -Value 0 -Type DWord -ErrorAction SilentlyContinue
         Write-OK "Schermate iniziali di Edge disattivate."
     } catch {}
 }
@@ -935,6 +998,9 @@ if ($RunReale) {
 # =============================================================================
 # LINGUA E REGIONE (ITALIANO) - primo passo
 # =============================================================================
+
+if (Test-FaseFatta 1) { Write-Info "Lingua e regione: gia' fatto nella sessione precedente, salto." }
+else {
 
 Write-Titolo "Lingua e Regione (Italiano)"
 
@@ -1035,12 +1101,18 @@ if ($impostaLingua -match "^[Ss]") {
     Add-Report "Lingua italiana (it-IT)" "SALTATO"
 }
 
+Save-Fase 1 "Lingua e regione"
+}
+
 # (nessuna pausa: si avanza da solo, come nel wizard)
 
 # =============================================================================
 # NOME CLIENTE E PC (prima voce dopo la lingua: la prima cosa da impostare)
 # Un solo nome: vale sia per l'account Windows sia per il nome del PC.
 # =============================================================================
+
+if (Test-FaseFatta 2) { Write-Info "Nome cliente e PC: gia' fatto nella sessione precedente, salto." }
+else {
 
 Write-Titolo "Nome Cliente e PC"
 
@@ -1101,11 +1173,17 @@ if ($nomeCliente -ne "") {
     Add-Report "Nome cliente" "SALTATO"
 }
 
+Save-Fase 2 "Nome cliente e PC"
+}
+
 # (nessuna pausa: si avanza da solo)
 
 # =============================================================================
 # PUNTO DI RIPRISTINO (rete di sicurezza prima delle modifiche)
 # =============================================================================
+
+if (Test-FaseFatta 3) { Write-Info "Punto di ripristino: gia' fatto nella sessione precedente, salto." }
+else {
 
 Write-Titolo "Punto di Ripristino"
 
@@ -1132,11 +1210,17 @@ if ($vuoiRestore -match "^[Ss]") {
     Add-Report "Punto di ripristino" "SALTATO"
 }
 
+Save-Fase 3 "Punto di ripristino"
+}
+
 # (nessuna pausa: si avanza da solo)
 
 # =============================================================================
 # ACCOUNT MICROSOFT (accedi/crea presto: velocizza Office e antivirus dopo)
 # =============================================================================
+
+if (Test-FaseFatta 4) { Write-Info "Account Microsoft: gia' fatto nella sessione precedente, salto." }
+else {
 
 Write-Titolo "Account Microsoft"
 
@@ -1184,10 +1268,16 @@ if ($vuoiMs -match "^[Ss]") {
 
 if ($vuoiMs -match "^[Ss]") { Pausa }
 
+Save-Fase 4 "Account Microsoft"
+}
+
 # =============================================================================
 # INSTALLAZIONE APP OFFICE (subito dopo l'account Microsoft): prima si INSTALLA
 # la suite scelta (se manca), poi la schermata dopo la attiva (codice/key).
 # =============================================================================
+
+if (Test-FaseFatta 5) { Write-Info "App Office: gia' fatto nella sessione precedente, salto." }
+else {
 
 Write-Titolo "Installazione App Office"
 
@@ -1208,6 +1298,48 @@ function Get-OsppPath {
     return $null
 }
 
+# Collegamenti alle app Office sul Desktop: i clienti le cercano li'. Usa
+# WScript.Shell (COM standard, niente P/Invoke: l'antivirus non lo segnala).
+# Crea solo i collegamenti delle app davvero presenti e non gia' esistenti.
+function Add-CollegamentiOffice {
+    $officeDir = @(
+        "$env:ProgramFiles\Microsoft Office\root\Office16",
+        "${env:ProgramFiles(x86)}\Microsoft Office\root\Office16",
+        "$env:ProgramFiles\Microsoft Office\Office16",
+        "${env:ProgramFiles(x86)}\Microsoft Office\Office16"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $officeDir) { Write-Info "Cartella Office non trovata: nessun collegamento sul Desktop."; return }
+    $appOffice = @(
+        @{ Nome = "Word";       Exe = "WINWORD.EXE"  },
+        @{ Nome = "Excel";      Exe = "EXCEL.EXE"    },
+        @{ Nome = "PowerPoint"; Exe = "POWERPNT.EXE" },
+        @{ Nome = "Outlook";    Exe = "OUTLOOK.EXE"  },
+        @{ Nome = "OneNote";    Exe = "ONENOTE.EXE"  }
+    )
+    $desktop = Get-DesktopDir
+    $creati = 0
+    try {
+        $wsh = New-Object -ComObject WScript.Shell
+        foreach ($a in $appOffice) {
+            $exe = Join-Path $officeDir $a.Exe
+            if (-not (Test-Path $exe)) { continue }
+            $lnk = Join-Path $desktop "$($a.Nome).lnk"
+            if (Test-Path $lnk) { continue }
+            $sc = $wsh.CreateShortcut($lnk)
+            $sc.TargetPath = $exe
+            $sc.WorkingDirectory = $officeDir
+            $sc.Save()
+            $creati++
+        }
+    } catch { Write-Info "Collegamenti Office non creati: $_" }
+    if ($creati -gt 0) {
+        Write-OK "Collegamenti sul Desktop: $creati app Office (Word, Excel, ...)."
+        Add-Report "Collegamenti Office sul Desktop ($creati)" "OK"
+    } else {
+        Write-Info "Collegamenti Office: gia' presenti sul Desktop o nessuna app trovata."
+    }
+}
+
 $sceltaAtt = Chiedi "Scelta (1-5)" "1"
 switch ($sceltaAtt) {
     "1" {
@@ -1220,6 +1352,7 @@ switch ($sceltaAtt) {
         } else {
             Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
         }
+        Add-CollegamentiOffice
         # 2/2: ATTIVAZIONE - la schermata dopo: pagina web per il codice di licenza
         # (l'indirizzo stampato sulla card Microsoft 365 Personal).
         Start-Process "https://microsoft365.com/setup"
@@ -1245,6 +1378,7 @@ switch ($sceltaAtt) {
         } else {
             Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
         }
+        Add-CollegamentiOffice
         # 2/2: ATTIVAZIONE. Le card vendute in negozio hanno SEMPRE il PIN da
         # grattare: si riscatta sul web con l'account Microsoft del cliente.
         # Quel codice NON va inserito in ospp.vbs (le chiavi retail moderne
@@ -1263,12 +1397,18 @@ switch ($sceltaAtt) {
 
 if ($sceltaAtt -match "^[12]$") { Pausa }
 
+Save-Fase 5 "App Office"
+}
+
 # =============================================================================
 # PULIZIA E OTTIMIZZAZIONE INIZIALE - un solo passaggio, una sola domanda:
 #   1/3 rimuove gli antivirus di PROVA (evita conflitti e blocchi)
 #   2/3 rimuove il bloatware + pulisce l'avvio automatico (boot piu' veloce)
 #   3/3 comodita' Windows (estensioni, Questo PC) + disinstalla OneDrive
 # =============================================================================
+
+if (Test-FaseFatta 6) { Write-Info "Pulizia e ottimizzazione: gia' fatto nella sessione precedente, salto." }
+else {
 
 Write-Titolo "Pulizia e Ottimizzazione Iniziale"
 
@@ -1415,6 +1555,29 @@ $bloatwareAppx = @(
         }
     }
 
+    # --- Collegamenti SPAZZATURA nel menu Start (Booking.com, "Offerte Adobe",
+    # HP Documentation...): sono solo link pubblicitari/promo, via. NON tocca
+    # le app vere (Word, Excel, Edge, l'antivirus). ---
+    $menuJunk = @('*Booking*', 'Offerte Adobe*', 'Adobe offers*', 'HP Documentation*', 'ExpressVPN*', 'WildTangent*', 'Amazon.it*')
+    $menuDirs = @(
+        (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'),
+        (Join-Path $env:APPDATA     'Microsoft\Windows\Start Menu\Programs')
+    )
+    foreach ($dir in $menuDirs) {
+        if (-not (Test-Path $dir)) { continue }
+        Get-ChildItem -Path $dir -Filter *.lnk -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            $nomeLnk = $_.BaseName
+            foreach ($pat in $menuJunk) {
+                if ($nomeLnk -like $pat) {
+                    Write-Info "Tolgo dal menu Start: $nomeLnk"
+                    Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+                    $rimosse++
+                    break
+                }
+            }
+        }
+    }
+
     # --- Pulizia AVVIO AUTOMATICO: updater/helper NOTI (produttore, promo). NON
     # tocca driver, OneDrive, gli updater dei browser, ne' le app del setup. ---
     $avvioJunk = @(
@@ -1538,6 +1701,9 @@ $bloatwareAppx = @(
     Add-Report "Configurazione Windows base" "SALTATO"
 }
 
+Save-Fase 6 "Pulizia e ottimizzazione"
+}
+
 # =============================================================================
 # PASSI DI CONFIGURAZIONE (dopo ogni scelta si avanza; B al prompt = indietro)
 # =============================================================================
@@ -1551,6 +1717,14 @@ function Test-Indietro { param([string]$v) return ($v -match '^\s*[Bb]\s*$') }
 # Installazione App Office) sono fuori dal wizard. Non rinumero i case: mostro
 # (passo-2) su 6 nella barra.
 $passo = 3
+# Nomi leggibili dei passi wizard per il checkpoint di ripresa sessione.
+$wizNomi = @{ 3 = "Antivirus"; 4 = "Unieuro Cyber Protection"; 5 = "Browser"; 6 = "Applicazioni base"; 7 = "Aggiornamento app"; 8 = "Driver" }
+# Ripresa sessione: fase 7..12 = passo wizard 3..8 completato -> si riparte
+# dal successivo (fase 12 = tutto il wizard fatto, si salta al report).
+if ($Global:FaseRipresa -ge 7) {
+    $passo = $Global:FaseRipresa - 3
+    if ($passo -le 8) { Write-Info "Riprendo il wizard dal passo $($passo - 2) di 6." }
+}
 :wizard while ($passo -ge 3 -and $passo -le 8) {
 Write-Host ""
 $barLen = 20
@@ -1925,6 +2099,9 @@ if ($vuoiDriver -match "^[Ss]") {
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 }
+# Checkpoint di ripresa: $passo e' gia' stato incrementato, il passo appena
+# completato e' ($passo - 1); la sua fase e' ($passo - 1) + 4.
+Save-Fase ($passo + 3) $wizNomi[($passo - 1)]
 if ($passo -lt 3) { $passo = 3 }
 }
 
@@ -2189,6 +2366,12 @@ if ($RunReale) {
     try {
         Remove-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -ErrorAction SilentlyContinue
         Remove-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction SilentlyContinue
+    } catch {}
+    # Lavoro COMPLETATO: via il checkpoint di ripresa sessione (contiene anche
+    # le credenziali generate: non deve restare sul PC del cliente).
+    try {
+        Remove-Item $Global:StatoFile -Force -ErrorAction SilentlyContinue
+        Remove-Item (Split-Path $Global:StatoFile) -Force -ErrorAction SilentlyContinue
     } catch {}
     $ioStesso = $MyInvocation.MyCommand.Path
     if ($ioStesso -and $ioStesso -like "$env:TEMP\*") {

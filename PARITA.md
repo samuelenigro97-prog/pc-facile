@@ -23,7 +23,9 @@ allineati come flusso e funzioni.
 | Avviso sonoro fine passo    | `[console]::Beep`                         | `printf '\a'`                                 | pari |
 | Credenziali (esist./gen.)   | `Nome123!` + `Set-Clipboard`              | `Nome123!` + `pbcopy`                         | pari |
 | Report finale .txt          | Desktop `Riepilogo-PC_*.txt`              | Desktop `Riepilogo-Mac_*.txt`                 | pari |
-| Pulizia finale (auto-elimina)| rimuove `%TEMP%\setup-pc.ps1` + reg colori| `rm` dello script scaricato in `/tmp`         | pari |
+| Pulizia finale (auto-elimina)| rimuove `%TEMP%\setup-pc.ps1` + reg colori + checkpoint | `rm` dello script scaricato in `/tmp` | pari |
+| Ripresa sessione interrotta | checkpoint JSON in `ProgramData\PCFacile` | —                                             | solo Win |
+| Collegamenti Office Desktop | WScript.Shell dopo installazione Office   | —                                             | solo Win |
 
 ## Solo Windows (non esiste su Mac)
 - **Debloat OEM**: macOS non ha crapware del produttore.

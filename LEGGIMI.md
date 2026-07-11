@@ -148,6 +148,17 @@ Desktop** e lo avvia.
 **Unieuro Cyber Protection**: solo apertura sito + promemoria di annotare le
 credenziali per l'app mobile del cliente (nessun installer PC).
 
+**Ripresa sessione**: se lo script si chiude a metà (crash, riavvio, blocco
+antivirus), al lancio successivo propone di **riprendere da dove eri arrivato**:
+i passi già completati vengono saltati. Il checkpoint si cancella da solo a
+lavoro finito.
+
+**Collegamenti sul Desktop**: dopo l'installazione di Office lo script crea i
+collegamenti a **Word, Excel, PowerPoint, Outlook e OneNote** sul Desktop.
+
+La pulizia toglie anche i **collegamenti promo dal menu Start** (Booking.com,
+"Offerte Adobe", HP Documentation).
+
 Alla fine, se hai cambiato la lingua, lo script **propone il riavvio** (serve per
 applicare display language e schermata di login).
 
