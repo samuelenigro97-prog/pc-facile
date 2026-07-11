@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "6.3 (2026-07-11)"
+$SCRIPT_VERSION = "6.4 (2026-07-11)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -750,6 +750,56 @@ function Confirm-Winget {
     }
 }
 
+# Barra di attesa ANIMATA mentre un processo lavora (download/installazione).
+# winget con l'output nascosto non da' progressi: mostro una barra "a spola"
+# (un blocco che scorre avanti e indietro) col tempo trascorso, cosi' si vede
+# che sta lavorando e non e' bloccato. Non e' una percentuale reale (winget
+# silenzioso non la espone), ma un indicatore di ATTIVITA'. Si ridisegna sulla
+# stessa riga con \r. Il processo va passato gia' avviato (-PassThru).
+function Show-BarraAttesa {
+    param([string]$Testo, [System.Diagnostics.Process]$Processo)
+    $larg = 22; $span = 4
+    $period = ($larg - $span) * 2
+    $inizio = Get-Date
+    $i = 0
+    while (-not $Processo.HasExited) {
+        $phase = $i % $period
+        $pos = if ($phase -le ($larg - $span)) { $phase } else { $period - $phase }
+        $barra = (([string]$BOX_EMPTY) * $pos) + (([string]$BOX_FULL) * $span) + (([string]$BOX_EMPTY) * ($larg - $span - $pos))
+        $sec = [int]((Get-Date) - $inizio).TotalSeconds
+        $riga = "   $Testo  [$barra]  ${sec}s"
+        if ($AON) { Write-Host ("`r$AON$riga$AOFF") -NoNewline }
+        else { Write-Host ("`r$riga") -NoNewline -ForegroundColor $THEME_COL }
+        Start-Sleep -Milliseconds 120
+        $i++
+    }
+    # Cancella la riga della barra (spazi + ritorno a inizio riga).
+    Write-Host ("`r" + (" " * ($Testo.Length + $larg + 24)) + "`r") -NoNewline
+}
+
+# Lancia winget con l'output nascosto (rediretto su file temporanei) MA con la
+# barra animata a schermo. Ritorna il codice di uscita di winget. Se per qualche
+# motivo non riesce ad avviare il processo, ripiega sulla chiamata classica.
+function Invoke-WingetConBarra {
+    param([string]$Nome, [string[]]$WingetArgs)
+    $wg = (Get-Command winget -ErrorAction SilentlyContinue).Source
+    if (-not $wg) { $wg = 'winget' }
+    $out = Join-Path $env:TEMP ("pcf_wg_out_{0}.txt" -f $PID)
+    $err = Join-Path $env:TEMP ("pcf_wg_err_{0}.txt" -f $PID)
+    try {
+        $p = Start-Process -FilePath $wg -ArgumentList $WingetArgs -PassThru -NoNewWindow `
+             -RedirectStandardOutput $out -RedirectStandardError $err -ErrorAction Stop
+        Show-BarraAttesa -Testo "Scarico e installo $Nome" -Processo $p
+        $code = $p.ExitCode
+    } catch {
+        # Ripiego: nessuna barra, ma l'installazione parte comunque.
+        & $wg @WingetArgs *> $null
+        $code = $LASTEXITCODE
+    }
+    try { Remove-Item $out, $err -Force -ErrorAction SilentlyContinue } catch {}
+    return $code
+}
+
 function Installa-Pacchetto {
     param(
         [string]$Nome,
@@ -784,10 +834,10 @@ function Installa-Pacchetto {
         $tentativiFatti = $tentativo
         Write-Info "Installo $Nome...$(if ($tentativo -gt 1) { " (tentativo $tentativo)" })"
         # Nascondo l'output tecnico di winget (hash, licenze, progressi): confonde.
-        # Mostro solo il risultato con un messaggio semplice.
-        winget install --exact --id $WingetId @sorgente --silent --accept-package-agreements --accept-source-agreements *> $null
-        if ($successo -contains $LASTEXITCODE) {
-            if ($LASTEXITCODE -eq 0) {
+        # Al suo posto una barra animata di attesa, cosi' si vede che sta lavorando.
+        $codeInstall = Invoke-WingetConBarra -Nome $Nome -WingetArgs (@('install', '--exact', '--id', $WingetId) + $sorgente + @('--silent', '--accept-package-agreements', '--accept-source-agreements'))
+        if ($successo -contains $codeInstall) {
+            if ($codeInstall -eq 0) {
                 Write-OK "$Nome installato."
             } else {
                 Write-OK "$Nome installato (richiede riavvio)."
@@ -796,9 +846,9 @@ function Installa-Pacchetto {
             return
         }
 
-        Write-Errore "Installazione $Nome fallita (codice: $LASTEXITCODE)."
+        Write-Errore "Installazione $Nome fallita (codice: $codeInstall)."
 
-        if (($erroriSorgente -contains $LASTEXITCODE) -and -not $riparatoQui) {
+        if (($erroriSorgente -contains $codeInstall) -and -not $riparatoQui) {
             # Sorgenti corrotte: riparo (reset+update forzato) e ritento
             Write-Info "Errore di integrita' sorgente: riparo le sorgenti winget e ritento..."
             Repair-WingetSources -Forza
@@ -2007,7 +2057,7 @@ if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(3, $passo - 1); continue 
 if ($vuoiUpgrade -match "^[Ss]") {
     if (Confirm-Winget) {
         Write-Info "Aggiornamento in corso (puo' richiedere diversi minuti)..."
-        winget upgrade --all --silent --accept-package-agreements --accept-source-agreements --include-unknown *> $null
+        $null = Invoke-WingetConBarra -Nome "aggiornamenti app" -WingetArgs @('upgrade', '--all', '--silent', '--accept-package-agreements', '--accept-source-agreements', '--include-unknown')
         Write-OK "Aggiornamento app completato."
         Add-Report "Aggiornamento app installate" "OK"
     } else {
