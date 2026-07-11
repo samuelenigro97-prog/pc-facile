@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "6.5 (2026-07-11)"
+$SCRIPT_VERSION = "6.6 (2026-07-11)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -128,25 +128,30 @@ function Beep-Completato {
     if ($RunReale) { try { [console]::Beep(784, 160); [console]::Beep(1047, 260) } catch {} }
 }
 
-# BIP RIPETUTO: se ti allontani e non rispondi, un solo bip si perde. Mentre lo
-# script aspetta una risposta faccio ribipare ogni 2 minuti finche' non digiti.
-# Read-Host blocca il thread principale, quindi il bip periodico gira in un
-# RUNSPACE separato (.NET gestito, niente P/Invoke: l'antivirus non lo segnala),
-# che lavora in parallelo mentre il thread principale e' fermo su Read-Host.
+# BIP DI RICHIAMO: se ti allontani e non rispondi, dopo 2 MINUTI di silenzio lo
+# script inizia a bipare in modo RICORRENTE (un bip corto ogni pochi secondi,
+# discreto, non stressante) e continua finche' non digiti, cosi' te ne accorgi.
+# Read-Host blocca il thread principale, quindi il bip gira in un RUNSPACE
+# separato (.NET gestito, niente P/Invoke: l'antivirus non lo segnala), che
+# lavora in parallelo mentre il thread principale e' fermo su Read-Host.
 $Global:BipPS = $null
 function Start-BipRipetuto {
-    param([int]$Intervallo = 120)   # secondi tra un bip e l'altro
+    param(
+        [int]$Attesa   = 120,   # secondi di silenzio prima di iniziare a richiamare
+        [int]$Cadenza  = 4       # poi un bip corto ogni tot secondi, di continuo
+    )
     if (-not $RunReale) { return }
     Stop-BipRipetuto
     try {
         $ps = [PowerShell]::Create()
         [void]$ps.AddScript({
-            param($sec)
-            while ($true) {
-                Start-Sleep -Seconds $sec
-                try { [console]::Beep(1000, 150) } catch {}
+            param($attesa, $cadenza)
+            Start-Sleep -Seconds $attesa          # 2 min: nessun suono, lavori in pace
+            while ($true) {                        # poi richiamo ricorrente ma discreto
+                try { [console]::Beep(880, 120) } catch {}
+                Start-Sleep -Seconds $cadenza
             }
-        }).AddArgument($Intervallo)
+        }).AddArgument($Attesa).AddArgument($Cadenza)
         [void]$ps.BeginInvoke()
         $Global:BipPS = $ps
     } catch { $Global:BipPS = $null }
