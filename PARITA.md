@@ -12,18 +12,23 @@ allineati come flusso e funzioni.
 | Nome cliente + host         | `Set-LocalUser` + `Rename-Computer`       | `scutil --set ComputerName/HostName`          | pari |
 | Punto di ripristino         | `Checkpoint-Computer`                     | `tmutil localsnapshot` (Time Machine)         | pari |
 | Account + credenziali       | Apre account.microsoft.com, genera cred   | Apre appleid.apple.com, genera cred           | pari |
-| Office                      | attiva 365/perpetuo (`ospp.vbs`)          | — (su Mac Office si scarica da web, opzionale)| solo Win |
+| Office                      | installa (winget) + riscatto card PIN sul web | — (su Mac Office si scarica da web, opzionale)| solo Win |
 | Pulizia / ottimizzazione    | AV prova + debloat OEM + config Windows   | config `defaults` (no debloat OEM: non esiste)| Mac = solo config |
 | Antivirus                   | McAfee/Norton                             | — (raramente su Mac; skip)                    | solo Win |
 | Unieuro Cyber Protection    | apre portale                              | apre portale (uguale)                         | pari |
 | Browser                     | catalogo winget                           | cask brew                                     | pari |
-| App (BASE/UFFICIO/GAMING)   | winget + GeForce se NVIDIA                | brew cask (Mac: no GeForce, GPU integrata)    | pari |
+| App (BASE/UFFICIO/GAMING)   | winget + tool GPU se dedicata (NVIDIA/Intel Arc/AMD) | brew cask (Mac: GPU integrata) | pari |
 | Aggiornamenti               | `winget upgrade` + driver Windows Update  | `brew upgrade` + `softwareupdate`             | pari |
 | Chiave di ripristino disco  | **BitLocker** (`manage-bde`/cmdlet)       | **FileVault** (`fdesetup`)                    | pari |
+| Barra attesa download/install| `Show-BarraAttesa` (winget in Start-Process)| — (brew mostra gia' il progresso)             | solo Win |
 | Avviso sonoro fine passo    | `[console]::Beep`                         | `printf '\a'`                                 | pari |
+| Bip di richiamo se non rispondi| runspace: dopo 2 min bip corto ogni ~4s | —                                             | solo Win |
 | Credenziali (esist./gen.)   | `Nome123!` + `Set-Clipboard`              | `Nome123!` + `pbcopy`                         | pari |
 | Report finale .txt          | Desktop `Riepilogo-PC_*.txt`              | Desktop `Riepilogo-Mac_*.txt`                 | pari |
-| Pulizia finale (auto-elimina)| rimuove `%TEMP%\setup-pc.ps1` + reg colori| `rm` dello script scaricato in `/tmp`         | pari |
+| Pulizia finale (auto-elimina)| rimuove `%TEMP%\setup-pc.ps1` + reg colori + checkpoint | `rm` dello script scaricato in `/tmp` | pari |
+| Ripresa sessione interrotta | checkpoint JSON in `ProgramData\PCFacile` | —                                             | solo Win |
+| Collegamenti Office Desktop | WScript.Shell dopo installazione Office   | —                                             | solo Win |
+| Icona Desktop per ogni app  | copia lnk da Start / shell:AppsFolder     | —                                             | solo Win |
 
 ## Solo Windows (non esiste su Mac)
 - **Debloat OEM**: macOS non ha crapware del produttore.

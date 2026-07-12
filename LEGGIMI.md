@@ -125,16 +125,19 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 
 | Step | Azione |
 |------|--------|
-| —  | **Punto di ripristino** (opzionale, consigliato): rete di sicurezza prima delle modifiche |
-| 0  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
-| 1  | Nome completo del cliente (cambia il "Nome visualizzato" dell'account) |
-| 2  | Riscatto licenza **Office 365 abbonamento** (`setup.office.com`) |
-| 3  | Installazione suite **Office / OpenOffice / LibreOffice** (winget) + subito dopo **attivazione Office perpetuo** con product key (`ospp.vbs`) |
-| 4  | **Antivirus**: McAfee, Norton, o Salta |
-| 4c | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
-| 5  | Browser: Chrome / Firefox |
-| 6  | App: **profili** BASE / UFFICIO / GAMING / COMPLETO, oppure MANUALE (VLC, Adobe Reader, Spotify, 7-Zip, WhatsApp, Steam, AnyDesk, Discord, Zoom) |
-| —  | **Report finale**: esito reale (OK / ERRORE / SALTATO / AVVISO) di ogni operazione + riavvio |
+| 1  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
+| 2  | Nome completo del cliente (cambia il "Nome visualizzato" dell'account **e** il nome del PC) |
+| 3  | **Punto di ripristino** (opzionale, consigliato): rete di sicurezza prima delle modifiche |
+| 4  | **Account Microsoft**: apre il login/registrazione; genera o annota email + password nel riepilogo |
+| 5  | **App Office**: installa la suite scelta se manca (Office 365, perpetuo, OpenOffice, LibreOffice), poi **attivazione** — card PIN → riscatto web (`microsoft365.com/setup` o `office.com/setup`) + accesso in Word. Crea i collegamenti Office sul Desktop |
+| 6  | **Pulizia e ottimizzazione**: rimuove antivirus di prova, bloatware OEM, promo dal menu Start, disinstalla OneDrive, piccole comodità Windows |
+| 7  | **Antivirus**: McAfee, Norton, o Salta |
+| 8  | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
+| 9  | **Browser** (catalogo winget): Chrome, Firefox, Edge, Brave, Opera, Opera GX, Vivaldi |
+| 10 | **App**: profili BASE / UFFICIO / GAMING / COMPLETO, oppure MANUALE |
+| 11 | **Aggiornamento** di tutte le app installate (`winget upgrade --all`) |
+| 12 | **Driver**: scheda video dedicata (tool del produttore) + driver generici da Windows Update |
+| —  | **Report finale**: verifica finale + chiave BitLocker + file riepilogo sul Desktop + riavvio |
 
 **Profili app (STEP 6):**
 - **BASE** — VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk
@@ -142,11 +145,41 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 - **GAMING** — BASE + Steam, Discord
 - **COMPLETO** — tutte · **MANUALE** — scegli i singoli numeri
 
+**Driver scheda video**: la ricerca di Windows Update spesso non prende il driver
+video giusto. Perciò, se lo script rileva una GPU **dedicata**, usa il tool del
+produttore: **NVIDIA** → app NVIDIA; **Intel Arc** → Intel Driver & Support
+Assistant; **AMD dedicata** (Radeon RX/Pro) → apre `amd.com/it/support`. Con la
+**sola grafica integrata** (Intel HD/UHD/Iris, Radeon dei Ryzen) non installa
+nulla di extra: ci pensa Windows Update.
+
 Antivirus **Norton/McAfee**: lo script apre il sito, tu registri e scarichi
 l'installer (nome variabile) → lo script trova l'`.exe` più recente in **Download o
 Desktop** e lo avvia.
 **Unieuro Cyber Protection**: solo apertura sito + promemoria di annotare le
 credenziali per l'app mobile del cliente (nessun installer PC).
+
+**Ripresa sessione**: se lo script si chiude a metà (crash, riavvio, blocco
+antivirus), al lancio successivo propone di **riprendere da dove eri arrivato**:
+i passi già completati vengono saltati. Il checkpoint si cancella da solo a
+lavoro finito.
+
+**Collegamenti sul Desktop**: dopo l'installazione di Office lo script crea i
+collegamenti a **Word, Excel, PowerPoint, Outlook e OneNote**; inoltre mette sul
+Desktop l'icona di **ogni app installata** (browser e app dei profili: VLC,
+7-Zip, WhatsApp, TeamViewer, ecc.), così il cliente vede a colpo d'occhio cosa è
+stato installato.
+
+La pulizia toglie anche i **collegamenti promo dal menu Start** (Booking.com,
+"Offerte Adobe", HP Documentation).
+
+**Comodità durante l'uso** (valgono per tutto lo script):
+- **Barra di avanzamento**: durante ogni download/installazione una barra animata
+  con i secondi mostra che sta lavorando (l'output tecnico resta nascosto).
+- **Bip di richiamo**: quando lo script aspetta una tua risposta fa un bip; se non
+  rispondi entro 2 minuti inizia a bipare in modo ricorrente (discreto) finché non
+  riprendi, così te ne accorgi se ti sei allontanato.
+- **Edge senza schermate iniziali** (benvenuto, accesso, import) e senza barra
+  laterale/Copilot, Rewards, assistente acquisti.
 
 Alla fine, se hai cambiato la lingua, lo script **propone il riavvio** (serve per
 applicare display language e schermata di login).

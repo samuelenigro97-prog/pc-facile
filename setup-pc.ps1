@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "5.9 (2026-07-08)"
+$SCRIPT_VERSION = "6.8 (2026-07-11)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -128,10 +128,56 @@ function Beep-Completato {
     if ($RunReale) { try { [console]::Beep(784, 160); [console]::Beep(1047, 260) } catch {} }
 }
 
+# BIP DI RICHIAMO: se ti allontani e non rispondi, dopo 2 MINUTI di silenzio lo
+# script inizia a bipare in modo RICORRENTE (un bip corto ogni pochi secondi,
+# discreto, non stressante) e continua finche' non digiti, cosi' te ne accorgi.
+# Read-Host blocca il thread principale, quindi il bip gira in un RUNSPACE
+# separato (.NET gestito, niente P/Invoke: l'antivirus non lo segnala), che
+# lavora in parallelo mentre il thread principale e' fermo su Read-Host.
+$Global:BipPS = $null
+function Start-BipRipetuto {
+    param(
+        [int]$Attesa   = 120,   # secondi di silenzio prima di iniziare a richiamare
+        [int]$Cadenza  = 4       # poi un bip corto ogni tot secondi, di continuo
+    )
+    if (-not $RunReale) { return }
+    Stop-BipRipetuto
+    try {
+        $ps = [PowerShell]::Create()
+        [void]$ps.AddScript({
+            param($attesa, $cadenza)
+            Start-Sleep -Seconds $attesa          # 2 min: nessun suono, lavori in pace
+            while ($true) {                        # poi richiamo ricorrente ma discreto
+                try { [console]::Beep(880, 120) } catch {}
+                Start-Sleep -Seconds $cadenza
+            }
+        }).AddArgument($Attesa).AddArgument($Cadenza)
+        [void]$ps.BeginInvoke()
+        $Global:BipPS = $ps
+    } catch { $Global:BipPS = $null }
+}
+function Stop-BipRipetuto {
+    if ($Global:BipPS) {
+        try { $Global:BipPS.Stop(); $Global:BipPS.Dispose() } catch {}
+        $Global:BipPS = $null
+    }
+}
+
+# Attesa di una risposta CON bip iniziale + bip ripetuto ogni 2 min se non
+# rispondi. Sostituisce il vecchio schema "Beep-Attesa; Read-Host". Il beeper
+# si ferma SEMPRE appena Read-Host ritorna (anche con Ctrl+C), grazie a finally.
+function Attendi-Risposta {
+    param([string]$Prompt)
+    Beep-Attesa            # primo bip subito
+    Start-BipRipetuto      # poi ogni 2 min finche' non rispondi
+    try { $r = Read-Host $Prompt }
+    finally { Stop-BipRipetuto }
+    return $r
+}
+
 function Pausa {
     Write-Host ""
-    Beep-Attesa
-    Read-Host "Premi INVIO per continuare"
+    [void](Attendi-Risposta "Premi INVIO per continuare")
 }
 
 # Password = nome cliente + "123!" (sempre, cosi' e' prevedibile e facile da
@@ -163,6 +209,36 @@ function Test-GpuNvidia {
         return @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -match 'NVIDIA|GeForce|RTX|GTX' }).Count -gt 0
     } catch { return $false }
+}
+
+# Rileva la GPU DEDICATA (non l'integrata): solo per queste ha senso installare
+# il tool del produttore, perche' Windows Update spesso non ne prende il driver
+# giusto. Sulle integrate (Intel HD/UHD/Iris, Radeon dei Ryzen) Windows Update
+# basta, quindi non aggiungiamo app inutili. Ritorna il vendor: 'NVIDIA',
+# 'AMD', 'INTEL' oppure $null se c'e' solo grafica integrata.
+# Euristica (solo Win32_VideoController, niente tool esterni):
+#  - NVIDIA presente          -> sempre dedicata.
+#  - AMD "Radeon RX/Pro"       -> dedicata; una AMD + un'altra GPU -> dedicata.
+#    "Radeon Graphics"/"Vega" da sola -> integrata (nel dubbio si salta).
+#  - Intel "Arc"               -> dedicata (rara); le altre Intel -> integrate.
+function Get-GpuDedicata {
+    try {
+        $gpu = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+                 Where-Object { $_.Name })
+        if ($gpu.Count -eq 0) { return $null }
+
+        if ($gpu | Where-Object { $_.Name -match 'NVIDIA|GeForce|RTX|GTX' }) { return 'NVIDIA' }
+
+        $amdDed = $gpu | Where-Object { $_.Name -match 'Radeon\s*(RX|Pro)|Radeon\s*R[579]|FirePro' }
+        # AMD affiancata a una GPU di un altro vendor = quasi certamente dedicata.
+        $amdQualsiasi = $gpu | Where-Object { $_.Name -match 'AMD|Radeon' }
+        $nonAmd       = $gpu | Where-Object { $_.Name -notmatch 'AMD|Radeon' }
+        if ($amdDed -or ($amdQualsiasi -and $nonAmd)) { return 'AMD' }
+
+        if ($gpu | Where-Object { $_.Name -match 'Intel.*Arc|Arc\s*A\d' }) { return 'INTEL' }
+
+        return $null   # solo grafica integrata
+    } catch { return $null }
 }
 
 # Trova gli antivirus di PROVA installati leggendo le chiavi di disinstallazione
@@ -203,8 +279,7 @@ function Chiedi {
         Write-Host "  $Prompt  [Veloce => '$Auto']" -ForegroundColor Gray
         return $Auto
     }
-    Beep-Attesa   # bip: sto per fermarmi e aspettare la tua risposta
-    return Read-Host $Prompt
+    return Attendi-Risposta $Prompt   # bip subito + ribip ogni 2 min se non rispondi
 }
 
 # Recupera la chiave di ripristino BitLocker del volume di sistema.
@@ -342,6 +417,36 @@ $RunReale = (-not $Test -and -not $Diagnostica)
 # Microsoft e scritte nel riepilogo. Init qui cosi' esistono anche se quel
 # passo viene saltato (restano vuote nel file).
 $credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
+
+# =============================================================================
+# RIPRESA SESSIONE: se lo script viene chiuso a meta' (crash, riavvio, blocco
+# antivirus), al lancio successivo riparte da dove era arrivato. Dopo ogni
+# passo completato lo stato (numero passo + nome cliente + credenziali
+# generate) finisce in un file JSON in ProgramData, ELIMINATO a fine lavoro.
+# Fasi: 1=Lingua 2=Nome 3=Ripristino 4=Account 5=Office 6=Pulizia,
+# 7..12 = passi wizard 3..8 (Antivirus..Driver). Solo nel run reale.
+# =============================================================================
+$Global:StatoFile   = Join-Path $env:ProgramData "PCFacile\stato.json"
+$Global:FaseRipresa = 0
+
+# Segna un passo come completato (sovrascrive il checkpoint precedente).
+function Save-Fase {
+    param([int]$Fase, [string]$Nome)
+    if (-not $RunReale) { return }
+    try {
+        $dir = Split-Path $Global:StatoFile
+        if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
+        [pscustomobject]@{
+            Fase = $Fase; FaseNome = $Nome
+            Data = (Get-Date -Format 'dd/MM/yyyy HH:mm')
+            NomeCliente = $nomeCliente
+            CredAccount = $credMsAccount; CredPassword = $credMsPassword
+        } | ConvertTo-Json | Set-Content -Path $Global:StatoFile -Encoding UTF8
+    } catch {}
+}
+
+# Vero se il passo era gia' stato completato nella sessione ripresa.
+function Test-FaseFatta { param([int]$Fase) return ($Global:FaseRipresa -ge $Fase) }
 
 # =============================================================================
 # CATALOGO PACCHETTI - UNICA FONTE (usato da STEP 3/5/6 e dalla Diagnostica)
@@ -720,6 +825,130 @@ function Confirm-Winget {
     }
 }
 
+# Barra di attesa ANIMATA mentre un processo lavora (download/installazione).
+# winget con l'output nascosto non da' progressi: mostro una barra "a spola"
+# (un blocco che scorre avanti e indietro) col tempo trascorso, cosi' si vede
+# che sta lavorando e non e' bloccato. Non e' una percentuale reale (winget
+# silenzioso non la espone), ma un indicatore di ATTIVITA'. Si ridisegna sulla
+# stessa riga con \r. Il processo va passato gia' avviato (-PassThru).
+function Show-BarraAttesa {
+    param([string]$Testo, [System.Diagnostics.Process]$Processo)
+    $larg = 22; $span = 4
+    $period = ($larg - $span) * 2
+    $inizio = Get-Date
+    $i = 0
+    while (-not $Processo.HasExited) {
+        $phase = $i % $period
+        $pos = if ($phase -le ($larg - $span)) { $phase } else { $period - $phase }
+        $barra = (([string]$BOX_EMPTY) * $pos) + (([string]$BOX_FULL) * $span) + (([string]$BOX_EMPTY) * ($larg - $span - $pos))
+        $sec = [int]((Get-Date) - $inizio).TotalSeconds
+        $riga = "   $Testo  [$barra]  ${sec}s"
+        if ($AON) { Write-Host ("`r$AON$riga$AOFF") -NoNewline }
+        else { Write-Host ("`r$riga") -NoNewline -ForegroundColor $THEME_COL }
+        Start-Sleep -Milliseconds 120
+        $i++
+    }
+    # Cancella la riga della barra (spazi + ritorno a inizio riga).
+    Write-Host ("`r" + (" " * ($Testo.Length + $larg + 24)) + "`r") -NoNewline
+}
+
+# Lancia winget con l'output nascosto (rediretto su file temporanei) MA con la
+# barra animata a schermo. Ritorna il codice di uscita di winget. Se per qualche
+# motivo non riesce ad avviare il processo, ripiega sulla chiamata classica.
+function Invoke-WingetConBarra {
+    param([string]$Nome, [string[]]$WingetArgs)
+    $wg = (Get-Command winget -ErrorAction SilentlyContinue).Source
+    if (-not $wg) { $wg = 'winget' }
+    $out = Join-Path $env:TEMP ("pcf_wg_out_{0}.txt" -f $PID)
+    $err = Join-Path $env:TEMP ("pcf_wg_err_{0}.txt" -f $PID)
+    try {
+        $p = Start-Process -FilePath $wg -ArgumentList $WingetArgs -PassThru -NoNewWindow `
+             -RedirectStandardOutput $out -RedirectStandardError $err -ErrorAction Stop
+        Show-BarraAttesa -Testo "Scarico e installo $Nome" -Processo $p
+        $code = $p.ExitCode
+    } catch {
+        # Ripiego: nessuna barra, ma l'installazione parte comunque.
+        & $wg @WingetArgs *> $null
+        $code = $LASTEXITCODE
+    }
+    try { Remove-Item $out, $err -Force -ErrorAction SilentlyContinue } catch {}
+    return $code
+}
+
+# --- ICONA SUL DESKTOP per ogni app installata (cosi' il cliente vede cosa e'
+#     stato messo). Due nomi "somigliano" se, tolti spazi/punteggiatura, uno
+#     contiene l'altro (es. "Adobe Acrobat Reader" ~ "Adobe Acrobat"). ---
+function Test-NomeSimile {
+    param([string]$A, [string]$B)
+    $na = ($A -replace '[^A-Za-z0-9]', '').ToLower()
+    $nb = ($B -replace '[^A-Za-z0-9]', '').ToLower()
+    if (-not $na -or -not $nb) { return $false }
+    return ($na.Contains($nb) -or $nb.Contains($na))
+}
+
+# Collegamenti "spazzatura" da NON copiare sul Desktop (disinstalla, guida...).
+function Test-LnkJunk {
+    param([string]$Base)
+    $junk = @('*uninstall*', '*disinstall*', '*guida*', '*help*', '*read*me*', '*leggimi*',
+              '*documentation*', '*website*', '*sito*', '*modify*', '*repair*', '*support*',
+              '*aggiorna*', '*update*')
+    foreach ($p in $junk) { if ($Base -like $p) { return $true } }
+    return $false
+}
+
+# Tutti i collegamenti del menu Start (utente + tutti gli utenti, ricorsivo).
+function Get-StartMenuLnks {
+    $roots = @(
+        (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'),
+        (Join-Path $env:APPDATA     'Microsoft\Windows\Start Menu\Programs')
+    )
+    $res = @()
+    foreach ($r in $roots) {
+        if (Test-Path $r) { $res += Get-ChildItem -Path $r -Filter *.lnk -Recurse -ErrorAction SilentlyContinue }
+    }
+    return $res
+}
+
+# Crea sul Desktop l'icona dell'app appena installata. 1) prova a copiare il
+# collegamento vero dal menu Start (icona corretta); 2) se e' un'app dello Store
+# (MSIX, niente .lnk) ripiega su Get-StartApps + shell:AppsFolder. Salta se
+# un'icona simile e' gia' sul Desktop (niente doppioni).
+function Add-IconaDesktop {
+    param([string]$Nome)
+    if (-not $RunReale) { return }
+    try {
+        $desktop = Get-DesktopDir
+        $gia = Get-ChildItem -Path $desktop -Filter *.lnk -ErrorAction SilentlyContinue |
+            Where-Object { Test-NomeSimile $_.BaseName $Nome } | Select-Object -First 1
+        if ($gia) { return }
+
+        # 1) Menu Start: collegamento Win32 con l'icona vera dell'app.
+        $cand = Get-StartMenuLnks |
+            Where-Object { -not (Test-LnkJunk $_.BaseName) -and (Test-NomeSimile $_.BaseName $Nome) } |
+            Sort-Object { $_.BaseName.Length } | Select-Object -First 1
+        if ($cand) {
+            Copy-Item -Path $cand.FullName -Destination (Join-Path $desktop $cand.Name) -Force -ErrorAction SilentlyContinue
+            return
+        }
+
+        # 2) App dello Store (WhatsApp, Spotify...): AppUserModelID via Get-StartApps.
+        $app = Get-StartApps -ErrorAction SilentlyContinue |
+            Where-Object { Test-NomeSimile $_.Name $Nome } | Sort-Object { $_.Name.Length } | Select-Object -First 1
+        if ($app) {
+            $wsh = New-Object -ComObject WScript.Shell
+            $file = ("$($app.Name).lnk" -replace '[\\/:*?"<>|]', '')
+            $sc = $wsh.CreateShortcut((Join-Path $desktop $file))
+            if ($app.AppID -match '\.exe$' -and (Test-Path $app.AppID)) {
+                $sc.TargetPath = $app.AppID
+            } else {
+                $sc.TargetPath = "$env:WINDIR\explorer.exe"
+                $sc.Arguments  = "shell:AppsFolder\$($app.AppID)"
+            }
+            $sc.Save()
+        }
+    } catch {}
+}
+
 function Installa-Pacchetto {
     param(
         [string]$Nome,
@@ -739,6 +968,7 @@ function Installa-Pacchetto {
     if ($LASTEXITCODE -eq 0) {
         Write-OK "$Nome gia' installato. Salto."
         Add-Report "$Nome (installazione)" "OK"
+        Add-IconaDesktop -Nome $Nome
         return
     }
 
@@ -754,21 +984,22 @@ function Installa-Pacchetto {
         $tentativiFatti = $tentativo
         Write-Info "Installo $Nome...$(if ($tentativo -gt 1) { " (tentativo $tentativo)" })"
         # Nascondo l'output tecnico di winget (hash, licenze, progressi): confonde.
-        # Mostro solo il risultato con un messaggio semplice.
-        winget install --exact --id $WingetId @sorgente --silent --accept-package-agreements --accept-source-agreements *> $null
-        if ($successo -contains $LASTEXITCODE) {
-            if ($LASTEXITCODE -eq 0) {
+        # Al suo posto una barra animata di attesa, cosi' si vede che sta lavorando.
+        $codeInstall = Invoke-WingetConBarra -Nome $Nome -WingetArgs (@('install', '--exact', '--id', $WingetId) + $sorgente + @('--silent', '--accept-package-agreements', '--accept-source-agreements'))
+        if ($successo -contains $codeInstall) {
+            if ($codeInstall -eq 0) {
                 Write-OK "$Nome installato."
             } else {
                 Write-OK "$Nome installato (richiede riavvio)."
             }
             Add-Report "$Nome (installazione)" "OK"
+            Add-IconaDesktop -Nome $Nome
             return
         }
 
-        Write-Errore "Installazione $Nome fallita (codice: $LASTEXITCODE)."
+        Write-Errore "Installazione $Nome fallita (codice: $codeInstall)."
 
-        if (($erroriSorgente -contains $LASTEXITCODE) -and -not $riparatoQui) {
+        if (($erroriSorgente -contains $codeInstall) -and -not $riparatoQui) {
             # Sorgenti corrotte: riparo (reset+update forzato) e ritento
             Write-Info "Errore di integrita' sorgente: riparo le sorgenti winget e ritento..."
             Repair-WingetSources -Forza
@@ -851,8 +1082,8 @@ if ($Diagnostica) {
         "$env:ProgramFiles\Microsoft Office\Office16\ospp.vbs",
         "${env:ProgramFiles(x86)}\Microsoft Office\Office16\ospp.vbs"
     ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-    if ($ospp) { Write-OK "Office installato (ospp.vbs trovato): attivazione perpetuo possibile." }
-    else { Write-Info "Office non ancora installato (ospp.vbs assente): normale su PC nuovo." }
+    if ($ospp) { Write-OK "Office installato (ospp.vbs trovato)." }
+    else { Write-Info "Office non ancora installato (ospp.vbs assente): normale su PC nuovo, lo installa il passo Office." }
 
     Write-Host ""
     Write-Info "Diagnostica completata. Nessuna modifica effettuata al sistema."
@@ -870,6 +1101,34 @@ try { Clear-Host } catch {}
 # diretti. Ogni singolo passo chiede comunque S/N, niente modifiche a sorpresa.
 
 # =============================================================================
+# SESSIONE PRECEDENTE INTERROTTA? Se c'e' un checkpoint, proponi di riprendere
+# da dove si era arrivati (i passi gia' completati vengono saltati).
+# =============================================================================
+if ($RunReale) {
+    try {
+        if (Test-Path $Global:StatoFile) {
+            $st = Get-Content $Global:StatoFile -Raw -ErrorAction Stop | ConvertFrom-Json
+            Write-Titolo "Sessione precedente trovata"
+            Write-Host "  Interrotta il           : $($st.Data)" -ForegroundColor White
+            Write-Host "  Ultimo passo completato : $($st.FaseNome)" -ForegroundColor White
+            if ($st.NomeCliente) { Write-Host "  Cliente                 : $($st.NomeCliente)" -ForegroundColor White }
+            Write-Host ""
+            $rRip = Attendi-Risposta "Riprendere da dove eri arrivato? (S = riprendi / N = ricomincia da capo)"
+            if ($rRip -match '^[Ss]') {
+                $Global:FaseRipresa = [int]$st.Fase
+                if ($st.NomeCliente)  { $nomeCliente    = [string]$st.NomeCliente }
+                if ($st.CredAccount)  { $credMsAccount  = [string]$st.CredAccount }
+                if ($st.CredPassword) { $credMsPassword = [string]$st.CredPassword }
+                Write-OK "Riprendo: i passi gia' completati verranno saltati."
+            } else {
+                Remove-Item $Global:StatoFile -Force -ErrorAction SilentlyContinue
+                Write-Info "Si ricomincia da capo."
+            }
+        }
+    } catch {}
+}
+
+# =============================================================================
 # CONTROLLO CONNESSIONE - prima di tutto: senza Internet la lingua (pacchetto),
 # le app e gli aggiornamenti NON funzionano. Avviso e do modo di collegarla.
 # =============================================================================
@@ -881,7 +1140,7 @@ if ($RunReale) {
         Write-Host "aggiornamenti e driver. Collega il WiFi o il cavo di rete PRIMA di continuare." -ForegroundColor White
         Write-Host ""
         do {
-            Beep-Attesa; $rNet = Read-Host "Collega Internet e premi INVIO per riprovare  (oppure S = prosegui senza)"
+            $rNet = Attendi-Risposta "Collega Internet e premi INVIO per riprovare  (oppure S = prosegui senza)"
             if ($rNet -match '^[Ss]') { break }
         } while (-not (Test-Rete))
         if (Test-Rete) { Write-OK "Connessione a Internet OK." }
@@ -908,7 +1167,7 @@ if ($RunReale) {
         Write-Host "  - aggiungi la chiavetta/cartella alle ESCLUSIONI dell'antivirus, oppure" -ForegroundColor White
         Write-Host "  - tieni pronto a dare ALLOW/CONSENTI se compare 'Threat blocked'." -ForegroundColor White
         Write-Host ""
-        Beep-Attesa; Read-Host "Quando sei pronto premi INVIO per continuare"
+        [void](Attendi-Risposta "Quando sei pronto premi INVIO per continuare")
     }
 }
 
@@ -928,6 +1187,11 @@ if ($RunReale) {
         Set-ItemProperty -Path $edgePol -Name 'ImportOnEachLaunch'            -Value 0 -Type DWord -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $edgePol -Name 'AutoImportAtFirstRun'          -Value 4 -Type DWord -ErrorAction SilentlyContinue  # 4 = non importare
         Set-ItemProperty -Path $edgePol -Name 'DefaultBrowserSettingEnabled'  -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        # Meno distrazioni anche DOPO la prima apertura: niente barra laterale/
+        # Copilot, niente Microsoft Rewards, niente assistente acquisti.
+        Set-ItemProperty -Path $edgePol -Name 'HubsSidebarEnabled'            -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'ShowMicrosoftRewards'          -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'EdgeShoppingAssistantEnabled'  -Value 0 -Type DWord -ErrorAction SilentlyContinue
         Write-OK "Schermate iniziali di Edge disattivate."
     } catch {}
 }
@@ -935,6 +1199,9 @@ if ($RunReale) {
 # =============================================================================
 # LINGUA E REGIONE (ITALIANO) - primo passo
 # =============================================================================
+
+if (Test-FaseFatta 1) { Write-Info "Lingua e regione: gia' fatto nella sessione precedente, salto." }
+else {
 
 Write-Titolo "Lingua e Regione (Italiano)"
 
@@ -1035,12 +1302,18 @@ if ($impostaLingua -match "^[Ss]") {
     Add-Report "Lingua italiana (it-IT)" "SALTATO"
 }
 
+Save-Fase 1 "Lingua e regione"
+}
+
 # (nessuna pausa: si avanza da solo, come nel wizard)
 
 # =============================================================================
 # NOME CLIENTE E PC (prima voce dopo la lingua: la prima cosa da impostare)
 # Un solo nome: vale sia per l'account Windows sia per il nome del PC.
 # =============================================================================
+
+if (Test-FaseFatta 2) { Write-Info "Nome cliente e PC: gia' fatto nella sessione precedente, salto." }
+else {
 
 Write-Titolo "Nome Cliente e PC"
 
@@ -1058,7 +1331,7 @@ Write-Info "Nome visualizzato attuale: $(if ($nomeAttuale) { $nomeAttuale } else
 Write-Host ""
 Write-Info "Nome PC attuale: $env:COMPUTERNAME"
 Write-Host ""
-Beep-Attesa; $nomeCliente = (Read-Host "Nome del cliente (account E nome PC) - INVIO per saltare").Trim()
+$nomeCliente = (Attendi-Risposta "Nome del cliente (account E nome PC) - INVIO per saltare").Trim()
 
 if ($nomeCliente -ne "") {
     $nomeOk = $false
@@ -1101,11 +1374,17 @@ if ($nomeCliente -ne "") {
     Add-Report "Nome cliente" "SALTATO"
 }
 
+Save-Fase 2 "Nome cliente e PC"
+}
+
 # (nessuna pausa: si avanza da solo)
 
 # =============================================================================
 # PUNTO DI RIPRISTINO (rete di sicurezza prima delle modifiche)
 # =============================================================================
+
+if (Test-FaseFatta 3) { Write-Info "Punto di ripristino: gia' fatto nella sessione precedente, salto." }
+else {
 
 Write-Titolo "Punto di Ripristino"
 
@@ -1132,11 +1411,17 @@ if ($vuoiRestore -match "^[Ss]") {
     Add-Report "Punto di ripristino" "SALTATO"
 }
 
+Save-Fase 3 "Punto di ripristino"
+}
+
 # (nessuna pausa: si avanza da solo)
 
 # =============================================================================
 # ACCOUNT MICROSOFT (accedi/crea presto: velocizza Office e antivirus dopo)
 # =============================================================================
+
+if (Test-FaseFatta 4) { Write-Info "Account Microsoft: gia' fatto nella sessione precedente, salto." }
+else {
 
 Write-Titolo "Account Microsoft"
 
@@ -1156,10 +1441,10 @@ if ($vuoiMs -match "^[Ss]") {
     # In entrambi i casi niente lette dal browser. Questa domanda resta anche in
     # Veloce perche' cambia da cliente a cliente.
     if ($RunReale) {
-        Beep-Attesa; $haAccount = Read-Host "Il cliente ha GIA' una sua email/password che usa? (S = le inserisco io / N = ne genero una nuova)"
+        $haAccount = Attendi-Risposta "Il cliente ha GIA' una sua email/password che usa? (S = le inserisco io / N = ne genero una nuova)"
         if ($haAccount -match "^[Ss]") {
-            $credMsAccount  = (Read-Host "  Email del cliente").Trim()
-            $credMsPassword = (Read-Host "  Password del cliente").Trim()
+            $credMsAccount  = (Attendi-Risposta "  Email del cliente").Trim()
+            $credMsPassword = (Attendi-Risposta "  Password del cliente").Trim()
             Write-OK "Uso le credenziali del cliente (finiscono nel riepilogo)."
         } else {
             $credMsAccount  = New-EmailCliente -Base $nomeCliente
@@ -1184,16 +1469,22 @@ if ($vuoiMs -match "^[Ss]") {
 
 if ($vuoiMs -match "^[Ss]") { Pausa }
 
+Save-Fase 4 "Account Microsoft"
+}
+
 # =============================================================================
-# ATTIVAZIONE OFFICE (subito dopo l'account Microsoft: si riscatta/attiva)
+# INSTALLAZIONE APP OFFICE (subito dopo l'account Microsoft): prima si INSTALLA
+# la suite scelta (se manca), poi la schermata dopo la attiva (codice/key).
 # =============================================================================
 
-Write-Titolo "Attivazione Office"
+if (Test-FaseFatta 5) { Write-Info "App Office: gia' fatto nella sessione precedente, salto." }
+else {
 
-Write-Host "Su quasi tutti i PC nuovi Office/M365 e' GIA' installato: qui ATTIVI la licenza" -ForegroundColor White
-Write-Host "oppure installi una suite gratuita in alternativa." -ForegroundColor White
-Write-Host "  1) Microsoft 365 (abbonamento) - apre setup.office.com per riscatto/attivazione" -ForegroundColor White
-Write-Host "  2) Office perpetuo (2021/2024) - inserisci il product key" -ForegroundColor White
+Write-Titolo "Installazione App Office"
+
+Write-Host "Scegli la suite Office da installare (se manca) e attivare:" -ForegroundColor White
+Write-Host "  1) Microsoft 365 (abbonamento, card PIN) - installa, poi riscatto su microsoft365.com/setup" -ForegroundColor White
+Write-Host "  2) Office perpetuo (Home 2024/2021, card PIN) - installa, poi riscatto su office.com/setup" -ForegroundColor White
 Write-Host "  3) OpenOffice (suite gratuita)" -ForegroundColor White
 Write-Host "  4) LibreOffice (suite gratuita)" -ForegroundColor White
 Write-Host "  5) Salta" -ForegroundColor White
@@ -1208,13 +1499,67 @@ function Get-OsppPath {
     return $null
 }
 
+# Collegamenti alle app Office sul Desktop: i clienti le cercano li'. Usa
+# WScript.Shell (COM standard, niente P/Invoke: l'antivirus non lo segnala).
+# Crea solo i collegamenti delle app davvero presenti e non gia' esistenti.
+function Add-CollegamentiOffice {
+    $officeDir = @(
+        "$env:ProgramFiles\Microsoft Office\root\Office16",
+        "${env:ProgramFiles(x86)}\Microsoft Office\root\Office16",
+        "$env:ProgramFiles\Microsoft Office\Office16",
+        "${env:ProgramFiles(x86)}\Microsoft Office\Office16"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $officeDir) { Write-Info "Cartella Office non trovata: nessun collegamento sul Desktop."; return }
+    $appOffice = @(
+        @{ Nome = "Word";       Exe = "WINWORD.EXE"  },
+        @{ Nome = "Excel";      Exe = "EXCEL.EXE"    },
+        @{ Nome = "PowerPoint"; Exe = "POWERPNT.EXE" },
+        @{ Nome = "Outlook";    Exe = "OUTLOOK.EXE"  },
+        @{ Nome = "OneNote";    Exe = "ONENOTE.EXE"  }
+    )
+    $desktop = Get-DesktopDir
+    $creati = 0
+    try {
+        $wsh = New-Object -ComObject WScript.Shell
+        foreach ($a in $appOffice) {
+            $exe = Join-Path $officeDir $a.Exe
+            if (-not (Test-Path $exe)) { continue }
+            $lnk = Join-Path $desktop "$($a.Nome).lnk"
+            if (Test-Path $lnk) { continue }
+            $sc = $wsh.CreateShortcut($lnk)
+            $sc.TargetPath = $exe
+            $sc.WorkingDirectory = $officeDir
+            $sc.Save()
+            $creati++
+        }
+    } catch { Write-Info "Collegamenti Office non creati: $_" }
+    if ($creati -gt 0) {
+        Write-OK "Collegamenti sul Desktop: $creati app Office (Word, Excel, ...)."
+        Add-Report "Collegamenti Office sul Desktop ($creati)" "OK"
+    } else {
+        Write-Info "Collegamenti Office: gia' presenti sul Desktop o nessuna app trovata."
+    }
+}
+
 $sceltaAtt = Chiedi "Scelta (1-5)" "1"
 switch ($sceltaAtt) {
     "1" {
-        Start-Process "https://setup.office.com"
-        Write-OK "Browser aperto su setup.office.com"
-        Write-Info "Accedi con l'account Microsoft del cliente per riscattare e attivare Office 365."
-        Add-Report "Office 365 (riscatto/attivazione)" "OK"
+        # 1/2: INSTALLAZIONE (se manca). Su molti PC nuovi M365 e' preinstallato:
+        # in quel caso non si tocca nulla e si passa subito all'attivazione.
+        if (Get-OsppPath) {
+            Write-OK "Office gia' installato su questo PC."
+        } elseif (Confirm-Winget) {
+            Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
+        } else {
+            Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
+        }
+        Add-CollegamentiOffice
+        # 2/2: ATTIVAZIONE - la schermata dopo: pagina web per il codice di licenza
+        # (l'indirizzo stampato sulla card Microsoft 365 Personal).
+        Start-Process "https://microsoft365.com/setup"
+        Write-OK "Browser aperto su microsoft365.com/setup"
+        Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice grattato sulla card."
+        Add-Report "Microsoft 365 (riscatto card PIN)" "OK"
     }
     "3" {
         if (Confirm-Winget) { Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice" }
@@ -1225,42 +1570,36 @@ switch ($sceltaAtt) {
         else { Write-Errore "Winget non disponibile." ; Add-Report "LibreOffice (installazione)" "ERRORE" }
     }
     "2" {
-        $osppPath = Get-OsppPath
-        if (-not $osppPath) {
-            Write-Errore "ospp.vbs non trovato: Office non risulta installato su questo PC."
-            Add-Report "Attivazione Office perpetuo" "ERRORE"
+        # 1/2: INSTALLAZIONE (se manca). La suite e' la stessa di Microsoft 365:
+        # cambia solo la licenza. Se e' gia' presente non si tocca nulla.
+        if (Get-OsppPath) {
+            Write-OK "Office gia' installato su questo PC."
+        } elseif (Confirm-Winget) {
+            Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
         } else {
-            Beep-Attesa; $chiaveLicenza = (Read-Host "Inserisci il product key (XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)").Trim().ToUpper()
-            if ($chiaveLicenza -notmatch "^([A-Z0-9]{5}-){4}[A-Z0-9]{5}$") {
-                Write-Errore "Formato non valido: 5 gruppi da 5 caratteri separati da trattino."
-                Add-Report "Attivazione Office perpetuo" "ERRORE"
-            } else {
-                Write-Info "Inserimento product key..."
-                cscript //nologo $osppPath /inpkey:$chiaveLicenza
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Errore "Inserimento chiave fallito (codice $LASTEXITCODE)."
-                    Add-Report "Attivazione Office perpetuo" "ERRORE"
-                } else {
-                    Write-Info "Attivazione in corso..."
-                    cscript //nologo $osppPath /act
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-OK "Office attivato con successo."
-                        Add-Report "Attivazione Office perpetuo" "OK"
-                    } else {
-                        Write-Errore "Attivazione fallita (codice $LASTEXITCODE). Verifica chiave e connessione."
-                        Add-Report "Attivazione Office perpetuo" "ERRORE"
-                    }
-                }
-            }
+            Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
         }
+        Add-CollegamentiOffice
+        # 2/2: ATTIVAZIONE. Le card vendute in negozio hanno SEMPRE il PIN da
+        # grattare: si riscatta sul web con l'account Microsoft del cliente.
+        # Quel codice NON va inserito in ospp.vbs (le chiavi retail moderne
+        # sono solo da riscatto), quindi niente domande: si apre la pagina.
+        Start-Process "https://office.com/setup"
+        Write-OK "Browser aperto su office.com/setup (l'indirizzo stampato sulla card)."
+        Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice grattato sulla card."
+        Write-Info "Dopo il riscatto: apri Word e accedi con lo stesso account -> Office si attiva da solo."
+        Add-Report "Office perpetuo (riscatto card PIN)" "OK"
     }
     default {
-        Write-Info "Attivazione Office saltata."
-        Add-Report "Attivazione Office" "SALTATO"
+        Write-Info "Installazione app Office saltata."
+        Add-Report "Installazione app Office" "SALTATO"
     }
 }
 
 if ($sceltaAtt -match "^[12]$") { Pausa }
+
+Save-Fase 5 "App Office"
+}
 
 # =============================================================================
 # PULIZIA E OTTIMIZZAZIONE INIZIALE - un solo passaggio, una sola domanda:
@@ -1268,6 +1607,9 @@ if ($sceltaAtt -match "^[12]$") { Pausa }
 #   2/3 rimuove il bloatware + pulisce l'avvio automatico (boot piu' veloce)
 #   3/3 comodita' Windows (estensioni, Questo PC) + disinstalla OneDrive
 # =============================================================================
+
+if (Test-FaseFatta 6) { Write-Info "Pulizia e ottimizzazione: gia' fatto nella sessione precedente, salto." }
+else {
 
 Write-Titolo "Pulizia e Ottimizzazione Iniziale"
 
@@ -1414,6 +1756,29 @@ $bloatwareAppx = @(
         }
     }
 
+    # --- Collegamenti SPAZZATURA nel menu Start (Booking.com, "Offerte Adobe",
+    # HP Documentation...): sono solo link pubblicitari/promo, via. NON tocca
+    # le app vere (Word, Excel, Edge, l'antivirus). ---
+    $menuJunk = @('*Booking*', 'Offerte Adobe*', 'Adobe offers*', 'HP Documentation*', 'ExpressVPN*', 'WildTangent*', 'Amazon.it*')
+    $menuDirs = @(
+        (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'),
+        (Join-Path $env:APPDATA     'Microsoft\Windows\Start Menu\Programs')
+    )
+    foreach ($dir in $menuDirs) {
+        if (-not (Test-Path $dir)) { continue }
+        Get-ChildItem -Path $dir -Filter *.lnk -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+            $nomeLnk = $_.BaseName
+            foreach ($pat in $menuJunk) {
+                if ($nomeLnk -like $pat) {
+                    Write-Info "Tolgo dal menu Start: $nomeLnk"
+                    Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+                    $rimosse++
+                    break
+                }
+            }
+        }
+    }
+
     # --- Pulizia AVVIO AUTOMATICO: updater/helper NOTI (produttore, promo). NON
     # tocca driver, OneDrive, gli updater dei browser, ne' le app del setup. ---
     $avvioJunk = @(
@@ -1537,6 +1902,9 @@ $bloatwareAppx = @(
     Add-Report "Configurazione Windows base" "SALTATO"
 }
 
+Save-Fase 6 "Pulizia e ottimizzazione"
+}
+
 # =============================================================================
 # PASSI DI CONFIGURAZIONE (dopo ogni scelta si avanza; B al prompt = indietro)
 # =============================================================================
@@ -1547,9 +1915,17 @@ $bloatwareAppx = @(
 function Test-Indietro { param([string]$v) return ($v -match '^\s*[Bb]\s*$') }
 
 # Il wizard parte dal passo 3: il passo 1 "Nome" e la suite Office (ora nel menu
-# Attivazione Office) sono fuori dal wizard. Non rinumero i case: mostro
+# Installazione App Office) sono fuori dal wizard. Non rinumero i case: mostro
 # (passo-2) su 6 nella barra.
 $passo = 3
+# Nomi leggibili dei passi wizard per il checkpoint di ripresa sessione.
+$wizNomi = @{ 3 = "Antivirus"; 4 = "Unieuro Cyber Protection"; 5 = "Browser"; 6 = "Applicazioni base"; 7 = "Aggiornamento app"; 8 = "Driver" }
+# Ripresa sessione: fase 7..12 = passo wizard 3..8 completato -> si riparte
+# dal successivo (fase 12 = tutto il wizard fatto, si salta al report).
+if ($Global:FaseRipresa -ge 7) {
+    $passo = $Global:FaseRipresa - 3
+    if ($passo -le 8) { Write-Info "Riprendo il wizard dal passo $($passo - 2) di 6." }
+}
 :wizard while ($passo -ge 3 -and $passo -le 8) {
 Write-Host ""
 $barLen = 20
@@ -1573,7 +1949,7 @@ Write-Host "  2) Norton"
 Write-Host "  3) Salta"
 Write-Host ""
 
-Beep-Attesa; $sceltaAV = Read-Host "Scelta (1-3, B=indietro)"
+$sceltaAV = Attendi-Risposta "Scelta (1-3, B=indietro)"
 if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 
 function Installa-Antivirus {
@@ -1635,7 +2011,7 @@ function Attiva-ServizioWeb {
     Write-Host ""
     Write-Host "Sul sito: inserisci il codice/PIN e completa i dati richiesti." -ForegroundColor White
     Write-Host "IMPORTANTE: annota le credenziali per l'app mobile e consegnale al cliente." -ForegroundColor Yellow
-    Beep-Attesa; $fatto = Read-Host "Attivazione completata e credenziali annotate? (S/N)"
+    $fatto = Attendi-Risposta "Attivazione completata e credenziali annotate? (S/N)"
     if ($fatto -match "^[Ss]") {
         Write-OK "$Nome attivato."
         Add-Report "$Nome (protezione)" "OK"
@@ -1765,7 +2141,7 @@ Write-Host "  5) MANUALE          (scelgo io i singoli numeri)"
 Write-Host "  S) Salta"
 Write-Host ""
 
-Beep-Attesa; $sceltaApps = Read-Host "Scelta (1-5 - S salta - B indietro)"
+$sceltaApps = Attendi-Risposta "Scelta (1-5 - S salta - B indietro)"
 if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 
 switch ($sceltaApps) {
@@ -1785,7 +2161,7 @@ switch ($sceltaApps) {
         for ($i = 0; $i -lt $appsDisponibili.Count; $i++) {
             Write-Host "  $($i + 1)) $($appsDisponibili[$i].Nome)"
         }
-        Beep-Attesa; $sceltaManuale = Read-Host "Numeri separati da virgola (es: 1,3,5)"
+        $sceltaManuale = Attendi-Risposta "Numeri separati da virgola (es: 1,3,5)"
         $indici = $sceltaManuale -split "," | ForEach-Object { $_.Trim() }
         if (Confirm-Winget) {
             foreach ($indice in $indici) {
@@ -1832,7 +2208,7 @@ if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(3, $passo - 1); continue 
 if ($vuoiUpgrade -match "^[Ss]") {
     if (Confirm-Winget) {
         Write-Info "Aggiornamento in corso (puo' richiedere diversi minuti)..."
-        winget upgrade --all --silent --accept-package-agreements --accept-source-agreements --include-unknown *> $null
+        $null = Invoke-WingetConBarra -Nome "aggiornamenti app" -WingetArgs @('upgrade', '--all', '--silent', '--accept-package-agreements', '--accept-source-agreements', '--include-unknown')
         Write-OK "Aggiornamento app completato."
         Add-Report "Aggiornamento app installate" "OK"
     } else {
@@ -1854,27 +2230,60 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 Write-Titolo "Driver (Windows Update)"
 
 Write-Host "Cerca e installa i driver mancanti/aggiornati dal catalogo Windows Update." -ForegroundColor White
-Write-Host "Vendor-neutral: niente tool del produttore. Puo' richiedere qualche minuto" -ForegroundColor White
+Write-Host "Se c'e' una scheda video DEDICATA, uso anche il tool del produttore (Windows" -ForegroundColor White
+Write-Host "Update spesso non ne prende il driver giusto). Puo' richiedere qualche minuto" -ForegroundColor White
 Write-Host "e talvolta un riavvio. Opzionale, ultimo passo." -ForegroundColor White
 Write-Host ""
 
-# GPU NVIDIA: installo l'app NVIDIA (gestisce i driver video meglio della ricerca
-# generica di Windows Update). Provo prima "NVIDIA App" (attuale), poi GeForce
-# Experience come fallback. Va a prescindere dalla scelta su Windows Update.
-if ((Test-GpuNvidia) -and (Confirm-Winget)) {
-    Write-Info "GPU NVIDIA rilevata: installo l'app NVIDIA per i driver..."
-    winget install --exact --id Nvidia.NvidiaApp --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        winget install --exact --id Nvidia.GeForceExperience --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+# DRIVER SCHEDA VIDEO DEDICATA: solo se c'e' una GPU dedicata (non l'integrata),
+# perche' e' li' che Windows Update fa cilecca. Sulle integrate ci pensa Windows
+# Update (sotto) e non installiamo app inutili.
+$gpuDed = Get-GpuDedicata
+switch ($gpuDed) {
+    'NVIDIA' {
+        # App NVIDIA: gestisce i driver video meglio della ricerca generica di WU.
+        # Provo "NVIDIA App" (attuale), poi GeForce Experience come ripiego.
+        if (Confirm-Winget) {
+            Write-Info "Scheda video NVIDIA (dedicata): installo l'app NVIDIA per i driver..."
+            winget install --exact --id Nvidia.NvidiaApp --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                winget install --exact --id Nvidia.GeForceExperience --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+            }
+            if ($LASTEXITCODE -eq 0) {
+                Write-OK "App NVIDIA installata: APRILA per scaricare i driver piu' recenti."
+                Add-Report "App NVIDIA (driver GeForce): aprire per completare" "OK"
+            } else {
+                Write-Info "App NVIDIA non installata (id/rete): scaricala da nvidia.com/it-it/software/nvidia-app/"
+                Add-Report "App NVIDIA (driver GeForce)" "AVVISO"
+            }
+        }
+        Write-Host ""
     }
-    if ($LASTEXITCODE -eq 0) {
-        Write-OK "App NVIDIA installata: aprila per scaricare i driver piu' recenti."
-        Add-Report "App NVIDIA (driver GeForce)" "OK"
-    } else {
-        Write-Info "App NVIDIA non installata (id/rete): scaricala da nvidia.com/it-it/software/nvidia-app/"
-        Add-Report "App NVIDIA (driver GeForce)" "AVVISO"
+    'INTEL' {
+        # Intel Arc (dedicata): Intel Driver & Support Assistant trova e installa
+        # da solo il driver grafico Intel piu' recente.
+        if (Confirm-Winget) {
+            Write-Info "Scheda video Intel Arc (dedicata): installo Intel Driver & Support Assistant..."
+            Installa-Pacchetto -Nome "Intel Driver e Support Assistant" -WingetId "Intel.IntelDriverAndSupportAssistant"
+            Write-Info "APRI 'Intel Driver & Support Assistant' per scaricare il driver video."
+            Add-Report "Intel DSA (driver video): aprire per completare" "OK"
+        }
+        Write-Host ""
     }
-    Write-Host ""
+    'AMD' {
+        # AMD dedicata: non c'e' un pacchetto winget affidabile per il driver
+        # Adrenalin, quindi apro la pagina AMD di rilevamento automatico (come
+        # per i tool antivirus): l'operatore scarica ed esegue.
+        Write-Info "Scheda video AMD (dedicata): apro la pagina AMD per il driver video."
+        Start-Process "https://www.amd.com/it/support"
+        Write-OK "Browser aperto su amd.com/it/support (auto-rilevamento driver)."
+        Write-Info "Scarica ed esegui 'AMD Software: Adrenalin Edition', poi riavvia se richiesto."
+        Add-Report "AMD (driver video): scaricare da amd.com" "AVVISO"
+        Write-Host ""
+    }
+    default {
+        Write-Info "Nessuna scheda video dedicata rilevata: i driver video li gestisce Windows Update."
+    }
 }
 
 $vuoiDriver = Chiedi "Cercare e installare i driver ora? (S/N, B=indietro)" "S"
@@ -1924,6 +2333,9 @@ if ($vuoiDriver -match "^[Ss]") {
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 }
+# Checkpoint di ripresa: $passo e' gia' stato incrementato, il passo appena
+# completato e' ($passo - 1); la sua fase e' ($passo - 1) + 4.
+Save-Fase ($passo + 3) $wizNomi[($passo - 1)]
 if ($passo -lt 3) { $passo = 3 }
 }
 
@@ -2188,6 +2600,12 @@ if ($RunReale) {
     try {
         Remove-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -ErrorAction SilentlyContinue
         Remove-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction SilentlyContinue
+    } catch {}
+    # Lavoro COMPLETATO: via il checkpoint di ripresa sessione (contiene anche
+    # le credenziali generate: non deve restare sul PC del cliente).
+    try {
+        Remove-Item $Global:StatoFile -Force -ErrorAction SilentlyContinue
+        Remove-Item (Split-Path $Global:StatoFile) -Force -ErrorAction SilentlyContinue
     } catch {}
     $ioStesso = $MyInvocation.MyCommand.Path
     if ($ioStesso -and $ioStesso -like "$env:TEMP\*") {
