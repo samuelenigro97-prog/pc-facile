@@ -17,7 +17,7 @@ allineati come flusso e funzioni.
 | Antivirus                   | McAfee/Norton                             | — (raramente su Mac; skip)                    | solo Win |
 | Unieuro Cyber Protection    | apre portale                              | apre portale (uguale)                         | pari |
 | Browser                     | catalogo winget                           | cask brew                                     | pari |
-| App (BASE/UFFICIO/GAMING)   | winget + GeForce se NVIDIA                | brew cask (Mac: no GeForce, GPU integrata)    | pari |
+| App (BASE/UFFICIO/GAMING)   | winget + tool GPU se dedicata (NVIDIA/Intel Arc/AMD) | brew cask (Mac: GPU integrata) | pari |
 | Aggiornamenti               | `winget upgrade` + driver Windows Update  | `brew upgrade` + `softwareupdate`             | pari |
 | Chiave di ripristino disco  | **BitLocker** (`manage-bde`/cmdlet)       | **FileVault** (`fdesetup`)                    | pari |
 | Barra attesa download/install| `Show-BarraAttesa` (winget in Start-Process)| — (brew mostra gia' il progresso)             | solo Win |

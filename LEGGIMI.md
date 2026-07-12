@@ -142,6 +142,13 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 - **GAMING** — BASE + Steam, Discord
 - **COMPLETO** — tutte · **MANUALE** — scegli i singoli numeri
 
+**Driver scheda video**: la ricerca di Windows Update spesso non prende il driver
+video giusto. Perciò, se lo script rileva una GPU **dedicata**, usa il tool del
+produttore: **NVIDIA** → app NVIDIA; **Intel Arc** → Intel Driver & Support
+Assistant; **AMD dedicata** (Radeon RX/Pro) → apre `amd.com/it/support`. Con la
+**sola grafica integrata** (Intel HD/UHD/Iris, Radeon dei Ryzen) non installa
+nulla di extra: ci pensa Windows Update.
+
 Antivirus **Norton/McAfee**: lo script apre il sito, tu registri e scarichi
 l'installer (nome variabile) → lo script trova l'`.exe` più recente in **Download o
 Desktop** e lo avvia.

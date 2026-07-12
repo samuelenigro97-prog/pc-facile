@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "6.7 (2026-07-11)"
+$SCRIPT_VERSION = "6.8 (2026-07-11)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -209,6 +209,36 @@ function Test-GpuNvidia {
         return @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -match 'NVIDIA|GeForce|RTX|GTX' }).Count -gt 0
     } catch { return $false }
+}
+
+# Rileva la GPU DEDICATA (non l'integrata): solo per queste ha senso installare
+# il tool del produttore, perche' Windows Update spesso non ne prende il driver
+# giusto. Sulle integrate (Intel HD/UHD/Iris, Radeon dei Ryzen) Windows Update
+# basta, quindi non aggiungiamo app inutili. Ritorna il vendor: 'NVIDIA',
+# 'AMD', 'INTEL' oppure $null se c'e' solo grafica integrata.
+# Euristica (solo Win32_VideoController, niente tool esterni):
+#  - NVIDIA presente          -> sempre dedicata.
+#  - AMD "Radeon RX/Pro"       -> dedicata; una AMD + un'altra GPU -> dedicata.
+#    "Radeon Graphics"/"Vega" da sola -> integrata (nel dubbio si salta).
+#  - Intel "Arc"               -> dedicata (rara); le altre Intel -> integrate.
+function Get-GpuDedicata {
+    try {
+        $gpu = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
+                 Where-Object { $_.Name })
+        if ($gpu.Count -eq 0) { return $null }
+
+        if ($gpu | Where-Object { $_.Name -match 'NVIDIA|GeForce|RTX|GTX' }) { return 'NVIDIA' }
+
+        $amdDed = $gpu | Where-Object { $_.Name -match 'Radeon\s*(RX|Pro)|Radeon\s*R[579]|FirePro' }
+        # AMD affiancata a una GPU di un altro vendor = quasi certamente dedicata.
+        $amdQualsiasi = $gpu | Where-Object { $_.Name -match 'AMD|Radeon' }
+        $nonAmd       = $gpu | Where-Object { $_.Name -notmatch 'AMD|Radeon' }
+        if ($amdDed -or ($amdQualsiasi -and $nonAmd)) { return 'AMD' }
+
+        if ($gpu | Where-Object { $_.Name -match 'Intel.*Arc|Arc\s*A\d' }) { return 'INTEL' }
+
+        return $null   # solo grafica integrata
+    } catch { return $null }
 }
 
 # Trova gli antivirus di PROVA installati leggendo le chiavi di disinstallazione
@@ -2200,27 +2230,60 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 Write-Titolo "Driver (Windows Update)"
 
 Write-Host "Cerca e installa i driver mancanti/aggiornati dal catalogo Windows Update." -ForegroundColor White
-Write-Host "Vendor-neutral: niente tool del produttore. Puo' richiedere qualche minuto" -ForegroundColor White
+Write-Host "Se c'e' una scheda video DEDICATA, uso anche il tool del produttore (Windows" -ForegroundColor White
+Write-Host "Update spesso non ne prende il driver giusto). Puo' richiedere qualche minuto" -ForegroundColor White
 Write-Host "e talvolta un riavvio. Opzionale, ultimo passo." -ForegroundColor White
 Write-Host ""
 
-# GPU NVIDIA: installo l'app NVIDIA (gestisce i driver video meglio della ricerca
-# generica di Windows Update). Provo prima "NVIDIA App" (attuale), poi GeForce
-# Experience come fallback. Va a prescindere dalla scelta su Windows Update.
-if ((Test-GpuNvidia) -and (Confirm-Winget)) {
-    Write-Info "GPU NVIDIA rilevata: installo l'app NVIDIA per i driver..."
-    winget install --exact --id Nvidia.NvidiaApp --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        winget install --exact --id Nvidia.GeForceExperience --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+# DRIVER SCHEDA VIDEO DEDICATA: solo se c'e' una GPU dedicata (non l'integrata),
+# perche' e' li' che Windows Update fa cilecca. Sulle integrate ci pensa Windows
+# Update (sotto) e non installiamo app inutili.
+$gpuDed = Get-GpuDedicata
+switch ($gpuDed) {
+    'NVIDIA' {
+        # App NVIDIA: gestisce i driver video meglio della ricerca generica di WU.
+        # Provo "NVIDIA App" (attuale), poi GeForce Experience come ripiego.
+        if (Confirm-Winget) {
+            Write-Info "Scheda video NVIDIA (dedicata): installo l'app NVIDIA per i driver..."
+            winget install --exact --id Nvidia.NvidiaApp --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                winget install --exact --id Nvidia.GeForceExperience --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
+            }
+            if ($LASTEXITCODE -eq 0) {
+                Write-OK "App NVIDIA installata: APRILA per scaricare i driver piu' recenti."
+                Add-Report "App NVIDIA (driver GeForce): aprire per completare" "OK"
+            } else {
+                Write-Info "App NVIDIA non installata (id/rete): scaricala da nvidia.com/it-it/software/nvidia-app/"
+                Add-Report "App NVIDIA (driver GeForce)" "AVVISO"
+            }
+        }
+        Write-Host ""
     }
-    if ($LASTEXITCODE -eq 0) {
-        Write-OK "App NVIDIA installata: aprila per scaricare i driver piu' recenti."
-        Add-Report "App NVIDIA (driver GeForce)" "OK"
-    } else {
-        Write-Info "App NVIDIA non installata (id/rete): scaricala da nvidia.com/it-it/software/nvidia-app/"
-        Add-Report "App NVIDIA (driver GeForce)" "AVVISO"
+    'INTEL' {
+        # Intel Arc (dedicata): Intel Driver & Support Assistant trova e installa
+        # da solo il driver grafico Intel piu' recente.
+        if (Confirm-Winget) {
+            Write-Info "Scheda video Intel Arc (dedicata): installo Intel Driver & Support Assistant..."
+            Installa-Pacchetto -Nome "Intel Driver e Support Assistant" -WingetId "Intel.IntelDriverAndSupportAssistant"
+            Write-Info "APRI 'Intel Driver & Support Assistant' per scaricare il driver video."
+            Add-Report "Intel DSA (driver video): aprire per completare" "OK"
+        }
+        Write-Host ""
     }
-    Write-Host ""
+    'AMD' {
+        # AMD dedicata: non c'e' un pacchetto winget affidabile per il driver
+        # Adrenalin, quindi apro la pagina AMD di rilevamento automatico (come
+        # per i tool antivirus): l'operatore scarica ed esegue.
+        Write-Info "Scheda video AMD (dedicata): apro la pagina AMD per il driver video."
+        Start-Process "https://www.amd.com/it/support"
+        Write-OK "Browser aperto su amd.com/it/support (auto-rilevamento driver)."
+        Write-Info "Scarica ed esegui 'AMD Software: Adrenalin Edition', poi riavvia se richiesto."
+        Add-Report "AMD (driver video): scaricare da amd.com" "AVVISO"
+        Write-Host ""
+    }
+    default {
+        Write-Info "Nessuna scheda video dedicata rilevata: i driver video li gestisce Windows Update."
+    }
 }
 
 $vuoiDriver = Chiedi "Cercare e installare i driver ora? (S/N, B=indietro)" "S"
