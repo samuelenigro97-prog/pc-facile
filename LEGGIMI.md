@@ -125,16 +125,19 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 
 | Step | Azione |
 |------|--------|
-| —  | **Punto di ripristino** (opzionale, consigliato): rete di sicurezza prima delle modifiche |
-| 0  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
-| 1  | Nome completo del cliente (cambia il "Nome visualizzato" dell'account) |
-| 2  | **Installazione app Office** (Office 365, perpetuo, OpenOffice, LibreOffice via winget): la suite scelta si installa se manca |
-| 3  | **Attivazione**: card con PIN da grattare → riscatto web (`microsoft365.com/setup` per M365, `office.com/setup` per il perpetuo) con l'account Microsoft del cliente, poi accesso in Word |
-| 4  | **Antivirus**: McAfee, Norton, o Salta |
-| 4c | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
-| 5  | Browser: Chrome / Firefox |
-| 6  | App: **profili** BASE / UFFICIO / GAMING / COMPLETO, oppure MANUALE (VLC, Adobe Reader, Spotify, 7-Zip, WhatsApp, Steam, AnyDesk, Discord, Zoom) |
-| —  | **Report finale**: esito reale (OK / ERRORE / SALTATO / AVVISO) di ogni operazione + riavvio |
+| 1  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
+| 2  | Nome completo del cliente (cambia il "Nome visualizzato" dell'account **e** il nome del PC) |
+| 3  | **Punto di ripristino** (opzionale, consigliato): rete di sicurezza prima delle modifiche |
+| 4  | **Account Microsoft**: apre il login/registrazione; genera o annota email + password nel riepilogo |
+| 5  | **App Office**: installa la suite scelta se manca (Office 365, perpetuo, OpenOffice, LibreOffice), poi **attivazione** — card PIN → riscatto web (`microsoft365.com/setup` o `office.com/setup`) + accesso in Word. Crea i collegamenti Office sul Desktop |
+| 6  | **Pulizia e ottimizzazione**: rimuove antivirus di prova, bloatware OEM, promo dal menu Start, disinstalla OneDrive, piccole comodità Windows |
+| 7  | **Antivirus**: McAfee, Norton, o Salta |
+| 8  | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
+| 9  | **Browser** (catalogo winget): Chrome, Firefox, Edge, Brave, Opera, Opera GX, Vivaldi |
+| 10 | **App**: profili BASE / UFFICIO / GAMING / COMPLETO, oppure MANUALE |
+| 11 | **Aggiornamento** di tutte le app installate (`winget upgrade --all`) |
+| 12 | **Driver**: scheda video dedicata (tool del produttore) + driver generici da Windows Update |
+| —  | **Report finale**: verifica finale + chiave BitLocker + file riepilogo sul Desktop + riavvio |
 
 **Profili app (STEP 6):**
 - **BASE** — VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk
@@ -168,6 +171,15 @@ stato installato.
 
 La pulizia toglie anche i **collegamenti promo dal menu Start** (Booking.com,
 "Offerte Adobe", HP Documentation).
+
+**Comodità durante l'uso** (valgono per tutto lo script):
+- **Barra di avanzamento**: durante ogni download/installazione una barra animata
+  con i secondi mostra che sta lavorando (l'output tecnico resta nascosto).
+- **Bip di richiamo**: quando lo script aspetta una tua risposta fa un bip; se non
+  rispondi entro 2 minuti inizia a bipare in modo ricorrente (discreto) finché non
+  riprendi, così te ne accorgi se ti sei allontanato.
+- **Edge senza schermate iniziali** (benvenuto, accesso, import) e senza barra
+  laterale/Copilot, Rewards, assistente acquisti.
 
 Alla fine, se hai cambiato la lingua, lo script **propone il riavvio** (serve per
 applicare display language e schermata di login).
