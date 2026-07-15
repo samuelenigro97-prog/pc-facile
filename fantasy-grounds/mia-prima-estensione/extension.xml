@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!--
+  MANIFEST dell'estensione.
+  Deve stare alla RADICE del file .ext (che è uno ZIP rinominato).
+  Fantasy Grounds legge questo file per sapere nome, versione e quali script caricare.
+-->
+<root version="3.0" release="8|CoreRPG:4">
+	<properties>
+		<name>Mia Prima Estensione</name>
+		<version>1.0</version>
+		<author>Samuele</author>
+		<description>Scheletro di partenza per D&amp;D 5E: si carica, scrive in console e aggiunge i comandi chat /ciao e /combattenti.</description>
+		<!-- Su quale ruleset gira. "5E" = D&D 5a edizione. -->
+		<ruleset>
+			<name>5E</name>
+		</ruleset>
+	</properties>
+
+	<!--
+	  <base> = codice caricato all'avvio della campagna.
+	  Ogni <script> con un "name" diventa un pacchetto globale: FG chiama
+	  automaticamente le sue funzioni onInit() e onClose().
+	-->
+	<base>
+		<script name="MiaEstensione" file="scripts/main.lua"/>
+	</base>
+</root>
