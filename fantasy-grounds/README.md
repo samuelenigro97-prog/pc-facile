@@ -26,6 +26,14 @@ Il linguaggio è **Lua** e si usa l'**API di Fantasy Grounds**: oggetti globali 
 
 ---
 
+## Estensioni in questa cartella
+
+- **`mia-prima-estensione/`** — scheletro di partenza (comandi di prova, esempi di API).
+- **`traduzione-italiano-5e/`** — traduce l'interfaccia di D&D 5E in italiano
+  (vedi il suo `README.md`: spiega come estrarre i nomi delle stringhe dal ruleset).
+
+---
+
 ## Esempio incluso: `mia-prima-estensione/`
 
 Uno **scheletro pronto** da cui partire. Quando lo carichi:

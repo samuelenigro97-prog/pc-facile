@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ============================================================================
+   STRINGHE TRADOTTE IN ITALIANO  ·  ruleset D&D 5E
+  ============================================================================
+
+  Ogni riga <string name="XXX">Testo</string> sovrascrive UNA etichetta
+  dell'interfaccia.
+
+  REGOLA D'ORO:
+    l'attributo  name="..."  deve essere IDENTICO a quello del ruleset
+    originale. Se il nome non esiste, la riga non fa niente (nessun errore,
+    ma nessuna traduzione). I nomi NON si inventano: si estraggono dal
+    ruleset seguendo il README (sezione "Estrarre i nomi delle stringhe").
+
+  Le voci qui sotto sono ESEMPI illustrativi, da verificare/correggere sulla
+  TUA versione di 5E. Servono a mostrarti il formato: sostituisci i "name"
+  con quelli reali che trovi nel ruleset, poi traduci il testo.
+
+  ACCENTI (à è é ì ò ù): questo file è salvato in UTF-8. Se in gioco gli
+  accenti appaiono strani, rileggi la nota "Encoding" nel README.
+  ============================================================================
+-->
+<root>
+	<!-- ESEMPI - verifica i "name" contro il ruleset prima di fidarti -->
+	<string name="library_recordtype_label_spell">Incantesimo</string>
+	<string name="library_recordtype_label_spells">Incantesimi</string>
+	<string name="library_recordtype_label_item">Oggetto</string>
+	<string name="library_recordtype_label_items">Oggetti</string>
+	<string name="char_label_hp">Punti Ferita</string>
+	<string name="char_label_ac">Classe Armatura</string>
+	<string name="char_label_speed">Velocità</string>
+	<string name="char_label_initiative">Iniziativa</string>
+	<string name="char_label_savingthrows">Tiri Salvezza</string>
+	<string name="char_label_skills">Abilità</string>
+	<string name="char_label_proficiency">Competenza</string>
+
+	<!-- Aggiungi qui le altre stringhe man mano che le estrai dal ruleset. -->
+</root>

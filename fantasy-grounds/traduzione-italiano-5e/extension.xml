@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!--
+  MANIFEST dell'estensione di TRADUZIONE per D&D 5E.
+  Deve stare alla RADICE del file .ext (che è uno ZIP rinominato).
+
+  Il meccanismo: <includefile> carica il file delle stringhe tradotte.
+  Poiché le estensioni si caricano DOPO il ruleset, le stringhe con lo stesso
+  "name" SOVRASCRIVONO quelle originali -> l'interfaccia appare in italiano.
+-->
+<root version="3.0" release="8|CoreRPG:4">
+	<properties>
+		<name>Traduzione Italiano - 5E</name>
+		<version>0.1</version>
+		<author>Samuele</author>
+		<description>Traduce in italiano le etichette dell'interfaccia del ruleset D&amp;D 5E. Traduce SOLO i testi dell'interfaccia, non i contenuti dei manuali.</description>
+		<ruleset>
+			<name>5E</name>
+		</ruleset>
+	</properties>
+
+	<base>
+		<!-- Carica il file con le stringhe tradotte in italiano. -->
+		<includefile source="strings/strings_it.xml" />
+	</base>
+</root>
