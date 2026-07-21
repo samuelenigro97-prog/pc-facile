@@ -1,0 +1,12 @@
+# Fine-riga fissi: lo SHA256 di setup-pc.ps1 deve combaciare tra il file nel
+# repo, la copia servita da GitHub raw e quella verificata dalla CI. Senza
+# questo, un checkout con autocrlf cambierebbe i byte e l'hash non tornerebbe.
+*.ps1       text eol=lf
+*.sha256    text eol=lf
+*.sh        text eol=lf
+*.command   text eol=lf
+*.md        text
+*.yml       text eol=lf
+*.psd1      text eol=lf
+# I file batch restano CRLF (formato Windows).
+*.bat       text eol=crlf

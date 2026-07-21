@@ -29,6 +29,13 @@ allineati come flusso e funzioni.
 | Ripresa sessione interrotta | checkpoint JSON in `ProgramData\PCFacile` | —                                             | solo Win |
 | Collegamenti Office Desktop | WScript.Shell dopo installazione Office   | —                                             | solo Win |
 | Icona Desktop per ogni app  | copia lnk da Start / shell:AppsFolder     | —                                             | solo Win |
+| Errori: rete di sicurezza   | `trap` a livello script + lista imprevisti | (`set -e` / trap shell)                       | solo Win (per ora) |
+| Log strutturato             | JSON + CSV in `ProgramData\PCFacile\log`  | — (TODO)                                       | solo Win (per ora) |
+
+## Infrastruttura (a livello di repo, vale per entrambi)
+- **Test Pester** (`tests/`) sulle funzioni pure di `setup-pc.ps1`.
+- **CI GitHub Actions**: sintassi + PSScriptAnalyzer + Pester + verifica SHA256.
+- **SHA256** (`setup-pc.ps1.sha256`) verificato dal `.bat` allo scaricamento.
 
 ## Solo Windows (non esiste su Mac)
 - **Debloat OEM**: macOS non ha crapware del produttore.
