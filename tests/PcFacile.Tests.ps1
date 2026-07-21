@@ -4,34 +4,36 @@
 # setup-pc.ps1 e' un unico file che "gira" dall'alto in basso (menu, controlli
 # admin, installazioni): NON si puo' dot-sourcare per intero senza eseguirlo.
 # Per testare le funzioni PURE senza effetti collaterali, le ESTRAGGO dal file
-# con il parser di PowerShell (AST) e carico in sessione solo quelle. Cosi' i
-# test restano sempre allineati alla vera sorgente, senza duplicare codice.
+# con il parser di PowerShell (AST) e le definisco a scope GLOBALE, cosi' sono
+# visibili in tutti i blocchi It (in Pester v5 lo scope conta). Restano sempre
+# allineate alla vera sorgente, senza duplicare codice.
 # =============================================================================
 
 BeforeAll {
     $script:SetupPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'setup-pc.ps1'
     if (-not (Test-Path $script:SetupPath)) { throw "setup-pc.ps1 non trovato: $script:SetupPath" }
 
-    $tokens = $null; $errors = $null
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:SetupPath, [ref]$tokens, [ref]$errors)
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:SetupPath, [ref]$null, [ref]$null)
 
-    # Carica in sessione SOLO le funzioni indicate (per nome), prese dall'AST.
-    function Import-FunzioniDaSetup {
-        param([string[]]$Nomi)
-        foreach ($nome in $Nomi) {
-            $fn = $ast.FindAll({
-                param($n)
-                $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $nome
-            }, $true) | Select-Object -First 1
-            if (-not $fn) { throw "Funzione '$nome' non trovata in setup-pc.ps1" }
-            . ([ScriptBlock]::Create($fn.Extent.Text))
-        }
-    }
-
-    Import-FunzioniDaSetup -Nomi @(
+    $script:FunzioniTestate = @(
         'New-PasswordCliente', 'New-EmailCliente',
         'Test-NomeSimile', 'Test-LnkJunk', 'Test-Indietro'
     )
+    foreach ($nome in $script:FunzioniTestate) {
+        $fn = $ast.FindAll({
+            param($n)
+            $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $nome
+        }, $true) | Select-Object -First 1
+        if (-not $fn) { throw "Funzione '$nome' non trovata in setup-pc.ps1" }
+        # Definisco la funzione a scope globale: cosi' e' visibile in ogni It.
+        Set-Item -Path "function:global:$nome" -Value $fn.Body.GetScriptBlock()
+    }
+}
+
+AfterAll {
+    foreach ($nome in $script:FunzioniTestate) {
+        Remove-Item -Path "function:global:$nome" -ErrorAction SilentlyContinue
+    }
 }
 
 Describe 'setup-pc.ps1: la sorgente e'' sintatticamente valida' {
