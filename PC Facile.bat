@@ -37,10 +37,14 @@ if %errorlevel% neq 0 (
 
 REM --- Scarico SEMPRE l'ultima versione da GitHub su file temporaneo ---
 REM     (cache-buster sull'URL per evitare copie vecchie della CDN) ---
+REM     Poi VERIFICO l'integrita' con lo SHA256 pubblicato accanto allo script:
+REM     scarico setup-pc.ps1.sha256, calcolo l'hash del file scaricato e li
+REM     confronto. Se non combaciano (download corrotto/troncato) scarto il
+REM     file e uso il fallback offline. Se l'hash non e' disponibile, proseguo.
 echo Scarico l'ultima versione da GitHub...
 set "PS1=%TEMP%\setup-pc.ps1"
 if exist "%PS1%" del "%PS1%" >nul 2>&1
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { irm ('https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1?t=' + (Get-Date -UFormat %%s)) -Headers @{ 'Cache-Control' = 'no-cache' } -OutFile '%PS1%' } catch { Write-Host ('Download fallito: ' + $_) -ForegroundColor Yellow }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $t=(Get-Date -UFormat %%s); $base='https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main'; irm ($base+'/setup-pc.ps1?t='+$t) -Headers @{ 'Cache-Control'='no-cache' } -OutFile '%PS1%'; try { $atteso=(((irm ($base+'/setup-pc.ps1.sha256?t='+$t) -Headers @{ 'Cache-Control'='no-cache' }).Trim()) -split '\s+')[0].ToLower(); $reale=(Get-FileHash '%PS1%' -Algorithm SHA256).Hash.ToLower(); if ($atteso -and $reale -ne $atteso) { Write-Host 'ATTENZIONE: impronta SHA256 non corrisponde: scarto il download.' -ForegroundColor Red; Remove-Item '%PS1%' -Force } else { Write-Host 'Integrita'' verificata (SHA256).' -ForegroundColor Green } } catch { Write-Host 'Verifica SHA256 saltata (impronta non disponibile).' -ForegroundColor Yellow } } catch { Write-Host ('Download fallito: '+$_) -ForegroundColor Yellow }"
 
 REM --- Se il download e' riuscito uso quello (SEMPRE aggiornato) ---
 if exist "%PS1%" (

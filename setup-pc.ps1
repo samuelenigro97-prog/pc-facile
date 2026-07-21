@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "6.8 (2026-07-11)"
+$SCRIPT_VERSION = "6.9 (2026-07-11)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -412,6 +412,37 @@ if ($Veloce -and -not $Test -and -not $Diagnostica) {
 # Run "reale" = Configura (non Test, non Diagnostica): solo qui si creano i
 # file su Desktop (log/report/scheda/batteria), per non sporcare coi controlli.
 $RunReale = (-not $Test -and -not $Diagnostica)
+
+# =============================================================================
+# GESTIONE ERRORI CENTRALIZZATA
+# I singoli passi gestiscono gia' i propri errori "attesi" con try/catch mirati
+# e li scrivono nel Report. Qui aggiungiamo una RETE DI SICUREZZA per gli errori
+# IMPREVISTI (terminanti) che sfuggono: un 'trap' a livello script li raccoglie
+# in una lista, li mostra in modo pulito e PROSEGUE (continue) senza far
+# esplodere tutto. Finiscono anche nel log strutturato, utili all'assistenza.
+# =============================================================================
+$Global:ErroriImprevisti = [System.Collections.ArrayList]::new()
+
+function Register-ErroreImprevisto {
+    param($ErroreRec)
+    try {
+        $info = [ordered]@{
+            Quando  = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+            Messaggio = "$($ErroreRec.Exception.Message)"
+            Comando   = "$($ErroreRec.InvocationInfo.MyCommand)"
+            Riga      = "$($ErroreRec.InvocationInfo.ScriptLineNumber)"
+            Dettaglio = "$($ErroreRec.InvocationInfo.Line)".Trim()
+        }
+        [void]$Global:ErroriImprevisti.Add([pscustomobject]$info)
+    } catch {}
+}
+
+# Trap a livello script: cattura i terminanti non gestiti, li registra e continua.
+trap {
+    Register-ErroreImprevisto $_
+    try { Write-Host "   [!] Imprevisto gestito: $($_.Exception.Message)" -ForegroundColor DarkYellow } catch {}
+    continue
+}
 
 # Credenziali del nuovo account, generate dallo script allo step Account
 # Microsoft e scritte nel riepilogo. Init qui cosi' esistono anche se quel
@@ -2564,6 +2595,14 @@ if ($RunReale) {
         $f += ""
         $f += "  Altro             : $(if ($credAltro) { $credAltro } else { $blank })"
         $f += ""
+        if ($Global:ErroriImprevisti.Count -gt 0) {
+            $f += $sep
+            $f += "IMPREVISTI GESTITI ($($Global:ErroriImprevisti.Count)) - dettaglio nel log tecnico"
+            $f += $sep
+            foreach ($e in $Global:ErroriImprevisti) { $f += "  [riga $($e.Riga)] $($e.Messaggio)" }
+            $f += ""
+        }
+
         $f += $sep
         $f += "DETTAGLI TECNICI (per l'assistenza, se il PC torna in negozio)"
         $f += $sep
@@ -2583,6 +2622,43 @@ if ($RunReale) {
         $riepFile = Join-Path (Get-DesktopDir) ("$nomeFile.txt")
         $f | Set-Content -Path $riepFile -Encoding UTF8
         Write-OK "Riepilogo salvato sul Desktop: $riepFile"
+
+        # ---------------------------------------------------------------------
+        # LOG STRUTTURATO (JSON + CSV) per l'assistenza/statistiche. NON sul
+        # Desktop (non e' roba per il cliente): va in ProgramData\PCFacile\log.
+        # Il JSON contiene tutto (sistema, esiti, verifica, errori imprevisti);
+        # il CSV e' la tabella piatta degli esiti, comoda da aprire in Excel.
+        # NIENTE credenziali nel log: restano solo nel .txt del cliente.
+        # ---------------------------------------------------------------------
+        try {
+            $logDir = Join-Path $env:ProgramData "PCFacile\log"
+            if (-not (Test-Path $logDir)) { New-Item -Path $logDir -ItemType Directory -Force | Out-Null }
+            $stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
+            $baseLog = Join-Path $logDir ("setup_{0}_{1}" -f $env:COMPUTERNAME, $stamp)
+
+            $logObj = [ordered]@{
+                versioneTool = $SCRIPT_VERSION
+                data         = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+                cliente      = "$nomeCliente"
+                nomePc       = "$env:COMPUTERNAME"
+                utente       = "$env:USERNAME"
+                sistema      = if ($osInfo) { "$($osInfo.Caption) build $($osInfo.BuildNumber)" } else { 'n/d' }
+                powershell   = "$($PSVersionTable.PSVersion)"
+                winget       = "$wgVer"
+                windowsAttivato = [bool]$winOk
+                risoluzione  = "$resTxt"
+                antivirus    = "$avTxt"
+                esiti        = @($Report | ForEach-Object { [ordered]@{ voce = $_.Voce; esito = $_.Esito } })
+                verificaFinale = @($verifica | ForEach-Object { [ordered]@{ voce = $_.N; ok = [bool]$_.Ok } })
+                erroriImprevisti = @($Global:ErroriImprevisti)
+            }
+            $logObj | ConvertTo-Json -Depth 6 | Set-Content -Path "$baseLog.json" -Encoding UTF8
+            $Report | Select-Object @{N='voce';E={$_.Voce}}, @{N='esito';E={$_.Esito}} |
+                Export-Csv -Path "$baseLog.csv" -NoTypeInformation -Encoding UTF8
+            Write-OK "Log tecnico salvato: $baseLog.json / .csv"
+        } catch {
+            Write-Info "Log strutturato non salvato: $_"
+        }
     } catch {
         Write-Info "Impossibile creare il file riepilogo: $_"
     }
@@ -2602,11 +2678,10 @@ if ($RunReale) {
         Remove-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction SilentlyContinue
     } catch {}
     # Lavoro COMPLETATO: via il checkpoint di ripresa sessione (contiene anche
-    # le credenziali generate: non deve restare sul PC del cliente).
-    try {
-        Remove-Item $Global:StatoFile -Force -ErrorAction SilentlyContinue
-        Remove-Item (Split-Path $Global:StatoFile) -Force -ErrorAction SilentlyContinue
-    } catch {}
+    # le credenziali generate: non deve restare sul PC del cliente). La cartella
+    # ProgramData\PCFacile resta perche' contiene i log tecnici (senza
+    # credenziali): li teniamo per l'assistenza.
+    try { Remove-Item $Global:StatoFile -Force -ErrorAction SilentlyContinue } catch {}
     $ioStesso = $MyInvocation.MyCommand.Path
     if ($ioStesso -and $ioStesso -like "$env:TEMP\*") {
         # Il file .ps1 in esecuzione NON e' bloccato: lo rimuovo ora, lo script
