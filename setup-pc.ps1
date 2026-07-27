@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "6.9 (2026-07-11)"
+$SCRIPT_VERSION = "7.0 (2026-07-11)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -896,7 +896,12 @@ function Invoke-WingetConBarra {
         $p = Start-Process -FilePath $wg -ArgumentList $WingetArgs -PassThru -NoNewWindow `
              -RedirectStandardOutput $out -RedirectStandardError $err -ErrorAction Stop
         Show-BarraAttesa -Testo "Scarico e installo $Nome" -Processo $p
+        # WaitForExit assicura che ExitCode sia popolato (con Start-Process su un
+        # alias a volte torna $null): in quel caso non fidarsi, lasciar decidere
+        # alla verifica 'winget list' del chiamante (codice fittizio -999).
+        try { $p.WaitForExit() } catch {}
         $code = $p.ExitCode
+        if ($null -eq $code) { $code = -999 }
     } catch {
         # Ripiego: nessuna barra, ma l'installazione parte comunque.
         & $wg @WingetArgs *> $null
@@ -1017,11 +1022,17 @@ function Installa-Pacchetto {
         # Nascondo l'output tecnico di winget (hash, licenze, progressi): confonde.
         # Al suo posto una barra animata di attesa, cosi' si vede che sta lavorando.
         $codeInstall = Invoke-WingetConBarra -Nome $Nome -WingetArgs (@('install', '--exact', '--id', $WingetId) + $sorgente + @('--silent', '--accept-package-agreements', '--accept-source-agreements'))
-        if ($successo -contains $codeInstall) {
-            if ($codeInstall -eq 0) {
-                Write-OK "$Nome installato."
-            } else {
+        # VERIFICA REALE: chiedo a winget se ORA il pacchetto e' presente. E' piu'
+        # affidabile del solo exit code: con la barra (Start-Process su un alias di
+        # sistema) il codice a volte torna sballato e segnava ERRORE un programma
+        # che in realta' era stato installato. Se c'e', e' OK a prescindere.
+        winget list --exact --id $WingetId @sorgente --accept-source-agreements 2>$null | Out-Null
+        $presenteOra = ($LASTEXITCODE -eq 0)
+        if (($successo -contains $codeInstall) -or $presenteOra) {
+            if ($codeInstall -eq 3010 -or $codeInstall -eq 1641) {
                 Write-OK "$Nome installato (richiede riavvio)."
+            } else {
+                Write-OK "$Nome installato."
             }
             Add-Report "$Nome (installazione)" "OK"
             Add-IconaDesktop -Nome $Nome
@@ -1579,6 +1590,7 @@ switch ($sceltaAtt) {
         # in quel caso non si tocca nulla e si passa subito all'attivazione.
         if (Get-OsppPath) {
             Write-OK "Office gia' installato su questo PC."
+            Add-Report "Microsoft Office (installazione)" "OK"
         } elseif (Confirm-Winget) {
             Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
         } else {
@@ -1605,6 +1617,7 @@ switch ($sceltaAtt) {
         # cambia solo la licenza. Se e' gia' presente non si tocca nulla.
         if (Get-OsppPath) {
             Write-OK "Office gia' installato su questo PC."
+            Add-Report "Microsoft Office (installazione)" "OK"
         } elseif (Confirm-Winget) {
             Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
         } else {
@@ -2451,6 +2464,14 @@ if ($RunReale) {
     # Le credenziali del nuovo account le ha GENERATE lo script allo step Account
     # Microsoft ($credMsAccount / $credMsPassword). Se quel passo e' stato saltato
     # restano vuote. Niente domande all'operatore, niente password dal browser.
+    #
+    # RETE DI SICUREZZA sulla PASSWORD: nel file non deve MAI mancare. Se per
+    # qualsiasi motivo e' vuota (passo saltato, account gia' esistente senza
+    # password digitata) ma conosco il nome cliente, la imposto al formato
+    # standard "Nome123!" (prima lettera maiuscola) - la stessa che si usa in
+    # negozio. Idem per l'email suggerita se manca del tutto.
+    if (-not $credMsPassword -and $nomeCliente) { $credMsPassword = New-PasswordCliente -Base $nomeCliente }
+    if (-not $credMsAccount  -and $nomeCliente) { $credMsAccount  = New-EmailCliente   -Base $nomeCliente }
     try {
         $winOk   = @($Report | Where-Object { $_.Voce -eq 'Windows attivato' -and $_.Esito -eq 'OK' }).Count -gt 0
         $diskBad = @($Report | Where-Object { $_.Voce -eq 'Salute disco' -and $_.Esito -eq 'ERRORE' }).Count -gt 0
