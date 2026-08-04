@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "7.0 (2026-07-11)"
+$SCRIPT_VERSION = "7.1 (2026-08-04)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -160,6 +160,45 @@ function Stop-BipRipetuto {
     if ($Global:BipPS) {
         try { $Global:BipPS.Stop(); $Global:BipPS.Dispose() } catch {}
         $Global:BipPS = $null
+    }
+}
+
+# BARRA ANIMATA GENERICA per le operazioni lunghe che NON sono installazioni
+# winget (lingua, punto di ripristino, driver, pulizia...). Quelle bloccano il
+# thread principale e non hanno un processo da "agganciare", percio' l'animazione
+# gira in un RUNSPACE separato (.NET gestito, niente P/Invoke) che disegna una
+# barra "a spola" col tempo trascorso, mentre l'operazione vera lavora nel thread
+# principale (cosi' variabili ed effetti restano intatti). Uso:
+#   Start-BarraAnimata "Testo"; <operazione bloccante>; Stop-BarraAnimata
+$Global:BarraPS = $null
+function Start-BarraAnimata {
+    param([string]$Testo)
+    if (-not $RunReale) { return }
+    Stop-BarraAnimata
+    try {
+        $ps = [PowerShell]::Create()
+        [void]$ps.AddScript({
+            param($testo, $full, $empty, $aon, $aoff)
+            $larg = 22; $span = 4; $period = ($larg - $span) * 2; $inizio = Get-Date; $i = 0
+            while ($true) {
+                $phase = $i % $period
+                $pos = if ($phase -le ($larg - $span)) { $phase } else { $period - $phase }
+                $barra = ($empty * $pos) + ($full * $span) + ($empty * ($larg - $span - $pos))
+                $sec = [int]((Get-Date) - $inizio).TotalSeconds
+                $riga = "   $testo  [$barra]  ${sec}s"
+                try { if ($aon) { [Console]::Write("`r$aon$riga$aoff") } else { [Console]::Write("`r$riga") } } catch {}
+                Start-Sleep -Milliseconds 120; $i++
+            }
+        }).AddArgument($Testo).AddArgument([string]$BOX_FULL).AddArgument([string]$BOX_EMPTY).AddArgument($AON).AddArgument($AOFF)
+        [void]$ps.BeginInvoke()
+        $Global:BarraPS = $ps
+    } catch { $Global:BarraPS = $null }
+}
+function Stop-BarraAnimata {
+    if ($Global:BarraPS) {
+        try { $Global:BarraPS.Stop(); $Global:BarraPS.Dispose() } catch {}
+        $Global:BarraPS = $null
+        try { [Console]::Write("`r" + (' ' * 72) + "`r") } catch {}
     }
 }
 
@@ -798,13 +837,14 @@ function Repair-WingetSources {
     if ($Global:WingetRiparato -and -not $Forza) { return }
     $Global:WingetRiparato = $true
     Write-Info "Riparazione sorgenti winget (reset + update)..."
+    Start-BarraAnimata "Riparo le sorgenti winget"
     try {
         winget source reset --force 2>&1 | Out-Null
         winget source update 2>&1 | Out-Null
         Write-OK "Sorgenti winget ripristinate."
     } catch {
         Write-Info "Riparazione sorgenti non riuscita: $_"
-    }
+    } finally { Stop-BarraAnimata }
 }
 
 function Confirm-Winget {
@@ -1274,13 +1314,16 @@ if ($impostaLingua -match "^[Ss]") {
     if (Get-Command Install-Language -ErrorAction SilentlyContinue) {
         try {
             Write-Info "Installazione/applicazione language pack it-IT (qualche minuto, serve Internet)..."
+            Start-BarraAnimata "Installo la lingua italiana"
             try {
-                # Modo moderno e affidabile
-                Install-Language it-IT -CopyToSettings -ErrorAction Stop | Out-Null
-            } catch {
-                # -CopyToSettings non c'e' su tutte le build: fallback senza flag
-                Install-Language it-IT -ErrorAction Stop | Out-Null
-            }
+                try {
+                    # Modo moderno e affidabile
+                    Install-Language it-IT -CopyToSettings -ErrorAction Stop | Out-Null
+                } catch {
+                    # -CopyToSettings non c'e' su tutte le build: fallback senza flag
+                    Install-Language it-IT -ErrorAction Stop | Out-Null
+                }
+            } finally { Stop-BarraAnimata }
             $packOk = ((Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId -contains "it-IT")
         } catch {
             Write-Errore "Language pack it-IT NON installato (Internet assente o bloccato)."
@@ -1441,7 +1484,9 @@ if ($vuoiRestore -match "^[Ss]") {
         New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" `
             -Name "SystemRestorePointCreationFrequency" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
         Write-Info "Creazione punto di ripristino (puo' richiedere un minuto)..."
-        Checkpoint-Computer -Description "Prima di setup-pc" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop
+        Start-BarraAnimata "Creo il punto di ripristino"
+        try { Checkpoint-Computer -Description "Prima di setup-pc" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop }
+        finally { Stop-BarraAnimata }
         Write-OK "Punto di ripristino creato."
         Add-Report "Punto di ripristino" "OK"
     } catch {
@@ -1916,6 +1961,7 @@ $bloatwareAppx = @(
     # versione Store (Appx) e il provisioning (i nuovi utenti non lo riavranno).
     try {
         Write-Info "Disinstallazione OneDrive..."
+        Start-BarraAnimata "Disinstallo OneDrive"
         taskkill /f /im OneDrive.exe 2>$null | Out-Null
         $odSetup = @("$env:SystemRoot\SysWOW64\OneDriveSetup.exe", "$env:SystemRoot\System32\OneDriveSetup.exe") |
             Where-Object { Test-Path $_ } | Select-Object -First 1
@@ -1936,7 +1982,7 @@ $bloatwareAppx = @(
     } catch {
         Write-Info "Rimozione OneDrive non riuscita: $_"
         Add-Report "Rimozione OneDrive" "AVVISO"
-    }
+    } finally { Stop-BarraAnimata }
 
     Write-OK "Pulizia e ottimizzazione iniziale completata."
 } else {
@@ -2335,10 +2381,13 @@ if (Test-Indietro $vuoiDriver) { $passo = [Math]::Max(3, $passo - 1); continue w
 if ($vuoiDriver -match "^[Ss]") {
     try {
         Write-Info "Ricerca driver su Windows Update (puo' richiedere qualche minuto)..."
-        $sess = New-Object -ComObject Microsoft.Update.Session
-        $searcher = $sess.CreateUpdateSearcher()
-        # Solo aggiornamenti di tipo driver non ancora installati
-        $result = $searcher.Search("Type='Driver' and IsInstalled=0")
+        Start-BarraAnimata "Cerco i driver su Windows Update"
+        try {
+            $sess = New-Object -ComObject Microsoft.Update.Session
+            $searcher = $sess.CreateUpdateSearcher()
+            # Solo aggiornamenti di tipo driver non ancora installati
+            $result = $searcher.Search("Type='Driver' and IsInstalled=0")
+        } finally { Stop-BarraAnimata }
         if ($result.Updates.Count -eq 0) {
             Write-OK "Nessun driver da installare: risultano gia' tutti aggiornati."
             Add-Report "Driver (Windows Update)" "OK"
@@ -2349,13 +2398,19 @@ if ($vuoiDriver -match "^[Ss]") {
                 $daInstallare.Add($u) | Out-Null
             }
             Write-Info "Download driver..."
-            $downloader = $sess.CreateUpdateDownloader()
-            $downloader.Updates = $daInstallare
-            $downloader.Download() | Out-Null
+            Start-BarraAnimata "Scarico i driver"
+            try {
+                $downloader = $sess.CreateUpdateDownloader()
+                $downloader.Updates = $daInstallare
+                $downloader.Download() | Out-Null
+            } finally { Stop-BarraAnimata }
             Write-Info "Installazione driver..."
-            $installer = $sess.CreateUpdateInstaller()
-            $installer.Updates = $daInstallare
-            $esito = $installer.Install()
+            Start-BarraAnimata "Installo i driver"
+            try {
+                $installer = $sess.CreateUpdateInstaller()
+                $installer.Updates = $daInstallare
+                $esito = $installer.Install()
+            } finally { Stop-BarraAnimata }
             if ($esito.ResultCode -eq 2) {
                 Write-OK "Driver installati ($($daInstallare.Count))."
                 Add-Report "Driver installati ($($daInstallare.Count))" "OK"
