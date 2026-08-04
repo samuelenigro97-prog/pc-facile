@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "7.1 (2026-08-04)"
+$SCRIPT_VERSION = "7.2 (2026-08-04)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -493,8 +493,9 @@ $credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
 # antivirus), al lancio successivo riparte da dove era arrivato. Dopo ogni
 # passo completato lo stato (numero passo + nome cliente + credenziali
 # generate) finisce in un file JSON in ProgramData, ELIMINATO a fine lavoro.
-# Fasi: 1=Lingua 2=Nome 3=Ripristino 4=Account 5=Office 6=Pulizia,
-# 7..12 = passi wizard 3..8 (Antivirus..Driver). Solo nel run reale.
+# Fasi: 1=Nome 2=Account 3=Lingua 4=Ripristino 5=Office 6=Pulizia,
+# 7..12 = passi wizard 3..8 (Unieuro, Browser, App, Aggiornamento, Driver,
+# Antivirus). Solo nel run reale.
 # =============================================================================
 $Global:StatoFile   = Join-Path $env:ProgramData "PCFacile\stato.json"
 $Global:FaseRipresa = 0
@@ -548,7 +549,6 @@ $CatalogoApp = @(
     @{ Nome = "Steam";                Id = "Valve.Steam";                  Profili = @("GAMING") },
     @{ Nome = "Epic Games Launcher";  Id = "EpicGames.EpicGamesLauncher";  Profili = @("GAMING") },
     @{ Nome = "AnyDesk";              Id = "AnyDesk.AnyDesk";              Profili = @("BASE","UFFICIO","GAMING") },
-    @{ Nome = "TeamViewer";           Id = "TeamViewer.TeamViewer";        Profili = @("BASE","UFFICIO","GAMING") },
     @{ Nome = "qBittorrent";          Id = "qBittorrent.qBittorrent";      Profili = @("GAMING") },
     @{ Nome = "Discord";              Id = "Discord.Discord";              Profili = @("GAMING") },
     @{ Nome = "Zoom";                 Id = "Zoom.Zoom";                    Profili = @("UFFICIO") }
@@ -985,20 +985,51 @@ function Get-StartMenuLnks {
     return $res
 }
 
-# Crea sul Desktop l'icona dell'app appena installata. 1) prova a copiare il
-# collegamento vero dal menu Start (icona corretta); 2) se e' un'app dello Store
-# (MSIX, niente .lnk) ripiega su Get-StartApps + shell:AppsFolder. Salta se
-# un'icona simile e' gia' sul Desktop (niente doppioni).
+# Crea sul Desktop l'icona dell'app APPENA installata, cosi' il cliente la vede
+# comparire man mano. Strategia in ordine di affidabilita':
+#  0) DIFF prima/dopo: se mi passi $LnkPrima (i collegamenti del menu Start PRIMA
+#     dell'installazione), copio i collegamenti NUOVI comparsi = esattamente
+#     quelli creati da QUESTA app (niente indovinelli sui nomi);
+#  1) altrimenti cerco nel menu Start un collegamento che somiglia al nome;
+#  2) app dello Store (MSIX, niente .lnk) -> Get-StartApps + shell:AppsFolder.
+# Salta i doppioni. Un breve retry copre il caso in cui il collegamento non e'
+# ancora stato scritto subito dopo la fine di winget.
 function Add-IconaDesktop {
-    param([string]$Nome)
+    param([string]$Nome, [string[]]$LnkPrima = @())
     if (-not $RunReale) { return }
     try {
         $desktop = Get-DesktopDir
+
+        # 0) DIFF: collegamenti NUOVI creati dall'installazione (max ~4s di attesa).
+        if ($LnkPrima -and $LnkPrima.Count -ge 0) {
+            $nuovi = @()
+            for ($t = 0; $t -lt 4; $t++) {
+                $nuovi = @(Get-StartMenuLnks | Where-Object {
+                    ($LnkPrima -notcontains $_.FullName) -and -not (Test-LnkJunk $_.BaseName)
+                })
+                if ($nuovi.Count -gt 0) { break }
+                Start-Sleep -Seconds 1
+            }
+            if ($nuovi.Count -gt 0) {
+                # Preferisci quelli che somigliano al nome; se nessuno, prendi il piu'
+                # "principale" (nome piu' corto). Copio UN collegamento per app.
+                $match = @($nuovi | Where-Object { Test-NomeSimile $_.BaseName $Nome })
+                $scelto = if ($match.Count -gt 0) { $match | Sort-Object { $_.BaseName.Length } | Select-Object -First 1 }
+                          else { $nuovi | Sort-Object { $_.BaseName.Length } | Select-Object -First 1 }
+                if ($scelto) {
+                    $dest = Join-Path $desktop $scelto.Name
+                    if (-not (Test-Path $dest)) { Copy-Item -Path $scelto.FullName -Destination $dest -Force -ErrorAction SilentlyContinue }
+                    return
+                }
+            }
+        }
+
+        # Gia' un'icona simile sul Desktop? niente doppioni.
         $gia = Get-ChildItem -Path $desktop -Filter *.lnk -ErrorAction SilentlyContinue |
             Where-Object { Test-NomeSimile $_.BaseName $Nome } | Select-Object -First 1
         if ($gia) { return }
 
-        # 1) Menu Start: collegamento Win32 con l'icona vera dell'app.
+        # 1) Menu Start: collegamento Win32 con l'icona vera dell'app (per nome).
         $cand = Get-StartMenuLnks |
             Where-Object { -not (Test-LnkJunk $_.BaseName) -and (Test-NomeSimile $_.BaseName $Nome) } |
             Sort-Object { $_.BaseName.Length } | Select-Object -First 1
@@ -1048,6 +1079,10 @@ function Installa-Pacchetto {
         return
     }
 
+    # Fotografo i collegamenti del menu Start PRIMA dell'installazione: dopo, la
+    # differenza sono quelli creati da quest'app -> li copio sul Desktop.
+    $lnkPrima = @(Get-StartMenuLnks | ForEach-Object { $_.FullName })
+
     # Codici che indicano successo (0) o successo con riavvio richiesto (3010/1641)
     $successo = @(0, 3010, 1641)
     # Errori di integrita'/certificato/sorgente: si risolvono riparando le sorgenti
@@ -1075,7 +1110,7 @@ function Installa-Pacchetto {
                 Write-OK "$Nome installato."
             }
             Add-Report "$Nome (installazione)" "OK"
-            Add-IconaDesktop -Nome $Nome
+            Add-IconaDesktop -Nome $Nome -LnkPrima $lnkPrima
             return
         }
 
@@ -1279,10 +1314,139 @@ if ($RunReale) {
 }
 
 # =============================================================================
-# LINGUA E REGIONE (ITALIANO) - primo passo
+# NOME CLIENTE E PC (PRIMO passo: serve subito, e il nome genera le credenziali
+# suggerite per l'account Microsoft del passo successivo).
 # =============================================================================
 
-if (Test-FaseFatta 1) { Write-Info "Lingua e regione: gia' fatto nella sessione precedente, salto." }
+if (Test-FaseFatta 1) { Write-Info "Nome cliente e PC: gia' fatto nella sessione precedente, salto." }
+else {
+
+Write-Titolo "Nome Cliente e PC"
+
+# Legge il nome visualizzato attuale: prima LocalAccounts, poi ADSI (che
+# funziona anche in PowerShell x86, dove il modulo LocalAccounts non c'e').
+$adsiUser = 'WinNT://./' + $env:USERNAME + ',user'
+$nomeAttuale = $null
+try {
+    $nomeAttuale = (Get-LocalUser -Name $env:USERNAME -ErrorAction Stop).FullName
+} catch {
+    try { $nomeAttuale = ([ADSI]$adsiUser).FullName } catch {}
+}
+Write-Info "Utente corrente: $env:USERNAME"
+Write-Info "Nome visualizzato attuale: $(if ($nomeAttuale) { $nomeAttuale } else { '(non impostato)' })"
+Write-Host ""
+Write-Info "Nome PC attuale: $env:COMPUTERNAME"
+Write-Host ""
+$nomeCliente = (Attendi-Risposta "Nome del cliente (account E nome PC) - INVIO per saltare").Trim()
+
+if ($nomeCliente -ne "") {
+    $nomeOk = $false
+    # 1) Metodo moderno (modulo LocalAccounts, disponibile solo in PowerShell 64-bit)
+    try {
+        Set-LocalUser -Name $env:USERNAME -FullName $nomeCliente -ErrorAction Stop
+        $nomeOk = $true
+    } catch {
+        # 2) Fallback ADSI/WinNT: funziona anche in x86 e senza il modulo LocalAccounts
+        try {
+            $u = [ADSI]$adsiUser
+            $u.FullName = $nomeCliente
+            $u.SetInfo()
+            $nomeOk = $true
+        } catch {}
+    }
+    if ($nomeOk) {
+        Write-OK "Nome account aggiornato a: $nomeCliente"
+        Add-Report "Nome cliente" "OK"
+    } else {
+        Write-Errore "Impossibile aggiornare il nome visualizzato dell'account $env:USERNAME."
+        Add-Report "Nome cliente" "ERRORE"
+    }
+
+    # Stesso nome anche per il PC (hostname): solo A-Z 0-9 e trattino, max 15 char.
+    $pcNuovo = ($nomeCliente -replace '[^A-Za-z0-9-]', '')
+    if ($pcNuovo.Length -gt 15) { $pcNuovo = $pcNuovo.Substring(0, 15) }
+    if ($pcNuovo -ne "" -and $pcNuovo -ne $env:COMPUTERNAME) {
+        try {
+            Rename-Computer -NewName $pcNuovo -Force -ErrorAction Stop
+            Write-OK "PC rinominato in '$pcNuovo' (attivo dopo il riavvio)."
+            Add-Report "Rinomina PC ($pcNuovo)" "OK"
+        } catch {
+            Write-Errore "Impossibile rinominare il PC: $_"
+            Add-Report "Rinomina PC" "ERRORE"
+        }
+    }
+} else {
+    Write-Info "Nome non modificato (account e PC invariati)."
+    Add-Report "Nome cliente" "SALTATO"
+}
+
+Save-Fase 1 "Nome cliente e PC"
+}
+
+# (nessuna pausa: si avanza da solo)
+
+# =============================================================================
+# ACCOUNT MICROSOFT (SECONDO passo: crealo/accedi ORA col cliente davanti, cosi'
+# dopo Office e antivirus fanno 'Accedi con Microsoft' senza altri OTP).
+# =============================================================================
+
+if (Test-FaseFatta 2) { Write-Info "Account Microsoft: gia' fatto nella sessione precedente, salto." }
+else {
+
+Write-Titolo "Account Microsoft"
+
+Write-Host "Accedi (o crea) l'account Microsoft ORA: la sessione resta attiva nel" -ForegroundColor White
+Write-Host "browser, cosi' dopo su Office e antivirus fai 'Accedi con Microsoft' al volo." -ForegroundColor White
+Write-Host ""
+
+$vuoiMs = Chiedi "Aprire il login account Microsoft ora? (S/N)" "S"
+if ($vuoiMs -match "^[Ss]") {
+    Start-Process "https://account.microsoft.com"
+    Write-OK "Aperto account.microsoft.com nel browser."
+
+    # Credenziali per il riepilogo. Due casi:
+    #  - il cliente ha GIA' una sua email/password che usa -> le inserisci tu
+    #    (le detta lui) e finiscono nel riepilogo;
+    #  - account NUOVO -> le genera lo script (email + Nome123!).
+    # In entrambi i casi niente lette dal browser. Questa domanda resta anche in
+    # Veloce perche' cambia da cliente a cliente.
+    if ($RunReale) {
+        $haAccount = Attendi-Risposta "Il cliente ha GIA' una sua email/password che usa? (S = le inserisco io / N = ne genero una nuova)"
+        if ($haAccount -match "^[Ss]") {
+            $credMsAccount  = (Attendi-Risposta "  Email del cliente").Trim()
+            $credMsPassword = (Attendi-Risposta "  Password del cliente").Trim()
+            Write-OK "Uso le credenziali del cliente (finiscono nel riepilogo)."
+        } else {
+            $credMsAccount  = New-EmailCliente -Base $nomeCliente
+            $credMsPassword = New-PasswordCliente -Base $nomeCliente
+            Write-Host ""
+            Write-Host "  Credenziali SUGGERITE per il nuovo account (gia' nel riepilogo):" -ForegroundColor White
+            Write-Info  "Email suggerita : $credMsAccount"
+            Write-Info  "Password        : $credMsPassword"
+            Write-Host "  Se in registrazione ne usi altre, correggi il file." -ForegroundColor Gray
+        }
+        # In tutti e due i casi copio la password negli appunti (Ctrl+V veloce).
+        if ($credMsPassword) { try { Set-Clipboard -Value $credMsPassword; Write-Info "Password copiata negli appunti." } catch {} }
+        Write-Host ""
+    }
+
+    Write-Info "Accedi o crea l'account, poi torna qui. Usa lo stesso browser per i login dopo."
+    Add-Report "Account Microsoft" "OK"
+} else {
+    Write-Info "Account Microsoft saltato."
+    Add-Report "Account Microsoft" "SALTATO"
+}
+
+if ($vuoiMs -match "^[Ss]") { Pausa }
+
+Save-Fase 2 "Account Microsoft"
+}
+
+# =============================================================================
+# LINGUA E REGIONE (ITALIANO)
+# =============================================================================
+
+if (Test-FaseFatta 3) { Write-Info "Lingua e regione: gia' fatto nella sessione precedente, salto." }
 else {
 
 Write-Titolo "Lingua e Regione (Italiano)"
@@ -1387,88 +1551,16 @@ if ($impostaLingua -match "^[Ss]") {
     Add-Report "Lingua italiana (it-IT)" "SALTATO"
 }
 
-Save-Fase 1 "Lingua e regione"
+Save-Fase 3 "Lingua e regione"
 }
 
 # (nessuna pausa: si avanza da solo, come nel wizard)
 
 # =============================================================================
-# NOME CLIENTE E PC (prima voce dopo la lingua: la prima cosa da impostare)
-# Un solo nome: vale sia per l'account Windows sia per il nome del PC.
-# =============================================================================
-
-if (Test-FaseFatta 2) { Write-Info "Nome cliente e PC: gia' fatto nella sessione precedente, salto." }
-else {
-
-Write-Titolo "Nome Cliente e PC"
-
-# Legge il nome visualizzato attuale: prima LocalAccounts, poi ADSI (che
-# funziona anche in PowerShell x86, dove il modulo LocalAccounts non c'e').
-$adsiUser = 'WinNT://./' + $env:USERNAME + ',user'
-$nomeAttuale = $null
-try {
-    $nomeAttuale = (Get-LocalUser -Name $env:USERNAME -ErrorAction Stop).FullName
-} catch {
-    try { $nomeAttuale = ([ADSI]$adsiUser).FullName } catch {}
-}
-Write-Info "Utente corrente: $env:USERNAME"
-Write-Info "Nome visualizzato attuale: $(if ($nomeAttuale) { $nomeAttuale } else { '(non impostato)' })"
-Write-Host ""
-Write-Info "Nome PC attuale: $env:COMPUTERNAME"
-Write-Host ""
-$nomeCliente = (Attendi-Risposta "Nome del cliente (account E nome PC) - INVIO per saltare").Trim()
-
-if ($nomeCliente -ne "") {
-    $nomeOk = $false
-    # 1) Metodo moderno (modulo LocalAccounts, disponibile solo in PowerShell 64-bit)
-    try {
-        Set-LocalUser -Name $env:USERNAME -FullName $nomeCliente -ErrorAction Stop
-        $nomeOk = $true
-    } catch {
-        # 2) Fallback ADSI/WinNT: funziona anche in x86 e senza il modulo LocalAccounts
-        try {
-            $u = [ADSI]$adsiUser
-            $u.FullName = $nomeCliente
-            $u.SetInfo()
-            $nomeOk = $true
-        } catch {}
-    }
-    if ($nomeOk) {
-        Write-OK "Nome account aggiornato a: $nomeCliente"
-        Add-Report "Nome cliente" "OK"
-    } else {
-        Write-Errore "Impossibile aggiornare il nome visualizzato dell'account $env:USERNAME."
-        Add-Report "Nome cliente" "ERRORE"
-    }
-
-    # Stesso nome anche per il PC (hostname): solo A-Z 0-9 e trattino, max 15 char.
-    $pcNuovo = ($nomeCliente -replace '[^A-Za-z0-9-]', '')
-    if ($pcNuovo.Length -gt 15) { $pcNuovo = $pcNuovo.Substring(0, 15) }
-    if ($pcNuovo -ne "" -and $pcNuovo -ne $env:COMPUTERNAME) {
-        try {
-            Rename-Computer -NewName $pcNuovo -Force -ErrorAction Stop
-            Write-OK "PC rinominato in '$pcNuovo' (attivo dopo il riavvio)."
-            Add-Report "Rinomina PC ($pcNuovo)" "OK"
-        } catch {
-            Write-Errore "Impossibile rinominare il PC: $_"
-            Add-Report "Rinomina PC" "ERRORE"
-        }
-    }
-} else {
-    Write-Info "Nome non modificato (account e PC invariati)."
-    Add-Report "Nome cliente" "SALTATO"
-}
-
-Save-Fase 2 "Nome cliente e PC"
-}
-
-# (nessuna pausa: si avanza da solo)
-
-# =============================================================================
 # PUNTO DI RIPRISTINO (rete di sicurezza prima delle modifiche)
 # =============================================================================
 
-if (Test-FaseFatta 3) { Write-Info "Punto di ripristino: gia' fatto nella sessione precedente, salto." }
+if (Test-FaseFatta 4) { Write-Info "Punto di ripristino: gia' fatto nella sessione precedente, salto." }
 else {
 
 Write-Titolo "Punto di Ripristino"
@@ -1498,70 +1590,15 @@ if ($vuoiRestore -match "^[Ss]") {
     Add-Report "Punto di ripristino" "SALTATO"
 }
 
-Save-Fase 3 "Punto di ripristino"
+Save-Fase 4 "Punto di ripristino"
 }
 
 # (nessuna pausa: si avanza da solo)
 
 # =============================================================================
-# ACCOUNT MICROSOFT (accedi/crea presto: velocizza Office e antivirus dopo)
-# =============================================================================
-
-if (Test-FaseFatta 4) { Write-Info "Account Microsoft: gia' fatto nella sessione precedente, salto." }
-else {
-
-Write-Titolo "Account Microsoft"
-
-Write-Host "Accedi (o crea) l'account Microsoft ORA: la sessione resta attiva nel" -ForegroundColor White
-Write-Host "browser, cosi' dopo su Office e antivirus fai 'Accedi con Microsoft' al volo." -ForegroundColor White
-Write-Host ""
-
-$vuoiMs = Chiedi "Aprire il login account Microsoft ora? (S/N)" "S"
-if ($vuoiMs -match "^[Ss]") {
-    Start-Process "https://account.microsoft.com"
-    Write-OK "Aperto account.microsoft.com nel browser."
-
-    # Credenziali per il riepilogo. Due casi:
-    #  - il cliente ha GIA' una sua email/password che usa -> le inserisci tu
-    #    (le detta lui) e finiscono nel riepilogo;
-    #  - account NUOVO -> le genera lo script (email + Nome123!).
-    # In entrambi i casi niente lette dal browser. Questa domanda resta anche in
-    # Veloce perche' cambia da cliente a cliente.
-    if ($RunReale) {
-        $haAccount = Attendi-Risposta "Il cliente ha GIA' una sua email/password che usa? (S = le inserisco io / N = ne genero una nuova)"
-        if ($haAccount -match "^[Ss]") {
-            $credMsAccount  = (Attendi-Risposta "  Email del cliente").Trim()
-            $credMsPassword = (Attendi-Risposta "  Password del cliente").Trim()
-            Write-OK "Uso le credenziali del cliente (finiscono nel riepilogo)."
-        } else {
-            $credMsAccount  = New-EmailCliente -Base $nomeCliente
-            $credMsPassword = New-PasswordCliente -Base $nomeCliente
-            Write-Host ""
-            Write-Host "  Credenziali SUGGERITE per il nuovo account (gia' nel riepilogo):" -ForegroundColor White
-            Write-Info  "Email suggerita : $credMsAccount"
-            Write-Info  "Password        : $credMsPassword"
-            Write-Host "  Se in registrazione ne usi altre, correggi il file." -ForegroundColor Gray
-        }
-        # In tutti e due i casi copio la password negli appunti (Ctrl+V veloce).
-        if ($credMsPassword) { try { Set-Clipboard -Value $credMsPassword; Write-Info "Password copiata negli appunti." } catch {} }
-        Write-Host ""
-    }
-
-    Write-Info "Accedi o crea l'account, poi torna qui. Usa lo stesso browser per i login dopo."
-    Add-Report "Account Microsoft" "OK"
-} else {
-    Write-Info "Account Microsoft saltato."
-    Add-Report "Account Microsoft" "SALTATO"
-}
-
-if ($vuoiMs -match "^[Ss]") { Pausa }
-
-Save-Fase 4 "Account Microsoft"
-}
-
-# =============================================================================
-# INSTALLAZIONE APP OFFICE (subito dopo l'account Microsoft): prima si INSTALLA
-# la suite scelta (se manca), poi la schermata dopo la attiva (codice/key).
+# INSTALLAZIONE APP OFFICE: prima si INSTALLA la suite scelta (se manca), poi
+# la schermata dopo la attiva (codice/key). L'account Microsoft, gia' fatto come
+# secondo passo, resta attivo nel browser per il riscatto.
 # =============================================================================
 
 if (Test-FaseFatta 5) { Write-Info "App Office: gia' fatto nella sessione precedente, salto." }
@@ -2004,44 +2041,9 @@ Save-Fase 6 "Pulizia e ottimizzazione"
 # anche da dentro lo switch, saltando il $passo++ di fine passo.
 function Test-Indietro { param([string]$v) return ($v -match '^\s*[Bb]\s*$') }
 
-# Il wizard parte dal passo 3: il passo 1 "Nome" e la suite Office (ora nel menu
-# Installazione App Office) sono fuori dal wizard. Non rinumero i case: mostro
-# (passo-2) su 6 nella barra.
-$passo = 3
-# Nomi leggibili dei passi wizard per il checkpoint di ripresa sessione.
-$wizNomi = @{ 3 = "Antivirus"; 4 = "Unieuro Cyber Protection"; 5 = "Browser"; 6 = "Applicazioni base"; 7 = "Aggiornamento app"; 8 = "Driver" }
-# Ripresa sessione: fase 7..12 = passo wizard 3..8 completato -> si riparte
-# dal successivo (fase 12 = tutto il wizard fatto, si salta al report).
-if ($Global:FaseRipresa -ge 7) {
-    $passo = $Global:FaseRipresa - 3
-    if ($passo -le 8) { Write-Info "Riprendo il wizard dal passo $($passo - 2) di 6." }
-}
-:wizard while ($passo -ge 3 -and $passo -le 8) {
-Write-Host ""
-$barLen = 20
-$totPassi = 6
-$passoMostrato = $passo - 2
-$pieni = [int]($barLen * $passoMostrato / $totPassi)
-if ($pieni -gt $barLen) { $pieni = $barLen }
-$bar = (([string]$BOX_FULL) * $pieni) + (([string]$BOX_EMPTY) * ($barLen - $pieni))
-Write-Host ("$AON  Passo $passoMostrato/$totPassi  [$bar]$AOFF") -ForegroundColor $THEME_COL
-switch ($passo) {
-3 {
-# =============================================================================
-# STEP 4 - ANTIVIRUS
-# =============================================================================
-
-Write-Titolo "Antivirus"
-
-Write-Host "Scegli l'antivirus da installare:" -ForegroundColor White
-Write-Host "  1) McAfee"
-Write-Host "  2) Norton"
-Write-Host "  3) Salta"
-Write-Host ""
-
-$sceltaAV = Attendi-Risposta "Scelta (1-3, B=indietro)"
-if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
-
+# Funzioni dei passi Antivirus/Unieuro: definite QUI (prima del wizard) perche'
+# ora l'Antivirus e' l'ultimo passo mentre Unieuro gira prima e usa
+# Attiva-ServizioWeb: cosi' entrambe sono gia' disponibili quando servono.
 function Installa-Antivirus {
     param(
         [string]$Nome,
@@ -2111,6 +2113,46 @@ function Attiva-ServizioWeb {
     }
 }
 
+# Il wizard: passo 3=Unieuro, 4=Browser, 5=App, 6=Aggiornamento, 7=Driver,
+# 8=Antivirus (ultimo). La barra mostra (passo-2) su 6.
+$passo = 3
+# Nomi leggibili dei passi wizard per il checkpoint di ripresa sessione.
+$wizNomi = @{ 3 = "Unieuro Cyber Protection"; 4 = "Browser"; 5 = "Applicazioni base"; 6 = "Aggiornamento app"; 7 = "Driver"; 8 = "Antivirus" }
+# Ripresa sessione: fase 7..12 = passo wizard 3..8 completato -> si riparte
+# dal successivo (fase 12 = tutto il wizard fatto, si salta al report).
+if ($Global:FaseRipresa -ge 7) {
+    $passo = $Global:FaseRipresa - 3
+    if ($passo -le 8) { Write-Info "Riprendo il wizard dal passo $($passo - 2) di 6." }
+}
+:wizard while ($passo -ge 3 -and $passo -le 8) {
+Write-Host ""
+$barLen = 20
+$totPassi = 6
+$passoMostrato = $passo - 2
+$pieni = [int]($barLen * $passoMostrato / $totPassi)
+if ($pieni -gt $barLen) { $pieni = $barLen }
+$bar = (([string]$BOX_FULL) * $pieni) + (([string]$BOX_EMPTY) * ($barLen - $pieni))
+Write-Host ("$AON  Passo $passoMostrato/$totPassi  [$bar]$AOFF") -ForegroundColor $THEME_COL
+switch ($passo) {
+8 {
+# =============================================================================
+# ANTIVIRUS (ultimo passo: dopo tutte le altre installazioni, cosi' un AV
+# appena attivato non blocca il download/installazione delle app - es. AnyDesk)
+# =============================================================================
+
+Write-Titolo "Antivirus"
+
+Write-Host "Scegli l'antivirus da installare:" -ForegroundColor White
+Write-Host "  1) McAfee"
+Write-Host "  2) Norton"
+Write-Host "  3) Salta"
+Write-Host ""
+
+$sceltaAV = Attendi-Risposta "Scelta (1-3, B=indietro)"
+if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
+
+# (Installa-Antivirus e Attiva-ServizioWeb sono definite PRIMA del wizard, cosi'
+#  sono disponibili anche al passo Unieuro che ora gira prima dell'Antivirus.)
 switch ($sceltaAV) {
     "1" {
         Installa-Antivirus -Nome "McAfee" -UrlRiscatto "https://www.mcafee.com/activate"
@@ -2130,7 +2172,7 @@ switch ($sceltaAV) {
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-4 {
+3 {
 # =============================================================================
 # STEP 4c - UNIEURO CYBER PROTECTION (opzionale)
 # =============================================================================
@@ -2151,7 +2193,7 @@ if ($vuoiUnieuro -match "^[Ss]") {
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-5 {
+4 {
 # =============================================================================
 # STEP 5 - BROWSER
 # =============================================================================
@@ -2196,7 +2238,7 @@ if ($sceltaBrowser -match "^[Ss]$") {
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-6 {
+5 {
 # =============================================================================
 # STEP 6 - APPLICAZIONI BASE
 # =============================================================================
@@ -2223,7 +2265,7 @@ function Installa-Set {
 }
 
 Write-Host "Scegli come installare le applicazioni:" -ForegroundColor White
-Write-Host "  1) PROFILO BASE     (VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk, TeamViewer)"
+Write-Host "  1) PROFILO BASE     (VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk)"
 Write-Host "  2) PROFILO UFFICIO  (BASE + Zoom, Spotify, GIMP, Sumatra PDF)"
 Write-Host "  3) PROFILO GAMING   (BASE + Steam, Epic, Discord, qBittorrent)"
 Write-Host "  4) COMPLETO         (tutte le app in lista)"
@@ -2282,7 +2324,7 @@ switch ($sceltaApps) {
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-7 {
+6 {
 # =============================================================================
 # STEP 8 - AGGIORNAMENTO APP INSTALLATE - opzionale
 # =============================================================================
@@ -2312,9 +2354,9 @@ if ($vuoiUpgrade -match "^[Ss]") {
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-8 {
+7 {
 # =============================================================================
-# STEP 8 - INSTALLA/AGGIORNA DRIVER (Windows Update, opzionale, ultimo passo)
+# DRIVER (Windows Update, opzionale)
 # =============================================================================
 
 Write-Titolo "Driver (Windows Update)"

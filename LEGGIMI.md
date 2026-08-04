@@ -125,21 +125,21 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 
 | Step | Azione |
 |------|--------|
-| 1  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
-| 2  | Nome completo del cliente (cambia il "Nome visualizzato" dell'account **e** il nome del PC) |
-| 3  | **Punto di ripristino** (opzionale, consigliato): rete di sicurezza prima delle modifiche |
-| 4  | **Account Microsoft**: apre il login/registrazione; genera o annota email + password nel riepilogo |
+| 1  | **Nome cliente** (cambia il "Nome visualizzato" dell'account **e** il nome del PC): serve subito, genera anche le credenziali suggerite |
+| 2  | **Account Microsoft** (subito, col cliente davanti): apre il login/registrazione; genera o annota email + password `Nome123!` nel riepilogo. Così Office e antivirus dopo non richiedono altri OTP |
+| 3  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
+| 4  | **Punto di ripristino** (opzionale, consigliato): rete di sicurezza prima delle modifiche |
 | 5  | **App Office**: installa la suite scelta se manca (Office 365, perpetuo, OpenOffice, LibreOffice), poi **attivazione** — card PIN → riscatto web (`microsoft365.com/setup` o `office.com/setup`) + accesso in Word. Crea i collegamenti Office sul Desktop |
 | 6  | **Pulizia e ottimizzazione**: rimuove antivirus di prova, bloatware OEM, promo dal menu Start, disinstalla OneDrive, piccole comodità Windows |
-| 7  | **Antivirus**: McAfee, Norton, o Salta |
-| 8  | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
-| 9  | **Browser** (catalogo winget): Chrome, Firefox, Edge, Brave, Opera, Opera GX, Vivaldi |
-| 10 | **App**: profili BASE / UFFICIO / GAMING / COMPLETO, oppure MANUALE |
-| 11 | **Aggiornamento** di tutte le app installate (`winget upgrade --all`) |
-| 12 | **Driver**: scheda video dedicata (tool del produttore) + driver generici da Windows Update |
+| 7  | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
+| 8  | **Browser** (catalogo winget): Chrome, Firefox, Edge, Brave, Opera, Opera GX, Vivaldi |
+| 9  | **App**: profili BASE / UFFICIO / GAMING / COMPLETO, oppure MANUALE |
+| 10 | **Aggiornamento** di tutte le app installate (`winget upgrade --all`) |
+| 11 | **Driver**: scheda video dedicata (tool del produttore) + driver generici da Windows Update |
+| 12 | **Antivirus** (ultimo passo): McAfee, Norton, o Salta — dopo le altre installazioni, così un AV appena attivato non le blocca |
 | —  | **Report finale**: verifica finale + chiave BitLocker + file riepilogo sul Desktop + riavvio |
 
-**Profili app (STEP 6):**
+**Profili app:**
 - **BASE** — VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk
 - **UFFICIO** — BASE + Zoom, Spotify
 - **GAMING** — BASE + Steam, Discord
