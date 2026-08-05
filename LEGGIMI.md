@@ -132,14 +132,13 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 | 5  | **App Office**: installa la suite scelta se manca (Office 365, perpetuo, OpenOffice, LibreOffice), poi **attivazione** — card PIN → riscatto web (`microsoft365.com/setup` o `office.com/setup`) + accesso in Word. Crea i collegamenti Office sul Desktop |
 | 6  | **Pulizia e ottimizzazione**: rimuove antivirus di prova, bloatware OEM, promo dal menu Start, disinstalla OneDrive, piccole comodità Windows |
 | 7  | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
-| 8  | **Browser** (catalogo winget): Chrome, Firefox, Edge, Brave, Opera, Opera GX, Vivaldi |
-| 9  | **App**: profili BASE / UFFICIO / GAMING / COMPLETO, oppure MANUALE |
-| 10 | **Aggiornamento** di tutte le app installate (`winget upgrade --all`) |
-| 11 | **Driver**: scheda video dedicata (tool del produttore) + driver generici da Windows Update |
-| 12 | **Antivirus** (ultimo passo): McAfee, Norton, o Salta — dopo le altre installazioni, così un AV appena attivato non le blocca |
+| 8  | **App + browser**: scegli il profilo e il **browser si installa da solo** — **Chrome** per tutti, **Opera GX** se scegli GAMING (niente più passo Browser separato) |
+| 9  | **Aggiornamento** di tutte le app installate (`winget upgrade --all`) |
+| 10 | **Driver**: scheda video dedicata (tool del produttore) + driver generici da Windows Update |
+| 11 | **Antivirus** (ultimo passo): McAfee, Norton, o Salta — dopo le altre installazioni, così un AV appena attivato non le blocca |
 | —  | **Report finale**: verifica finale + chiave BitLocker + file riepilogo sul Desktop + riavvio |
 
-**Profili app:**
+**Profili app** (browser incluso: Chrome, o Opera GX per GAMING):
 - **BASE** — VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk
 - **UFFICIO** — BASE + Zoom, Spotify
 - **GAMING** — BASE + Steam, Discord
