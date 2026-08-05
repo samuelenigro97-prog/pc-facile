@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "7.3 (2026-08-04)"
+$SCRIPT_VERSION = "7.4 (2026-08-05)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -498,7 +498,7 @@ $credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
 # passo completato lo stato (numero passo + nome cliente + credenziali
 # generate) finisce in un file JSON in ProgramData, ELIMINATO a fine lavoro.
 # Fasi: 1=Nome 2=Account 3=Lingua 4=Ripristino 5=Office 6=Pulizia,
-# 7..12 = passi wizard 3..8 (Unieuro, Browser, App, Aggiornamento, Driver,
+# 7..11 = passi wizard 3..7 (Unieuro, App+browser, Aggiornamento, Driver,
 # Antivirus). Solo nel run reale.
 # =============================================================================
 $Global:StatoFile   = Join-Path $env:ProgramData "PCFacile\stato.json"
@@ -2108,28 +2108,28 @@ function Attiva-ServizioWeb {
     }
 }
 
-# Il wizard: passo 3=Unieuro, 4=Browser, 5=App, 6=Aggiornamento, 7=Driver,
-# 8=Antivirus (ultimo). La barra mostra (passo-2) su 6.
+# Il wizard: passo 3=Unieuro, 4=App+browser, 5=Aggiornamento, 6=Driver,
+# 7=Antivirus (ultimo). La barra mostra (passo-2) su 5.
 $passo = 3
 # Nomi leggibili dei passi wizard per il checkpoint di ripresa sessione.
-$wizNomi = @{ 3 = "Unieuro Cyber Protection"; 4 = "Browser"; 5 = "Applicazioni base"; 6 = "Aggiornamento app"; 7 = "Driver"; 8 = "Antivirus" }
-# Ripresa sessione: fase 7..12 = passo wizard 3..8 completato -> si riparte
-# dal successivo (fase 12 = tutto il wizard fatto, si salta al report).
+$wizNomi = @{ 3 = "Unieuro Cyber Protection"; 4 = "Applicazioni + browser"; 5 = "Aggiornamento app"; 6 = "Driver"; 7 = "Antivirus" }
+# Ripresa sessione: fase 7..11 = passo wizard 3..7 completato -> si riparte
+# dal successivo (fase 11 = tutto il wizard fatto, si salta al report).
 if ($Global:FaseRipresa -ge 7) {
     $passo = $Global:FaseRipresa - 3
-    if ($passo -le 8) { Write-Info "Riprendo il wizard dal passo $($passo - 2) di 6." }
+    if ($passo -le 7) { Write-Info "Riprendo il wizard dal passo $($passo - 2) di 5." }
 }
-:wizard while ($passo -ge 3 -and $passo -le 8) {
+:wizard while ($passo -ge 3 -and $passo -le 7) {
 Write-Host ""
 $barLen = 20
-$totPassi = 6
+$totPassi = 5
 $passoMostrato = $passo - 2
 $pieni = [int]($barLen * $passoMostrato / $totPassi)
 if ($pieni -gt $barLen) { $pieni = $barLen }
 $bar = (([string]$BOX_FULL) * $pieni) + (([string]$BOX_EMPTY) * ($barLen - $pieni))
 Write-Host ("$AON  Passo $passoMostrato/$totPassi  [$bar]$AOFF") -ForegroundColor $THEME_COL
 switch ($passo) {
-8 {
+7 {
 # =============================================================================
 # ANTIVIRUS (ultimo passo: dopo tutte le altre installazioni, cosi' un AV
 # appena attivato non blocca il download/installazione delle app - es. AnyDesk)
@@ -2190,55 +2190,11 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 }
 4 {
 # =============================================================================
-# STEP 5 - BROWSER
+# APPLICAZIONI + BROWSER (unificati: il browser si installa da solo qui -
+# Chrome, oppure Opera GX se scegli il profilo GAMING)
 # =============================================================================
 
-Write-Titolo "Browser"
-
-$browserDisponibili = $CatalogoBrowser
-
-Write-Host "Browser disponibili:" -ForegroundColor White
-for ($i = 0; $i -lt $browserDisponibili.Count; $i++) {
-    Write-Host "  $($i + 1)) $($browserDisponibili[$i].Nome)"
-}
-Write-Host ""
-Write-Host "  S) Salta"
-Write-Host ""
-
-$sceltaBrowser = Chiedi "Scelta (es: 1,2 - S salta - B indietro)" "S"
-if (Test-Indietro $sceltaBrowser) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
-
-if ($sceltaBrowser -match "^[Ss]$") {
-    Write-Info "Browser saltati."
-} else {
-    $indici = $sceltaBrowser -split "," | ForEach-Object { $_.Trim() }
-    if (Confirm-Winget) {
-        foreach ($indice in $indici) {
-            $num = 0
-            if ($indice -match "^\d+$" -and [int]::TryParse($indice, [ref]$num)) {
-                $idx = $num - 1
-                if ($idx -ge 0 -and $idx -lt $browserDisponibili.Count) {
-                    Installa-Pacchetto -Nome $browserDisponibili[$idx].Nome -WingetId $browserDisponibili[$idx].Id
-                } else {
-                    Write-Errore "Numero non valido: $indice"
-                }
-            } elseif ($indice -ne "") {
-                Write-Errore "Valore non riconosciuto: $indice"
-            }
-        }
-    } else {
-        Write-Errore "Winget non disponibile."
-    }
-}
-
-$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
-}
-5 {
-# =============================================================================
-# STEP 6 - APPLICAZIONI BASE
-# =============================================================================
-
-Write-Titolo "Applicazioni Base"
+Write-Titolo "Applicazioni"
 
 # App e profili derivano dal CATALOGO unico definito all'inizio (niente duplicati).
 $appsDisponibili = $CatalogoApp
@@ -2259,17 +2215,24 @@ function Installa-Set {
     }
 }
 
-Write-Host "Scegli come installare le applicazioni:" -ForegroundColor White
-Write-Host "  1) PROFILO BASE     (VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk)"
-Write-Host "  2) PROFILO UFFICIO  (BASE + Zoom, Spotify, GIMP, Sumatra PDF)"
-Write-Host "  3) PROFILO GAMING   (BASE + Steam, Epic, Discord, qBittorrent)"
-Write-Host "  4) COMPLETO         (tutte le app in lista)"
-Write-Host "  5) MANUALE          (scelgo io i singoli numeri)"
+Write-Host "Scegli come installare le applicazioni (browser incluso in automatico):" -ForegroundColor White
+Write-Host "  1) PROFILO BASE     (Chrome + VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk)"
+Write-Host "  2) PROFILO UFFICIO  (Chrome + BASE + Zoom, Spotify, GIMP, Sumatra PDF)"
+Write-Host "  3) PROFILO GAMING   (Opera GX + BASE + Steam, Epic, Discord, qBittorrent)"
+Write-Host "  4) COMPLETO         (Chrome + tutte le app in lista)"
+Write-Host "  5) MANUALE          (Chrome + scelgo io i singoli numeri)"
 Write-Host "  S) Salta"
 Write-Host ""
 
 $sceltaApps = Attendi-Risposta "Scelta (1-5 - S salta - B indietro)"
 if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
+
+# BROWSER automatico (unito al profilo app): Opera GX per il GAMING, Chrome per
+# tutti gli altri profili. Salta (S) o scelta non valida = nessun browser.
+if ($sceltaApps -match "^[1-5]$") {
+    if ($sceltaApps -eq "3") { Installa-Pacchetto -Nome "Opera GX" -WingetId "Opera.OperaGX" }
+    else { Installa-Pacchetto -Nome "Google Chrome" -WingetId "Google.Chrome" }
+}
 
 switch ($sceltaApps) {
     "1" { Installa-Set -Ids $profili["BASE"] }
@@ -2319,9 +2282,9 @@ switch ($sceltaApps) {
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-6 {
+5 {
 # =============================================================================
-# STEP 8 - AGGIORNAMENTO APP INSTALLATE - opzionale
+# AGGIORNAMENTO APP INSTALLATE - opzionale
 # =============================================================================
 
 Write-Titolo "Aggiornamento App Installate"
@@ -2349,7 +2312,7 @@ if ($vuoiUpgrade -match "^[Ss]") {
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-7 {
+6 {
 # =============================================================================
 # DRIVER (Windows Update, opzionale)
 # =============================================================================
