@@ -22,6 +22,13 @@ reg add "HKCU\Console" /v VirtualTerminalLevel /t REG_DWORD /d 1 /f >nul 2>&1
 REM Slot "DarkBlue" (indice 1) rimappato al navy SCURO #0A0E24.
 REM DWORD = 0x00BBGGRR = 0x00240E0A.
 reg add "HKCU\Console" /v ColorTable01 /t REG_DWORD /d 0x00240E0A /f >nul 2>&1
+REM Font piu' GRANDE e leggibile (Consolas 20px, grassetto). Vale sulla console
+REM classica (conhost, quella del doppio-click sul .bat); Windows Terminal lo
+REM ignora. FontSize: altezza nel WORD alto -> 0x0014=20px. Ripristinato a fine.
+reg add "HKCU\Console" /v FaceName /t REG_SZ /d "Consolas" /f >nul 2>&1
+reg add "HKCU\Console" /v FontFamily /t REG_DWORD /d 54 /f >nul 2>&1
+reg add "HKCU\Console" /v FontWeight /t REG_DWORD /d 700 /f >nul 2>&1
+reg add "HKCU\Console" /v FontSize /t REG_DWORD /d 0x00140000 /f >nul 2>&1
 start "PC Facile" "%~f0" run
 exit /b
 
