@@ -139,9 +139,9 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 | —  | **Report finale**: verifica finale + chiave BitLocker + file riepilogo sul Desktop + riavvio |
 
 **Profili app** (browser incluso: Chrome, o Opera GX per GAMING):
-- **BASE** — VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk
-- **UFFICIO** — BASE + Zoom, Spotify
-- **GAMING** — BASE + Steam, Discord
+- **BASE** — VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, Zoom, AnyDesk
+- **UFFICIO** — BASE + GIMP, Sumatra PDF
+- **GAMING** — BASE + Steam, Epic, Discord, qBittorrent
 - **COMPLETO** — tutte · **MANUALE** — scegli i singoli numeri
 
 **Driver scheda video**: la ricerca di Windows Update spesso non prende il driver

@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "7.4 (2026-08-05)"
+$SCRIPT_VERSION = "7.5 (2026-08-05)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -545,7 +545,7 @@ $CatalogoApp = @(
     @{ Nome = "VLC Media Player";     Id = "VideoLAN.VLC";                 Profili = @("BASE","UFFICIO","GAMING") },
     @{ Nome = "Adobe Acrobat Reader"; Id = "Adobe.Acrobat.Reader.64-bit";  Profili = @("BASE","UFFICIO","GAMING") },
     @{ Nome = "Sumatra PDF";          Id = "SumatraPDF.SumatraPDF";        Profili = @("UFFICIO") },
-    @{ Nome = "Spotify";              Id = "Spotify.Spotify";              Profili = @("UFFICIO") },
+    @{ Nome = "Spotify";              Id = "Spotify.Spotify";              Profili = @("BASE","UFFICIO","GAMING") },
     @{ Nome = "AIMP";                 Id = "AIMP.AIMP";                    Profili = @() },
     @{ Nome = "7-Zip";                Id = "7zip.7zip";                    Profili = @("BASE","UFFICIO","GAMING") },
     @{ Nome = "WhatsApp";             Id = "WhatsApp.WhatsApp";            Profili = @("BASE","UFFICIO","GAMING") },
@@ -555,7 +555,7 @@ $CatalogoApp = @(
     @{ Nome = "AnyDesk";              Id = "AnyDesk.AnyDesk";              Profili = @("BASE","UFFICIO","GAMING") },
     @{ Nome = "qBittorrent";          Id = "qBittorrent.qBittorrent";      Profili = @("GAMING") },
     @{ Nome = "Discord";              Id = "Discord.Discord";              Profili = @("GAMING") },
-    @{ Nome = "Zoom";                 Id = "Zoom.Zoom";                    Profili = @("UFFICIO") }
+    @{ Nome = "Zoom";                 Id = "Zoom.Zoom";                    Profili = @("BASE","UFFICIO","GAMING") }
 )
 
 # =============================================================================
@@ -932,26 +932,16 @@ function Show-BarraAttesa {
 # motivo non riesce ad avviare il processo, ripiega sulla chiamata classica.
 function Invoke-WingetConBarra {
     param([string]$Nome, [string[]]$WingetArgs)
-    $wg = (Get-Command winget -ErrorAction SilentlyContinue).Source
-    if (-not $wg) { $wg = 'winget' }
-    $out = Join-Path $env:TEMP ("pcf_wg_out_{0}.txt" -f $PID)
-    $err = Join-Path $env:TEMP ("pcf_wg_err_{0}.txt" -f $PID)
-    try {
-        $p = Start-Process -FilePath $wg -ArgumentList $WingetArgs -PassThru -NoNewWindow `
-             -RedirectStandardOutput $out -RedirectStandardError $err -ErrorAction Stop
-        Show-BarraAttesa -Testo "Scarico e installo $Nome" -Processo $p
-        # WaitForExit assicura che ExitCode sia popolato (con Start-Process su un
-        # alias a volte torna $null): in quel caso non fidarsi, lasciar decidere
-        # alla verifica 'winget list' del chiamante (codice fittizio -999).
-        try { $p.WaitForExit() } catch {}
-        $code = $p.ExitCode
-        if ($null -eq $code) { $code = -999 }
-    } catch {
-        # Ripiego: nessuna barra, ma l'installazione parte comunque.
-        & $wg @WingetArgs *> $null
-        $code = $LASTEXITCODE
-    }
-    try { Remove-Item $out, $err -Force -ErrorAction SilentlyContinue } catch {}
+    # winget DIRETTO nel thread principale: cosi' $LASTEXITCODE e' AFFIDABILE
+    # (prima con Start-Process su un alias di sistema tornava a volte $null ->
+    # codice -999 e app come WhatsApp risultavano "fallite" pur installandosi).
+    # La barra animata gira in un runspace a parte; l'output tecnico di winget
+    # resta nascosto (*> $null).
+    $code = -1
+    Start-BarraAnimata "Scarico e installo $Nome"
+    try { winget @WingetArgs *> $null; $code = $LASTEXITCODE }
+    finally { Stop-BarraAnimata }
+    if ($null -eq $code) { $code = -1 }
     return $code
 }
 
@@ -974,6 +964,21 @@ function Test-LnkJunk {
               '*aggiorna*', '*update*')
     foreach ($p in $junk) { if ($Base -like $p) { return $true } }
     return $false
+}
+
+# Toglie il collegamento di Microsoft Edge dal Desktop (utente + pubblico):
+# se installiamo altri browser, l'icona di Edge sul Desktop non serve.
+function Remove-EdgeDaDesktop {
+    if (-not $RunReale) { return }
+    try {
+        $desktops = @([Environment]::GetFolderPath('Desktop'),
+                      [Environment]::GetFolderPath('CommonDesktopDirectory')) |
+                    Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+        foreach ($d in $desktops) {
+            Get-ChildItem -Path $d -Filter '*Edge*.lnk' -ErrorAction SilentlyContinue |
+                ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+        }
+    } catch {}
 }
 
 # Tutti i collegamenti del menu Start (utente + tutti gli utenti, ricorsivo).
@@ -1004,6 +1009,13 @@ function Add-IconaDesktop {
     try {
         $desktop = Get-DesktopDir
 
+        # ANTI-DOPPIONE (per PRIMO): se sul Desktop c'e' gia' un'icona che somiglia
+        # al nome dell'app - creata dall'installer stesso (Chrome, AnyDesk, Steam...)
+        # o da un giro precedente - non ne aggiungo una seconda.
+        $gia = Get-ChildItem -Path $desktop -Filter *.lnk -ErrorAction SilentlyContinue |
+            Where-Object { Test-NomeSimile $_.BaseName $Nome } | Select-Object -First 1
+        if ($gia) { return }
+
         # 0) DIFF: collegamenti NUOVI creati dall'installazione (max ~4s di attesa).
         if ($LnkPrima -and $LnkPrima.Count -ge 0) {
             $nuovi = @()
@@ -1016,22 +1028,22 @@ function Add-IconaDesktop {
             }
             if ($nuovi.Count -gt 0) {
                 # Preferisci quelli che somigliano al nome; se nessuno, prendi il piu'
-                # "principale" (nome piu' corto). Copio UN collegamento per app.
+                # "principale" (nome piu' corto). Copio UN collegamento per app, e
+                # solo se un'icona simile non e' comparsa nel frattempo sul Desktop.
                 $match = @($nuovi | Where-Object { Test-NomeSimile $_.BaseName $Nome })
                 $scelto = if ($match.Count -gt 0) { $match | Sort-Object { $_.BaseName.Length } | Select-Object -First 1 }
                           else { $nuovi | Sort-Object { $_.BaseName.Length } | Select-Object -First 1 }
                 if ($scelto) {
+                    $giaSimile = Get-ChildItem -Path $desktop -Filter *.lnk -ErrorAction SilentlyContinue |
+                        Where-Object { Test-NomeSimile $_.BaseName $scelto.BaseName } | Select-Object -First 1
                     $dest = Join-Path $desktop $scelto.Name
-                    if (-not (Test-Path $dest)) { Copy-Item -Path $scelto.FullName -Destination $dest -Force -ErrorAction SilentlyContinue }
+                    if (-not $giaSimile -and -not (Test-Path $dest)) {
+                        Copy-Item -Path $scelto.FullName -Destination $dest -Force -ErrorAction SilentlyContinue
+                    }
                     return
                 }
             }
         }
-
-        # Gia' un'icona simile sul Desktop? niente doppioni.
-        $gia = Get-ChildItem -Path $desktop -Filter *.lnk -ErrorAction SilentlyContinue |
-            Where-Object { Test-NomeSimile $_.BaseName $Nome } | Select-Object -First 1
-        if ($gia) { return }
 
         # 1) Menu Start: collegamento Win32 con l'icona vera dell'app (per nome).
         $cand = Get-StartMenuLnks |
@@ -1759,12 +1771,24 @@ if ($vuoiPulizia -match "^[Ss]") {
     } else {
         foreach ($av in $avInstallati) {
             Write-Info "Provo a rimuovere: $($av.Nome)..."
-            # winget toglie Avast/AVG e i pochi McAfee che gestisce; non bloccante,
-            # non fatale. McAfee/Norton spesso resistono: sotto ci pensano i tool
-            # ufficiali (MCPR / NRnR).
-            if (Confirm-Winget) {
-                winget uninstall --name $av.Nome --silent --accept-source-agreements --disable-interactivity 2>$null | Out-Null
-            }
+            Start-BarraAnimata "Rimuovo $($av.Nome)"
+            try {
+                # 1) Disinstallatore SILENZIOSO dal registro (ARP): e' il modo piu'
+                #    efficace, becca anche le versioni che winget non gestisce.
+                #    Preferisco QuietUninstallString; se manca, provo UninstallString
+                #    aggiungendo flag silenziosi tipici (McAfee usa /silent).
+                if ($av.QuietUninstall) {
+                    try { cmd /c $av.QuietUninstall 2>$null | Out-Null } catch {}
+                } elseif ($av.Uninstall) {
+                    try { cmd /c "$($av.Uninstall) /silent /quiet /norestart" 2>$null | Out-Null } catch {}
+                }
+                # 2) winget come rinforzo (Avast/AVG e i McAfee che gestisce).
+                #    McAfee/Norton spesso resistono: sotto ci pensano i tool
+                #    ufficiali (MCPR / NRnR).
+                if (Confirm-Winget) {
+                    winget uninstall --name $av.Nome --silent --accept-source-agreements --disable-interactivity 2>$null | Out-Null
+                }
+            } finally { Stop-BarraAnimata }
         }
 
         # VERIFICO davvero cosa e' rimasto (non mi fido dell'esito di winget).
@@ -2216,8 +2240,8 @@ function Installa-Set {
 }
 
 Write-Host "Scegli come installare le applicazioni (browser incluso in automatico):" -ForegroundColor White
-Write-Host "  1) PROFILO BASE     (Chrome + VLC, Adobe Reader, 7-Zip, WhatsApp, AnyDesk)"
-Write-Host "  2) PROFILO UFFICIO  (Chrome + BASE + Zoom, Spotify, GIMP, Sumatra PDF)"
+Write-Host "  1) PROFILO BASE     (Chrome + VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, Zoom, AnyDesk)"
+Write-Host "  2) PROFILO UFFICIO  (Chrome + BASE + GIMP, Sumatra PDF)"
 Write-Host "  3) PROFILO GAMING   (Opera GX + BASE + Steam, Epic, Discord, qBittorrent)"
 Write-Host "  4) COMPLETO         (Chrome + tutte le app in lista)"
 Write-Host "  5) MANUALE          (Chrome + scelgo io i singoli numeri)"
@@ -2229,9 +2253,11 @@ if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(3, $passo - 1); continue w
 
 # BROWSER automatico (unito al profilo app): Opera GX per il GAMING, Chrome per
 # tutti gli altri profili. Salta (S) o scelta non valida = nessun browser.
+# Installato un browser nostro, tolgo l'icona di Edge dal Desktop (superflua).
 if ($sceltaApps -match "^[1-5]$") {
     if ($sceltaApps -eq "3") { Installa-Pacchetto -Nome "Opera GX" -WingetId "Opera.OperaGX" }
     else { Installa-Pacchetto -Nome "Google Chrome" -WingetId "Google.Chrome" }
+    Remove-EdgeDaDesktop
 }
 
 switch ($sceltaApps) {
