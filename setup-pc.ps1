@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "7.2 (2026-08-04)"
+$SCRIPT_VERSION = "7.3 (2026-08-04)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -94,10 +94,14 @@ try {
 
 function Write-Titolo {
     param([string]$Testo)
+    # Titolo ben visibile: barra piena arancione + testo MAIUSCOLO su riga sua.
+    # Piu' "grosso" e netto della vecchia doppia linea, si legge a colpo d'occhio.
+    $barra = ([string]$BOX_FULL) * 50
     Write-Host ""
-    Write-Host "$AON  $LINEA_D$AOFF" -ForegroundColor $THEME_COL
-    Write-Host "   $Testo" -ForegroundColor $THEME_TXT
-    Write-Host "$AON  $LINEA_D$AOFF" -ForegroundColor $THEME_COL
+    Write-Host ""
+    Write-Host "$AON  $barra$AOFF" -ForegroundColor $THEME_COL
+    Write-Host "$AON   $($Testo.ToUpper())$AOFF" -ForegroundColor $THEME_TXT
+    Write-Host "$AON  $barra$AOFF" -ForegroundColor $THEME_COL
     Write-Host ""
 }
 
@@ -1395,8 +1399,7 @@ else {
 
 Write-Titolo "Account Microsoft"
 
-Write-Host "Accedi (o crea) l'account Microsoft ORA: la sessione resta attiva nel" -ForegroundColor White
-Write-Host "browser, cosi' dopo su Office e antivirus fai 'Accedi con Microsoft' al volo." -ForegroundColor White
+Write-Host "Crea/accedi ORA all'account: dopo Office e antivirus lo riusano senza altri OTP." -ForegroundColor White
 Write-Host ""
 
 $vuoiMs = Chiedi "Aprire il login account Microsoft ora? (S/N)" "S"
@@ -1451,8 +1454,7 @@ else {
 
 Write-Titolo "Lingua e Regione (Italiano)"
 
-Write-Host "I PC installati da chiavetta partono spesso in INGLESE." -ForegroundColor White
-Write-Host "Questo passaggio imposta display, formati, tastiera e language pack in it-IT." -ForegroundColor White
+Write-Host "Imposta display, tastiera, formati e pacchetto lingua in italiano (it-IT)." -ForegroundColor White
 Write-Host ""
 
 $culturaAttuale = (Get-Culture).Name
@@ -1739,14 +1741,7 @@ else {
 
 Write-Titolo "Pulizia e Ottimizzazione Iniziale"
 
-Write-Host "In un colpo solo, consigliato sui PC nuovi:" -ForegroundColor White
-Write-Host "  - toglie gli antivirus di PROVA (McAfee/Norton/Avast: scadono e vanno" -ForegroundColor White
-Write-Host "    in conflitto con quello che installi, a volte bloccano lo script)" -ForegroundColor White
-Write-Host "  - rimuove il bloatware del produttore (HP/Lenovo/Dell/Asus/Acer) e le" -ForegroundColor White
-Write-Host "    app consumer inutili, e alleggerisce l'avvio automatico" -ForegroundColor White
-Write-Host "  - applica piccole comodita' (estensioni file, Esplora su 'Questo PC'," -ForegroundColor White
-Write-Host "    OneDrive rimosso)" -ForegroundColor White
-Write-Host "NON tocca: Xbox, Spotify, Store, Foto, driver, ne' i programmi del setup." -ForegroundColor White
+Write-Host "Toglie antivirus di prova + bloatware OEM + OneDrive, alleggerisce l'avvio." -ForegroundColor White
 Write-Host ""
 
 $vuoiPulizia = Chiedi "Eseguire ora la pulizia e ottimizzazione iniziale? (consigliato) (S/N)" "S"
@@ -2794,6 +2789,11 @@ if ($RunReale) {
     try {
         Remove-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -ErrorAction SilentlyContinue
         Remove-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction SilentlyContinue
+        # Ripristino il font della console a com'era (rimuovo le chiavi del .bat).
+        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'FaceName'   -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'FontFamily' -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'FontWeight' -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'FontSize'   -ErrorAction SilentlyContinue
     } catch {}
     # Lavoro COMPLETATO: via il checkpoint di ripresa sessione (contiene anche
     # le credenziali generate: non deve restare sul PC del cliente). La cartella
