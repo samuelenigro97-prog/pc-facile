@@ -18,9 +18,14 @@ param(
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
+# In PowerShell 5.1 Invoke-WebRequest con il progresso attivo disegna una barra
+# "byte per byte" ed e' LENTISSIMO sui download grossi (es. installer): lo
+# disattiviamo, le nostre barre animate le facciamo noi. Vale per tutto lo script.
+$ProgressPreference = 'SilentlyContinue'
+
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "7.5 (2026-08-05)"
+$SCRIPT_VERSION = "7.6 (2026-08-09)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -927,20 +932,47 @@ function Show-BarraAttesa {
     Write-Host ("`r" + (" " * ($Testo.Length + $larg + 24)) + "`r") -NoNewline
 }
 
-# Lancia winget con l'output nascosto (rediretto su file temporanei) MA con la
-# barra animata a schermo. Ritorna il codice di uscita di winget. Se per qualche
-# motivo non riesce ad avviare il processo, ripiega sulla chiamata classica.
+# Lancia winget con l'output nascosto MA con la barra animata a schermo. Ritorna
+# il codice di uscita di winget. Un TIMEOUT evita che un winget bloccato (CDN
+# lento, rete che non risponde) faccia girare la barra all'infinito: oltre il
+# limite il processo viene interrotto e si torna un codice speciale (-2), cosi'
+# si prosegue (con la riserva del download diretto dove c'e').
 function Invoke-WingetConBarra {
-    param([string]$Nome, [string[]]$WingetArgs)
-    # winget DIRETTO nel thread principale: cosi' $LASTEXITCODE e' AFFIDABILE
-    # (prima con Start-Process su un alias di sistema tornava a volte $null ->
-    # codice -999 e app come WhatsApp risultavano "fallite" pur installandosi).
-    # La barra animata gira in un runspace a parte; l'output tecnico di winget
-    # resta nascosto (*> $null).
+    param(
+        [string]$Nome,
+        [string[]]$WingetArgs,
+        [int]$TimeoutSec = 1200   # 20 min: un download lento ha tempo, un blocco no
+    )
+    # winget va lanciato cosi' che il codice di uscita sia AFFIDABILE: una volta
+    # con Start-Process sull'alias di sistema tornava a volte $null (codice -999)
+    # e app come WhatsApp risultavano "fallite" pur installandosi. Passiamo da
+    # cmd.exe /c, che propaga il VERO codice di uscita di winget. La barra animata
+    # gira in un runspace a parte; l'output tecnico di winget resta nascosto.
     $code = -1
     Start-BarraAnimata "Scarico e installo $Nome"
-    try { winget @WingetArgs *> $null; $code = $LASTEXITCODE }
-    finally { Stop-BarraAnimata }
+    try {
+        if ($TimeoutSec -le 0) {
+            winget @WingetArgs *> $null
+            $code = $LASTEXITCODE
+        } else {
+            # Riga di comando con le virgolette giuste (argomenti con spazi
+            # racchiusi tra " e con gli eventuali " interni raddoppiati).
+            $argLine = ($WingetArgs | ForEach-Object {
+                if ($_ -match '[\s"]') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ }
+            }) -join ' '
+            $proc = Start-Process -FilePath "$env:ComSpec" `
+                -ArgumentList "/d /c winget $argLine" `
+                -WindowStyle Hidden -PassThru
+            if (-not $proc.WaitForExit([int]($TimeoutSec * 1000))) {
+                # Bloccato oltre il limite: chiudo l'intero albero processi (cmd +
+                # winget + eventuale installer) e ritorno il codice speciale.
+                try { & taskkill /pid $proc.Id /t /f 2>$null | Out-Null } catch {}
+                $code = -2
+            } else {
+                $code = $proc.ExitCode
+            }
+        }
+    } finally { Stop-BarraAnimata }
     if ($null -eq $code) { $code = -1 }
     return $code
 }
@@ -1149,7 +1181,95 @@ function Installa-Pacchetto {
     }
 
     Write-Errore "$Nome NON installato (tentativi: $tentativiFatti)."
+
+    # RISERVA: per i pochi pacchetti critici (es. Chrome) se winget fallisce o
+    # resta bloccato, proviamo il DOWNLOAD DIRETTO dal sito ufficiale: piu'
+    # robusto del CDN winget (niente sorgenti/certificati da riparare) e su reti
+    # lente spesso piu' veloce. Se riesce, il pacchetto risulta installato e OK.
+    $urlRiserva = Get-UrlRiserva -WingetId $WingetId
+    if ($urlRiserva) {
+        Write-Info "Riprovo $Nome con il download diretto dal sito ufficiale..."
+        if (Invoke-InstallaDiretto -Nome $Nome -Url $urlRiserva) {
+            # Verifica reale (stesso metodo del ramo winget): che il pacchetto ci sia.
+            winget list --exact --id $WingetId @sorgente --accept-source-agreements 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-OK "$Nome installato (download diretto)."
+                Add-Report "$Nome (installazione)" "OK"
+                Add-IconaDesktop -Nome $Nome -LnkPrima $lnkPrima
+                return
+            }
+            Write-Errore "Installazione diretta eseguita ma $Nome non risulta presente."
+        } else {
+            Write-Errore "Download diretto di $Nome fallito."
+        }
+    }
+
     Add-Report "$Nome (installazione)" "ERRORE"
+}
+
+# URL di riserva (download diretto ufficiale) per i pacchetti critici, usati
+# quando winget fallisce o resta bloccato. Tenuta volutamente MINIMA: solo i
+# browser che via winget si rompono di piu'. URL ufficiali e stabili.
+function Get-UrlRiserva {
+    param([string]$WingetId)
+    switch ($WingetId) {
+        'Google.Chrome' { return 'https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi' }
+        default { return $null }
+    }
+}
+
+# =============================================================================
+# DOWNLOAD DIRETTO DI RISERVA: scarica l'installer ufficiale (BITS, veloce e
+# riprendibile) e lo esegue in silenzioso. Ritorna $true se l'installer ha
+# riportato successo (0 / 3010 / 1641); la verifica finale la fa il chiamante.
+# =============================================================================
+function Invoke-InstallaDiretto {
+    param(
+        [string]$Nome,
+        [string]$Url
+    )
+
+    try {
+        $estensione = [System.IO.Path]::GetExtension(([uri]$Url).LocalPath).ToLower()
+        if (-not $estensione) { $estensione = '.exe' }
+        $dest = Join-Path $env:TEMP ("pcfacile_$([guid]::NewGuid().ToString('N'))$estensione")
+
+        # Download: BITS se disponibile (veloce, riprendibile); altrimenti
+        # Invoke-WebRequest (il progresso lento e' gia' disattivato sopra).
+        Start-BarraAnimata "Scarico $Nome dal sito ufficiale"
+        try {
+            if (Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue) {
+                try { Start-BitsTransfer -Source $Url -Destination $dest -ErrorAction Stop }
+                catch {
+                    Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue
+                    Invoke-WebRequest -Uri $Url -OutFile $dest -UseBasicParsing -ErrorAction Stop
+                }
+            } else {
+                Invoke-WebRequest -Uri $Url -OutFile $dest -UseBasicParsing -ErrorAction Stop
+            }
+        } finally { Stop-BarraAnimata }
+        if (-not (Test-Path $dest)) { return $false }
+
+        # Installazione silenziosa: MSI -> msiexec /qn; setup -> /silent.
+        Start-BarraAnimata "Installo $Nome"
+        try {
+            if ($estensione -eq '.msi') {
+                $log = Join-Path $env:TEMP ("pcfacile_msi_" + [guid]::NewGuid().ToString('N') + ".log")
+                $p = Start-Process -FilePath 'msiexec.exe' `
+                    -ArgumentList "/i `"$dest`" /qn /norestart /l*v `"$log`"" -PassThru -Wait
+                Remove-Item -LiteralPath $log -Force -ErrorAction SilentlyContinue
+            } else {
+                $p = Start-Process -FilePath $dest -ArgumentList '/silent /install' -PassThru -Wait
+            }
+            $code = $p.ExitCode
+        } finally { Stop-BarraAnimata }
+        Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue
+
+        return ($code -in @(0, 3010, 1641))
+    } catch {
+        try { Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue } catch {}
+        return $false
+    }
 }
 
 # =============================================================================
