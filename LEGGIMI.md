@@ -132,7 +132,7 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 | 5  | **App Office**: installa la suite scelta se manca (Office 365, perpetuo, OpenOffice, LibreOffice), poi **attivazione** — card PIN → riscatto web (`microsoft365.com/setup` o `office.com/setup`) + accesso in Word. Crea i collegamenti Office sul Desktop |
 | 6  | **Pulizia e ottimizzazione**: rimuove antivirus di prova, bloatware OEM, promo dal menu Start, disinstalla OneDrive, piccole comodità Windows |
 | 7  | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
-| 8  | **App + browser**: scegli il profilo e il **browser si installa da solo** — **Chrome** per tutti, **Opera GX** se scegli GAMING (niente più passo Browser separato) |
+| 8  | **App + browser**: scegli il profilo e il **browser si installa da solo** — **Chrome** per tutti, **Opera GX** se scegli GAMING (niente più passo Browser separato). Se il download di Chrome via winget fallisce o si blocca, lo script ripiega sul **download diretto dal sito ufficiale** |
 | 9  | **Aggiornamento** di tutte le app installate (`winget upgrade --all`) |
 | 10 | **Driver**: scheda video dedicata (tool del produttore) + driver generici da Windows Update |
 | 11 | **Antivirus** (ultimo passo): McAfee, Norton, o Salta — dopo le altre installazioni, così un AV appena attivato non le blocca |
@@ -174,6 +174,11 @@ La pulizia toglie anche i **collegamenti promo dal menu Start** (Booking.com,
 **Comodità durante l'uso** (valgono per tutto lo script):
 - **Barra di avanzamento**: durante ogni download/installazione una barra animata
   con i secondi mostra che sta lavorando (l'output tecnico resta nascosto).
+- **Download più veloci**: il progresso lento di PowerShell è disattivato, così i
+  download grossi (installer) partono a piena velocità invece di rallentare.
+- **Niente download bloccato all'infinito**: se winget resta fermo oltre 20 minuti
+  viene interrotto da solo (non più la barra che gira senza fine); dove c'è la
+  riserva del download diretto (Chrome) lo script riprova da lì prima di segnare errore.
 - **Bip di richiamo**: quando lo script aspetta una tua risposta fa un bip; se non
   rispondi entro 2 minuti inizia a bipare in modo ricorrente (discreto) finché non
   riprendi, così te ne accorgi se ti sei allontanato.

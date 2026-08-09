@@ -17,7 +17,8 @@ BeforeAll {
 
     $script:FunzioniTestate = @(
         'New-PasswordCliente', 'New-EmailCliente',
-        'Test-NomeSimile', 'Test-LnkJunk', 'Test-Indietro'
+        'Test-NomeSimile', 'Test-LnkJunk', 'Test-Indietro',
+        'Get-UrlRiserva'
     )
     foreach ($nome in $script:FunzioniTestate) {
         $fn = $ast.FindAll({
@@ -110,5 +111,14 @@ Describe 'Test-Indietro' {
     It 'non scatta su altri valori' {
         Test-Indietro '3' | Should -BeFalse
         Test-Indietro 'S' | Should -BeFalse
+    }
+}
+
+Describe 'Get-UrlRiserva' {
+    It 'mappa Chrome al download ufficiale diretto (CDN Google)' {
+        Get-UrlRiserva -WingetId 'Google.Chrome' | Should -Match 'dl\.google\.com'
+    }
+    It 'non ha riserve per gli altri pacchetti (null)' {
+        Get-UrlRiserva -WingetId 'VideoLAN.VLC' | Should -BeNullOrEmpty
     }
 }
