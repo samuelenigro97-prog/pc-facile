@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "7.5 (2026-08-05)"
+$SCRIPT_VERSION = "7.6 (2026-08-05)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -932,15 +932,14 @@ function Show-BarraAttesa {
 # motivo non riesce ad avviare il processo, ripiega sulla chiamata classica.
 function Invoke-WingetConBarra {
     param([string]$Nome, [string[]]$WingetArgs)
-    # winget DIRETTO nel thread principale: cosi' $LASTEXITCODE e' AFFIDABILE
-    # (prima con Start-Process su un alias di sistema tornava a volte $null ->
-    # codice -999 e app come WhatsApp risultavano "fallite" pur installandosi).
-    # La barra animata gira in un runspace a parte; l'output tecnico di winget
-    # resta nascosto (*> $null).
-    $code = -1
-    Start-BarraAnimata "Scarico e installo $Nome"
-    try { winget @WingetArgs *> $null; $code = $LASTEXITCODE }
-    finally { Stop-BarraAnimata }
+    # winget DIRETTO nel thread principale, con il SUO progresso di download a
+    # schermo (niente barra animata sopra: quella girava in un runspace a parte
+    # e "litigava" con winget sulla stessa console -> app come Chrome si
+    # impallavano e davano errore). Cosi': $LASTEXITCODE affidabile, nessun
+    # conflitto, e si vede il download reale (utile quando la rete e' lenta).
+    Write-Info "Scarico e installo $Nome (vedi il progresso qui sotto)..."
+    winget @WingetArgs
+    $code = $LASTEXITCODE
     if ($null -eq $code) { $code = -1 }
     return $code
 }
@@ -1019,12 +1018,12 @@ function Add-IconaDesktop {
         # 0) DIFF: collegamenti NUOVI creati dall'installazione (max ~4s di attesa).
         if ($LnkPrima -and $LnkPrima.Count -ge 0) {
             $nuovi = @()
-            for ($t = 0; $t -lt 4; $t++) {
+            for ($t = 0; $t -lt 2; $t++) {
                 $nuovi = @(Get-StartMenuLnks | Where-Object {
                     ($LnkPrima -notcontains $_.FullName) -and -not (Test-LnkJunk $_.BaseName)
                 })
                 if ($nuovi.Count -gt 0) { break }
-                Start-Sleep -Seconds 1
+                Start-Sleep -Milliseconds 700
             }
             if ($nuovi.Count -gt 0) {
                 # Preferisci quelli che somigliano al nome; se nessuno, prendi il piu'
@@ -1112,7 +1111,7 @@ function Installa-Pacchetto {
         Write-Info "Installo $Nome...$(if ($tentativo -gt 1) { " (tentativo $tentativo)" })"
         # Nascondo l'output tecnico di winget (hash, licenze, progressi): confonde.
         # Al suo posto una barra animata di attesa, cosi' si vede che sta lavorando.
-        $codeInstall = Invoke-WingetConBarra -Nome $Nome -WingetArgs (@('install', '--exact', '--id', $WingetId) + $sorgente + @('--silent', '--accept-package-agreements', '--accept-source-agreements'))
+        $codeInstall = Invoke-WingetConBarra -Nome $Nome -WingetArgs (@('install', '--exact', '--id', $WingetId) + $sorgente + @('--silent', '--disable-interactivity', '--accept-package-agreements', '--accept-source-agreements'))
         # VERIFICA REALE: chiedo a winget se ORA il pacchetto e' presente. E' piu'
         # affidabile del solo exit code: con la barra (Start-Process su un alias di
         # sistema) il codice a volte torna sballato e segnava ERRORE un programma
@@ -2324,7 +2323,7 @@ if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(3, $passo - 1); continue 
 if ($vuoiUpgrade -match "^[Ss]") {
     if (Confirm-Winget) {
         Write-Info "Aggiornamento in corso (puo' richiedere diversi minuti)..."
-        $null = Invoke-WingetConBarra -Nome "aggiornamenti app" -WingetArgs @('upgrade', '--all', '--silent', '--accept-package-agreements', '--accept-source-agreements', '--include-unknown')
+        $null = Invoke-WingetConBarra -Nome "aggiornamenti app" -WingetArgs @('upgrade', '--all', '--silent', '--disable-interactivity', '--accept-package-agreements', '--accept-source-agreements', '--include-unknown')
         Write-OK "Aggiornamento app completato."
         Add-Report "Aggiornamento app installate" "OK"
     } else {
