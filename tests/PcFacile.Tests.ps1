@@ -1,39 +1,20 @@
 # =============================================================================
 # Test Pester per setup-pc.ps1
 # -----------------------------------------------------------------------------
-# setup-pc.ps1 e' un unico file che "gira" dall'alto in basso (menu, controlli
-# admin, installazioni): NON si puo' dot-sourcare per intero senza eseguirlo.
-# Per testare le funzioni PURE senza effetti collaterali, le ESTRAGGO dal file
-# con il parser di PowerShell (AST) e le definisco a scope GLOBALE, cosi' sono
-# visibili in tutti i blocchi It (in Pester v5 lo scope conta). Restano sempre
-# allineate alla vera sorgente, senza duplicare codice.
+# Il flusso operativo non viene dot-sourcato: le funzioni pure sono importate
+# dal modulo core, mentre la sorgente principale viene validata tramite AST.
 # =============================================================================
 
 BeforeAll {
     $script:SetupPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'setup-pc.ps1'
     if (-not (Test-Path $script:SetupPath)) { throw "setup-pc.ps1 non trovato: $script:SetupPath" }
 
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:SetupPath, [ref]$null, [ref]$null)
-
-    $script:FunzioniTestate = @(
-        'New-PasswordCliente', 'New-EmailCliente',
-        'Test-NomeSimile', 'Test-LnkJunk', 'Test-Indietro'
-    )
-    foreach ($nome in $script:FunzioniTestate) {
-        $fn = $ast.FindAll({
-            param($n)
-            $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $nome
-        }, $true) | Select-Object -First 1
-        if (-not $fn) { throw "Funzione '$nome' non trovata in setup-pc.ps1" }
-        # Definisco la funzione a scope globale: cosi' e' visibile in ogni It.
-        Set-Item -Path "function:global:$nome" -Value $fn.Body.GetScriptBlock()
-    }
+    $script:CorePath = Join-Path (Split-Path $PSScriptRoot -Parent) 'src\PcFacile.Core.psm1'
+    Import-Module $script:CorePath -Force
 }
 
 AfterAll {
-    foreach ($nome in $script:FunzioniTestate) {
-        Remove-Item -Path "function:global:$nome" -ErrorAction SilentlyContinue
-    }
+    Remove-Module PcFacile.Core -Force -ErrorAction SilentlyContinue
 }
 
 Describe 'setup-pc.ps1: la sorgente e'' sintatticamente valida' {
@@ -110,5 +91,35 @@ Describe 'Test-Indietro' {
     It 'non scatta su altri valori' {
         Test-Indietro '3' | Should -BeFalse
         Test-Indietro 'S' | Should -BeFalse
+    }
+}
+
+Describe 'Modalita non mutanti' {
+    It 'calcola RunReale dopo la scelta iniziale e non personalizza il registro console' {
+        $sorgente = Get-Content $script:SetupPath -Raw
+        $inizializzazione = $sorgente.IndexOf('$RunReale = (-not $Test -and -not $Diagnostica)')
+        $sceltaTest = $sorgente.IndexOf('$Test = $true')
+        $inizializzazione | Should -BeGreaterThan -1
+        $inizializzazione | Should -BeGreaterThan $sceltaTest
+        $sorgente | Should -Not -Match "Set-ItemProperty -Path 'HKCU:\\Console'"
+    }
+}
+
+Describe 'Rilevamento GPU' {
+    It 'riconosce NVIDIA' {
+        Mock Get-CimInstance -ModuleName PcFacile.Core { @([pscustomobject]@{ Name = 'NVIDIA GeForce RTX 4060' }) }
+        Test-GpuNvidia | Should -BeTrue
+        Get-GpuDedicata | Should -BeExactly 'NVIDIA'
+    }
+
+    It 'non considera dedicata una grafica Intel integrata' {
+        Mock Get-CimInstance -ModuleName PcFacile.Core { @([pscustomobject]@{ Name = 'Intel UHD Graphics' }) }
+        Test-GpuNvidia | Should -BeFalse
+        Get-GpuDedicata | Should -BeNullOrEmpty
+    }
+
+    It 'riconosce AMD Radeon RX dedicata' {
+        Mock Get-CimInstance -ModuleName PcFacile.Core { @([pscustomobject]@{ Name = 'AMD Radeon RX 7800 XT' }) }
+        Get-GpuDedicata | Should -BeExactly 'AMD'
     }
 }

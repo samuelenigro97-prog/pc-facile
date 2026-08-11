@@ -13,8 +13,12 @@ Tutti i dettagli, i comandi alternativi da PowerShell e la compatibilità Window
 
 ## Sviluppo / qualità
 
-- **Integrità**: `PC Facile.bat` verifica lo **SHA256** dello script scaricato contro `setup-pc.ps1.sha256`; se non combacia, scarta il download e usa la copia locale.
+- **Integrità**: `PC Facile.bat` verifica lo **SHA256** dello script e del modulo core scaricati; se non combaciano, scarta il download e usa la copia locale.
 - **Test**: `tests/PcFacile.Tests.ps1` (Pester) verifica le funzioni pure. Esegui in locale con `Invoke-Pester ./tests`.
 - **CI**: `.github/workflows/ci.yml` gira su ogni push/PR (Windows) — controllo sintassi, PSScriptAnalyzer, Pester e verifica dell'hash.
 - **Dopo aver modificato `setup-pc.ps1`** va rigenerato l'hash:
   `(Get-FileHash ./setup-pc.ps1 -Algorithm SHA256).Hash.ToLower() | Set-Content ./setup-pc.ps1.sha256` (la CI fallisce se è disallineato).
+- **Struttura**: le funzioni pure e riutilizzabili sono in `src/PcFacile.Core.psm1`, separate dal flusso operativo.
+- **Rollback**: prima delle modifiche viene proposto un punto di ripristino; il report JSON conserva gli esiti tecnici.
+- **Release**: il workflow manuale `Release package` crea un pacchetto versionato con script, modulo, hash e documentazione.
+- **Sicurezza**: firma Authenticode, distribuzione e trattamento dei dati sensibili sono descritti in `SECURITY.md`.

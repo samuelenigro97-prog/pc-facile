@@ -35,13 +35,10 @@ Tasto destro → **Salva con nome** → `PC Facile.bat`.
 Il launcher scarica **sempre l'ultima versione** da GitHub, così è aggiornato da
 solo (niente copie vecchie sulla chiavetta).
 
-**Uso OFFLINE (fallback):** se vuoi poter lavorare senza Internet, scarica anche
-`setup-pc.ps1` e mettilo **nella stessa cartella** di `PC Facile.bat`. Serve solo
-se il download fallisce: in quel caso il launcher usa la copia accanto. Ricordati
-di rinfrescarla ogni tanto, altrimenti offline resti a una versione vecchia.
-```
-https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1
-```
+**Uso OFFLINE (fallback):** scarica il pacchetto ZIP più recente dalla sezione
+**Releases** ed estrailo mantenendo la cartella `src`. Il launcher richiede
+`setup-pc.ps1`, `setup-pc.ps1.sha256`, `src\PcFacile.Core.psm1` e la relativa
+impronta. Aggiorna periodicamente tutto il pacchetto, non i singoli file.
 
 ---
 
@@ -68,19 +65,16 @@ Niente comandi da digitare.
 Apri **Windows PowerShell** (NON la versione "(x86)") **come Amministratore**
 (Start → scrivi `PowerShell` → tasto destro → *Esegui come amministratore*).
 
-Usa questi comandi: eseguono lo script **in memoria** (come scriptblock), quindi
-**non** danno l'errore "L'esecuzione di script è disabilitata" e accettano i
-parametri. Non serve salvare file né toccare l'ExecutionPolicy.
+Il programma usa anche il modulo verificato `src\PcFacile.Core.psm1`: eseguilo
+dal pacchetto Release estratto, senza scaricare il solo script.
 
 ```powershell
-# CONFIGURA il PC (installa e imposta)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1)))
+# CONFIGURA il PC
+powershell -ExecutionPolicy Bypass -File '.\setup-pc.ps1'
 
-# DIAGNOSTICA (controlla ID pacchetti e ambiente, NON installa)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1))) -Diagnostica
-
-# TEST a vuoto (percorre tutto senza installare/modificare)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1))) -Test
+# DIAGNOSTICA / TEST non mutanti
+powershell -ExecutionPolicy Bypass -File '.\setup-pc.ps1' -Diagnostica
+powershell -ExecutionPolicy Bypass -File '.\setup-pc.ps1' -Test
 ```
 
 Se invece hai il file salvato e vuoi lanciarlo da file:
@@ -89,8 +83,7 @@ powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\Desktop\setup-pc.ps1"
 ```
 
 > ⚠️ **Perché l'errore "esecuzione disabilitata"?** Windows blocca i file `.ps1`
-> di default. Eseguire come scriptblock in memoria (comandi sopra) o con
-> `-ExecutionPolicy Bypass` lo evita. Lo script non puo' risolverlo da dentro:
+> di default. Eseguire con `-ExecutionPolicy Bypass` lo evita. Lo script non puo' risolverlo da dentro:
 > il blocco avviene PRIMA che parta.
 >
 > **Nota percorso:** usa `$env:USERPROFILE` (es. `C:\Users\telef`) — NON un nome
@@ -195,8 +188,8 @@ I PC nuovi **non sono nel dominio** aziendale: usano solo la connessione. Le pol
 aziendali (Group Policy, AppLocker) **non** si applicano al PC fresco. Il rischio è
 solo che il **firewall/proxy blocchi i download**:
 
-- **GitHub bloccato** → usa la modalità **offline**: tieni `setup-pc.ps1` accanto ad
-  `PC Facile.bat` (niente download).
+- **GitHub bloccato** → usa il pacchetto Release offline completo, mantenendo la
+  cartella `src` accanto a `setup-pc.ps1`.
 - **Winget/CDN Microsoft bloccati** → le app non si installano (il report lo segnala).
   Rimedio: **hotspot del telefono** per la fase installazioni, o installa dopo su rete
   senza filtri.
