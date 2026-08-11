@@ -50,23 +50,27 @@ REM     confronto. Se non combaciano (download corrotto/troncato) scarto il
 REM     file e uso il fallback offline. Se l'hash non e' disponibile, proseguo.
 echo Scarico l'ultima versione da GitHub...
 set "PS1=%TEMP%\setup-pc.ps1"
+set "CORE_DIR=%TEMP%\lib"
+set "CORE=%TEMP%\lib\PcFacile.Core.ps1"
 if exist "%PS1%" del "%PS1%" >nul 2>&1
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $t=(Get-Date -UFormat %%s); $base='https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main'; irm ($base+'/setup-pc.ps1?t='+$t) -Headers @{ 'Cache-Control'='no-cache' } -OutFile '%PS1%'; try { $atteso=(((irm ($base+'/setup-pc.ps1.sha256?t='+$t) -Headers @{ 'Cache-Control'='no-cache' }).Trim()) -split '\s+')[0].ToLower(); $reale=(Get-FileHash '%PS1%' -Algorithm SHA256).Hash.ToLower(); if ($atteso -and $reale -ne $atteso) { Write-Host 'ATTENZIONE: impronta SHA256 non corrisponde: scarto il download.' -ForegroundColor Red; Remove-Item '%PS1%' -Force } else { Write-Host 'Integrita'' verificata (SHA256).' -ForegroundColor Green } } catch { Write-Host 'Verifica SHA256 saltata (impronta non disponibile).' -ForegroundColor Yellow } } catch { Write-Host ('Download fallito: '+$_) -ForegroundColor Yellow }"
+if exist "%CORE%" del "%CORE%" >nul 2>&1
+if not exist "%CORE_DIR%" mkdir "%CORE_DIR%" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $t=(Get-Date -UFormat %%s); $base='https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main'; irm ($base+'/setup-pc.ps1?t='+$t) -Headers @{ 'Cache-Control'='no-cache' } -OutFile '%PS1%'; irm ($base+'/lib/PcFacile.Core.ps1?t='+$t) -Headers @{ 'Cache-Control'='no-cache' } -OutFile '%CORE%'; try { $atteso=(((irm ($base+'/setup-pc.ps1.sha256?t='+$t) -Headers @{ 'Cache-Control'='no-cache' }).Trim()) -split '\s+')[0].ToLower(); $reale=(Get-FileHash '%PS1%' -Algorithm SHA256).Hash.ToLower(); if ($atteso -and $reale -ne $atteso) { Write-Host 'ATTENZIONE: impronta SHA256 non corrisponde: scarto il download.' -ForegroundColor Red; Remove-Item '%PS1%' -Force } else { Write-Host 'Integrita'' verificata (SHA256).' -ForegroundColor Green } } catch { Write-Host 'Verifica SHA256 saltata (impronta non disponibile).' -ForegroundColor Yellow } } catch { Write-Host ('Download fallito: '+$_) -ForegroundColor Yellow; Remove-Item '%PS1%' -Force -ErrorAction SilentlyContinue }"
 
 REM --- Se il download e' riuscito uso quello (SEMPRE aggiornato) ---
-if exist "%PS1%" (
+if exist "%PS1%" if exist "%CORE%" (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%"
     goto :fine
 )
 
 REM --- Offline: fallback sulla copia accanto al .bat (chiavetta) ---
-if exist "%~dp0setup-pc.ps1" (
+if exist "%~dp0setup-pc.ps1" if exist "%~dp0lib\PcFacile.Core.ps1" (
     echo Offline: uso la copia sulla chiavetta ^(potrebbe non essere l'ultima^).
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1"
 ) else (
     echo.
     echo Impossibile scaricare lo script: controlla la connessione a Internet,
-    echo oppure copia setup-pc.ps1 sulla chiavetta accanto a PC Facile.bat.
+    echo oppure copia setup-pc.ps1 e la cartella lib sulla chiavetta.
 )
 
 :fine

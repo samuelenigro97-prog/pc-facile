@@ -126,7 +126,7 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 | Step | Azione |
 |------|--------|
 | 1  | **Nome cliente** (cambia il "Nome visualizzato" dell'account **e** il nome del PC): serve subito, genera anche le credenziali suggerite |
-| 2  | **Account Microsoft** (subito, col cliente davanti): apre il login/registrazione; genera o annota email + password `Nome123!` nel riepilogo. Così Office e antivirus dopo non richiedono altri OTP |
+| 2  | **Account Microsoft** (subito, col cliente davanti): apre il login/registrazione; genera una password temporanea casuale o annota le credenziali fornite nel riepilogo. Così Office e antivirus dopo non richiedono altri OTP |
 | 3  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
 | 4  | **Punto di ripristino** (opzionale, consigliato): rete di sicurezza prima delle modifiche |
 | 5  | **App Office**: installa la suite scelta se manca (Office 365, perpetuo, OpenOffice, LibreOffice), poi **attivazione** — card PIN → riscatto web (`microsoft365.com/setup` o `office.com/setup`) + accesso in Word. Crea i collegamenti Office sul Desktop |
@@ -137,6 +137,10 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 | 10 | **Driver**: scheda video dedicata (tool del produttore) + driver generici da Windows Update |
 | 11 | **Antivirus** (ultimo passo): McAfee, Norton, o Salta — dopo le altre installazioni, così un AV appena attivato non le blocca |
 | —  | **Report finale**: verifica finale + chiave BitLocker + file riepilogo sul Desktop + riavvio |
+
+La password non viene salvata nel checkpoint di ripresa e gli appunti vengono
+svuotati a fine procedura. Il riepilogo sul Desktop contiene dati sensibili:
+consegnalo al cliente e non conservarne copie non protette.
 
 **Profili app** (browser incluso: Chrome, o Opera GX per GAMING):
 - **BASE** — VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, Zoom, AnyDesk

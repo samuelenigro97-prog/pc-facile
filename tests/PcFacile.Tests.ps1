@@ -11,9 +11,11 @@
 
 BeforeAll {
     $script:SetupPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'setup-pc.ps1'
+    $script:CorePath = Join-Path (Split-Path $PSScriptRoot -Parent) 'lib/PcFacile.Core.ps1'
     if (-not (Test-Path $script:SetupPath)) { throw "setup-pc.ps1 non trovato: $script:SetupPath" }
+    if (-not (Test-Path $script:CorePath)) { throw "PcFacile.Core.ps1 non trovato: $script:CorePath" }
 
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:SetupPath, [ref]$null, [ref]$null)
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:CorePath, [ref]$null, [ref]$null)
 
     $script:FunzioniTestate = @(
         'New-PasswordCliente', 'New-EmailCliente',
@@ -42,17 +44,20 @@ Describe 'setup-pc.ps1: la sorgente e'' sintatticamente valida' {
         [System.Management.Automation.Language.Parser]::ParseFile($script:SetupPath, [ref]$null, [ref]$errs) | Out-Null
         @($errs).Count | Should -Be 0
     }
+    It 'non ha errori di parsing nel modulo core' {
+        $errs = $null
+        [System.Management.Automation.Language.Parser]::ParseFile($script:CorePath, [ref]$null, [ref]$errs) | Out-Null
+        @($errs).Count | Should -Be 0
+    }
 }
 
 Describe 'New-PasswordCliente' {
-    It 'costruisce Nome + 123! con iniziale maiuscola' {
-        New-PasswordCliente -Base 'Rossi' | Should -BeExactly 'Rossi123!'
-    }
-    It 'toglie spazi e caratteri non alfabetici' {
-        New-PasswordCliente -Base 'de luca' | Should -BeExactly 'Deluca123!'
-    }
-    It 'usa "Cliente" se il nome e'' vuoto' {
-        New-PasswordCliente -Base '' | Should -BeExactly 'Cliente123!'
+    It 'genera password casuali di 16 caratteri senza il nome cliente' {
+        $prima = New-PasswordCliente -Base 'Rossi'
+        $seconda = New-PasswordCliente -Base 'Rossi'
+        $prima.Length | Should -Be 16
+        $prima | Should -Not -Match 'Rossi'
+        $prima | Should -Not -BeExactly $seconda
     }
     It 'soddisfa i requisiti Microsoft (maiuscola, minuscola, cifra, simbolo)' {
         $pw = New-PasswordCliente -Base 'Bianchi'

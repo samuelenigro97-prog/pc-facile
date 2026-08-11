@@ -23,7 +23,7 @@ allineati come flusso e funzioni.
 | Barra attesa download/install| `Show-BarraAttesa` (winget in Start-Process)| — (brew mostra gia' il progresso)             | solo Win |
 | Avviso sonoro fine passo    | `[console]::Beep`                         | `printf '\a'`                                 | pari |
 | Bip di richiamo se non rispondi| runspace: dopo 2 min bip corto ogni ~4s | —                                             | solo Win |
-| Credenziali (esist./gen.)   | `Nome123!` + `Set-Clipboard`              | `Nome123!` + `pbcopy`                         | pari |
+| Credenziali (esist./gen.)   | password casuale + `Set-Clipboard`        | password casuale + `pbcopy`                   | pari |
 | Report finale .txt          | Desktop `Riepilogo-PC_*.txt`              | Desktop `Riepilogo-Mac_*.txt`                 | pari |
 | Pulizia finale (auto-elimina)| rimuove `%TEMP%\setup-pc.ps1` + reg colori + checkpoint | `rm` dello script scaricato in `/tmp` | pari |
 | Ripresa sessione interrotta | checkpoint JSON in `ProgramData\PCFacile` | —                                             | solo Win |

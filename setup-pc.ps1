@@ -18,6 +18,9 @@ param(
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
+# Funzioni pure condivise e testabili senza avviare il wizard.
+. (Join-Path $PSScriptRoot 'lib/PcFacile.Core.ps1')
+
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
 $SCRIPT_VERSION = "7.5 (2026-08-05)"
@@ -221,27 +224,6 @@ function Attendi-Risposta {
 function Pausa {
     Write-Host ""
     [void](Attendi-Risposta "Premi INVIO per continuare")
-}
-
-# Password = nome cliente + "123!" (sempre, cosi' e' prevedibile e facile da
-# dettare). Es. "Rossi" -> "Rossi123!". Ha maiuscola, minuscole, cifre e simbolo
-# -> soddisfa i requisiti Microsoft. Lo SCRIPT la costruisce (quindi la conosce
-# e la scrive nel riepilogo): NON legge nulla dal browser.
-function New-PasswordCliente {
-    param([string]$Base)
-    $b = ($Base -replace '[^A-Za-z]', '')
-    if ($b.Length -lt 1) { $b = "Cliente" }
-    $b = $b.Substring(0, 1).ToUpper() + $b.Substring(1).ToLower()
-    return "${b}123!"
-}
-
-# Email suggerita per un nuovo account (outlook.com) dal nome cliente + numero.
-function New-EmailCliente {
-    param([string]$Base)
-    $e = ($Base -replace '[^A-Za-z0-9]', '').ToLower()
-    if (-not $e) { $e = "cliente" }
-    if ($e.Length -gt 15) { $e = $e.Substring(0, 15) }
-    return "$e$(Get-Random -Minimum 10 -Maximum 999)@outlook.com"
 }
 
 # Rileva una GPU NVIDIA: serve a capire se e' un PC da gaming e installare l'app
@@ -495,8 +477,8 @@ $credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
 # =============================================================================
 # RIPRESA SESSIONE: se lo script viene chiuso a meta' (crash, riavvio, blocco
 # antivirus), al lancio successivo riparte da dove era arrivato. Dopo ogni
-# passo completato lo stato (numero passo + nome cliente + credenziali
-# generate) finisce in un file JSON in ProgramData, ELIMINATO a fine lavoro.
+# passo completato lo stato (numero passo, nome cliente e account, mai la
+# password) finisce in un file JSON in ProgramData, ELIMINATO a fine lavoro.
 # Fasi: 1=Nome 2=Account 3=Lingua 4=Ripristino 5=Office 6=Pulizia,
 # 7..11 = passi wizard 3..7 (Unieuro, App+browser, Aggiornamento, Driver,
 # Antivirus). Solo nel run reale.
@@ -515,7 +497,7 @@ function Save-Fase {
             Fase = $Fase; FaseNome = $Nome
             Data = (Get-Date -Format 'dd/MM/yyyy HH:mm')
             NomeCliente = $nomeCliente
-            CredAccount = $credMsAccount; CredPassword = $credMsPassword
+            CredAccount = $credMsAccount
         } | ConvertTo-Json | Set-Content -Path $Global:StatoFile -Encoding UTF8
     } catch {}
 }
@@ -948,24 +930,6 @@ function Invoke-WingetConBarra {
 # --- ICONA SUL DESKTOP per ogni app installata (cosi' il cliente vede cosa e'
 #     stato messo). Due nomi "somigliano" se, tolti spazi/punteggiatura, uno
 #     contiene l'altro (es. "Adobe Acrobat Reader" ~ "Adobe Acrobat"). ---
-function Test-NomeSimile {
-    param([string]$A, [string]$B)
-    $na = ($A -replace '[^A-Za-z0-9]', '').ToLower()
-    $nb = ($B -replace '[^A-Za-z0-9]', '').ToLower()
-    if (-not $na -or -not $nb) { return $false }
-    return ($na.Contains($nb) -or $nb.Contains($na))
-}
-
-# Collegamenti "spazzatura" da NON copiare sul Desktop (disinstalla, guida...).
-function Test-LnkJunk {
-    param([string]$Base)
-    $junk = @('*uninstall*', '*disinstall*', '*guida*', '*help*', '*read*me*', '*leggimi*',
-              '*documentation*', '*website*', '*sito*', '*modify*', '*repair*', '*support*',
-              '*aggiorna*', '*update*')
-    foreach ($p in $junk) { if ($Base -like $p) { return $true } }
-    return $false
-}
-
 # Toglie il collegamento di Microsoft Edge dal Desktop (utente + pubblico):
 # se installiamo altri browser, l'icona di Edge sul Desktop non serve.
 function Remove-EdgeDaDesktop {
@@ -1251,7 +1215,6 @@ if ($RunReale) {
                 $Global:FaseRipresa = [int]$st.Fase
                 if ($st.NomeCliente)  { $nomeCliente    = [string]$st.NomeCliente }
                 if ($st.CredAccount)  { $credMsAccount  = [string]$st.CredAccount }
-                if ($st.CredPassword) { $credMsPassword = [string]$st.CredPassword }
                 Write-OK "Riprendo: i passi gia' completati verranno saltati."
             } else {
                 Remove-Item $Global:StatoFile -Force -ErrorAction SilentlyContinue
@@ -1422,7 +1385,7 @@ if ($vuoiMs -match "^[Ss]") {
     # Credenziali per il riepilogo. Due casi:
     #  - il cliente ha GIA' una sua email/password che usa -> le inserisci tu
     #    (le detta lui) e finiscono nel riepilogo;
-    #  - account NUOVO -> le genera lo script (email + Nome123!).
+    #  - account NUOVO -> lo script genera email e password temporanea casuale.
     # In entrambi i casi niente lette dal browser. Questa domanda resta anche in
     # Veloce perche' cambia da cliente a cliente.
     if ($RunReale) {
@@ -2058,8 +2021,6 @@ Save-Fase 6 "Pulizia e ottimizzazione"
 # Torna al passo precedente quando l'utente digita B al prompt principale di un
 # passo. Uso 'continue wizard' (loop etichettato) per rifare il giro del while
 # anche da dentro lo switch, saltando il $passo++ di fine passo.
-function Test-Indietro { param([string]$v) return ($v -match '^\s*[Bb]\s*$') }
-
 # Funzioni dei passi Antivirus/Unieuro: definite QUI (prima del wizard) perche'
 # ora l'Antivirus e' l'ultimo passo mentre Unieuro gira prima e usa
 # Attiva-ServizioWeb: cosi' entrambe sono gia' disponibili quando servono.
@@ -2549,8 +2510,7 @@ if ($RunReale) {
     # RETE DI SICUREZZA sulla PASSWORD: nel file non deve MAI mancare. Se per
     # qualsiasi motivo e' vuota (passo saltato, account gia' esistente senza
     # password digitata) ma conosco il nome cliente, la imposto al formato
-    # standard "Nome123!" (prima lettera maiuscola) - la stessa che si usa in
-    # negozio. Idem per l'email suggerita se manca del tutto.
+    # casuale sicuro. Idem per l'email suggerita se manca del tutto.
     if (-not $credMsPassword -and $nomeCliente) { $credMsPassword = New-PasswordCliente -Base $nomeCliente }
     if (-not $credMsAccount  -and $nomeCliente) { $credMsAccount  = New-EmailCliente   -Base $nomeCliente }
     try {
@@ -2789,6 +2749,8 @@ if ($RunReale) {
     # ProgramData\PCFacile resta perche' contiene i log tecnici (senza
     # credenziali): li teniamo per l'assistenza.
     try { Remove-Item $Global:StatoFile -Force -ErrorAction SilentlyContinue } catch {}
+    # Il riepilogo e' stato creato: non lasciare la password negli appunti.
+    try { Set-Clipboard -Value '' } catch {}
     $ioStesso = $MyInvocation.MyCommand.Path
     if ($ioStesso -and $ioStesso -like "$env:TEMP\*") {
         # Il file .ps1 in esecuzione NON e' bloccato: lo rimuovo ora, lo script
