@@ -18,9 +18,19 @@ param(
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
+$corePath = Join-Path $PSScriptRoot 'src\PcFacile.Core.psm1'
+$coreHashPath = "$corePath.sha256"
+if (-not (Test-Path $corePath) -or -not (Test-Path $coreHashPath)) {
+    throw 'Modulo PcFacile.Core o relativa impronta SHA256 mancante.'
+}
+$coreAtteso = ((Get-Content $coreHashPath -Raw).Trim() -split '\s+')[0].ToLower()
+$coreReale = (Get-FileHash $corePath -Algorithm SHA256).Hash.ToLower()
+if ($coreAtteso -ne $coreReale) { throw 'Integrita del modulo PcFacile.Core non valida.' }
+Import-Module $corePath -Force
+
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "7.5 (2026-08-05)"
+$SCRIPT_VERSION = "7.6 (2026-08-11)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -46,16 +56,8 @@ $LINEA_D   = ([string][char]0x2550) * 60   # linea doppia orizzontale
 # cosi' dai lanci successivi su quel PC parte l'arancione vero.
 $THEME_TXT = "White"    # testo dei titoli (bianco, come il payoff del logo)
 
-# La chiave vale per le finestre APERTE DOPO averla scritta: il primo giro su
-# un PC nuovo puo' essere ancora ambra, i successivi arancione.
-try {
-    if (-not (Test-Path 'HKCU:\Console')) { New-Item -Path 'HKCU:\Console' -Force | Out-Null }
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -Value 1 -Type DWord -ErrorAction Stop
-    # Rimappa lo slot "DarkBlue" (indice 1) al navy SCURO #0A0E24, cosi' lo
-    # sfondo blu e' un navy vero e non il DarkBlue acceso di default. DWORD in
-    # formato 0x00BBGGRR = 0x00240E0A. Vale dalle finestre aperte dopo.
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -Value 0x00240E0A -Type DWord -ErrorAction SilentlyContinue
-} catch {}
+# Lo script non modifica più i colori persistenti della console. Se il Virtual
+# Terminal è già disponibile usa l'arancione ANSI; altrimenti usa DarkYellow.
 
 # Rileva se il VT e' attivo per QUESTA finestra (chiave gia' presente al lancio).
 $vtOn = $false
@@ -227,32 +229,12 @@ function Pausa {
 # dettare). Es. "Rossi" -> "Rossi123!". Ha maiuscola, minuscole, cifre e simbolo
 # -> soddisfa i requisiti Microsoft. Lo SCRIPT la costruisce (quindi la conosce
 # e la scrive nel riepilogo): NON legge nulla dal browser.
-function New-PasswordCliente {
-    param([string]$Base)
-    $b = ($Base -replace '[^A-Za-z]', '')
-    if ($b.Length -lt 1) { $b = "Cliente" }
-    $b = $b.Substring(0, 1).ToUpper() + $b.Substring(1).ToLower()
-    return "${b}123!"
-}
 
 # Email suggerita per un nuovo account (outlook.com) dal nome cliente + numero.
-function New-EmailCliente {
-    param([string]$Base)
-    $e = ($Base -replace '[^A-Za-z0-9]', '').ToLower()
-    if (-not $e) { $e = "cliente" }
-    if ($e.Length -gt 15) { $e = $e.Substring(0, 15) }
-    return "$e$(Get-Random -Minimum 10 -Maximum 999)@outlook.com"
-}
 
 # Rileva una GPU NVIDIA: serve a capire se e' un PC da gaming e installare l'app
 # GeForce (che tiene aggiornati i driver video). Get-CimInstance e' standard,
 # niente P/Invoke.
-function Test-GpuNvidia {
-    try {
-        return @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -match 'NVIDIA|GeForce|RTX|GTX' }).Count -gt 0
-    } catch { return $false }
-}
 
 # Rileva la GPU DEDICATA (non l'integrata): solo per queste ha senso installare
 # il tool del produttore, perche' Windows Update spesso non ne prende il driver
@@ -264,25 +246,6 @@ function Test-GpuNvidia {
 #  - AMD "Radeon RX/Pro"       -> dedicata; una AMD + un'altra GPU -> dedicata.
 #    "Radeon Graphics"/"Vega" da sola -> integrata (nel dubbio si salta).
 #  - Intel "Arc"               -> dedicata (rara); le altre Intel -> integrate.
-function Get-GpuDedicata {
-    try {
-        $gpu = @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
-                 Where-Object { $_.Name })
-        if ($gpu.Count -eq 0) { return $null }
-
-        if ($gpu | Where-Object { $_.Name -match 'NVIDIA|GeForce|RTX|GTX' }) { return 'NVIDIA' }
-
-        $amdDed = $gpu | Where-Object { $_.Name -match 'Radeon\s*(RX|Pro)|Radeon\s*R[579]|FirePro' }
-        # AMD affiancata a una GPU di un altro vendor = quasi certamente dedicata.
-        $amdQualsiasi = $gpu | Where-Object { $_.Name -match 'AMD|Radeon' }
-        $nonAmd       = $gpu | Where-Object { $_.Name -notmatch 'AMD|Radeon' }
-        if ($amdDed -or ($amdQualsiasi -and $nonAmd)) { return 'AMD' }
-
-        if ($gpu | Where-Object { $_.Name -match 'Intel.*Arc|Arc\s*A\d' }) { return 'INTEL' }
-
-        return $null   # solo grafica integrata
-    } catch { return $null }
-}
 
 # Trova gli antivirus di PROVA installati leggendo le chiavi di disinstallazione
 # (ARP) del registro: piu' affidabile di 'winget list', becca anche i
@@ -452,8 +415,8 @@ if ($Veloce -and -not $Test -and -not $Diagnostica) {
     function Pausa { }
 }
 
-# Run "reale" = Configura (non Test, non Diagnostica): solo qui si creano i
-# file su Desktop (log/report/scheda/batteria), per non sporcare coi controlli.
+# Calcolato DOPO il menu: anche Test/Diagnostica scelti dalla schermata iniziale
+# sono realmente non mutanti.
 $RunReale = (-not $Test -and -not $Diagnostica)
 
 # =============================================================================
@@ -948,23 +911,8 @@ function Invoke-WingetConBarra {
 # --- ICONA SUL DESKTOP per ogni app installata (cosi' il cliente vede cosa e'
 #     stato messo). Due nomi "somigliano" se, tolti spazi/punteggiatura, uno
 #     contiene l'altro (es. "Adobe Acrobat Reader" ~ "Adobe Acrobat"). ---
-function Test-NomeSimile {
-    param([string]$A, [string]$B)
-    $na = ($A -replace '[^A-Za-z0-9]', '').ToLower()
-    $nb = ($B -replace '[^A-Za-z0-9]', '').ToLower()
-    if (-not $na -or -not $nb) { return $false }
-    return ($na.Contains($nb) -or $nb.Contains($na))
-}
 
 # Collegamenti "spazzatura" da NON copiare sul Desktop (disinstalla, guida...).
-function Test-LnkJunk {
-    param([string]$Base)
-    $junk = @('*uninstall*', '*disinstall*', '*guida*', '*help*', '*read*me*', '*leggimi*',
-              '*documentation*', '*website*', '*sito*', '*modify*', '*repair*', '*support*',
-              '*aggiorna*', '*update*')
-    foreach ($p in $junk) { if ($Base -like $p) { return $true } }
-    return $false
-}
 
 # Toglie il collegamento di Microsoft Edge dal Desktop (utente + pubblico):
 # se installiamo altri browser, l'icona di Edge sul Desktop non serve.
@@ -2058,7 +2006,6 @@ Save-Fase 6 "Pulizia e ottimizzazione"
 # Torna al passo precedente quando l'utente digita B al prompt principale di un
 # passo. Uso 'continue wizard' (loop etichettato) per rifare il giro del while
 # anche da dentro lo switch, saltando il $passo++ di fine passo.
-function Test-Indietro { param([string]$v) return ($v -match '^\s*[Bb]\s*$') }
 
 # Funzioni dei passi Antivirus/Unieuro: definite QUI (prima del wizard) perche'
 # ora l'Antivirus e' l'ultimo passo mentre Unieuro gira prima e usa
@@ -2768,22 +2715,12 @@ if ($RunReale) {
 
 # -----------------------------------------------------------------------------
 # PULIZIA FINALE: PC Facile non lascia tracce di se' sul PC del cliente.
-# Cancella la copia dello script scaricata in %TEMP% dal launcher e i due valori
-# di registro dei colori (console riportata allo stato di fabbrica). Remove-Item
+# Cancella la copia dello script scaricata in %TEMP% dal launcher. Remove-Item
 # cancella in modo PERMANENTE, NON passa dal Cestino. Il REPORT sul Desktop
 # resta: serve al cliente. Se lo script gira dalla chiavetta (offline) la copia
 # locale NON viene toccata. Fatto PRIMA dell'eventuale riavvio, cosi' parte sempre.
 # -----------------------------------------------------------------------------
 if ($RunReale) {
-    try {
-        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -ErrorAction SilentlyContinue
-        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction SilentlyContinue
-        # Ripristino il font della console a com'era (rimuovo le chiavi del .bat).
-        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'FaceName'   -ErrorAction SilentlyContinue
-        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'FontFamily' -ErrorAction SilentlyContinue
-        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'FontWeight' -ErrorAction SilentlyContinue
-        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'FontSize'   -ErrorAction SilentlyContinue
-    } catch {}
     # Lavoro COMPLETATO: via il checkpoint di ripresa sessione (contiene anche
     # le credenziali generate: non deve restare sul PC del cliente). La cartella
     # ProgramData\PCFacile resta perche' contiene i log tecnici (senza
@@ -2794,6 +2731,9 @@ if ($RunReale) {
         # Il file .ps1 in esecuzione NON e' bloccato: lo rimuovo ora, lo script
         # prosegue dalla memoria. Cosi' non resta nulla sul disco del cliente.
         try { Remove-Item -LiteralPath $ioStesso -Force -ErrorAction SilentlyContinue } catch {}
+        $coreTemp = Join-Path $env:TEMP 'src\PcFacile.Core.psm1'
+        $coreHashTemp = "$coreTemp.sha256"
+        try { Remove-Item -LiteralPath $coreTemp, $coreHashTemp -Force -ErrorAction SilentlyContinue } catch {}
     }
     Write-OK "Pulizia finale: PC Facile rimosso dal PC (il report resta sul Desktop)."
 }
