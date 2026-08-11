@@ -70,10 +70,11 @@ pausa(){ return 0; }
 pausa_web(){ { $VELOCE || [[ "$MODO" == "TEST" || "$MODO" == "DIAGNOSTICA" ]]; } && return; beep_attesa; print -n -- "   Premi INVIO per continuare "; read -r _; }
 
 # ---- Generatori credenziali (come New-PasswordCliente/New-EmailCliente) -----
-password_cliente(){  # $1=nome  ->  Rossi123!
-  local b="${1//[^A-Za-z]/}"; [[ -z "$b" ]] && b="Cliente"
-  local primo="${b[1]}"; local resto="${b:1}"
-  print -r -- "${(U)primo}${(L)resto}123!"
+password_cliente(){
+  # 16 caratteri casuali; prefisso garantisce le quattro classi richieste.
+  local resto
+  resto="$(LC_ALL=C tr -dc 'A-Za-z0-9!@#$%*_-=' </dev/urandom | head -c 12)"
+  print -r -- "Aq7!${resto}"
 }
 email_cliente(){     # $1=nome  ->  rossi417@icloud.com
   local e="${1//[^A-Za-z0-9]/}"; e="${(L)e}"; [[ -z "$e" ]] && e="cliente"
@@ -519,6 +520,8 @@ fi
 # nel Cestino). Il REPORT sul Desktop resta (serve al cliente). Se lo script
 # gira dalla copia accanto (offline) NON lo tocco.
 if $RUN_REALE; then
+  # Il riepilogo e' stato creato: non lasciare la password negli appunti.
+  pbcopy </dev/null 2>/dev/null || true
   case "$0" in
     /tmp/*|/private/tmp/*|/private/var/*)
       rm -f "$0" 2>/dev/null

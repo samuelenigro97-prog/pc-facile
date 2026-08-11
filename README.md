@@ -15,6 +15,7 @@ Tutti i dettagli, i comandi alternativi da PowerShell e la compatibilità Window
 
 - **Integrità**: `PC Facile.bat` verifica lo **SHA256** dello script scaricato contro `setup-pc.ps1.sha256`; se non combacia, scarta il download e usa la copia locale.
 - **Test**: `tests/PcFacile.Tests.ps1` (Pester) verifica le funzioni pure. Esegui in locale con `Invoke-Pester ./tests`.
+- **Struttura**: le funzioni pure sono in `lib/PcFacile.Core.ps1`; il wizard e le operazioni di sistema restano in `setup-pc.ps1`.
 - **CI**: `.github/workflows/ci.yml` gira su ogni push/PR (Windows) — controllo sintassi, PSScriptAnalyzer, Pester e verifica dell'hash.
 - **Dopo aver modificato `setup-pc.ps1`** va rigenerato l'hash:
   `(Get-FileHash ./setup-pc.ps1 -Algorithm SHA256).Hash.ToLower() | Set-Content ./setup-pc.ps1.sha256` (la CI fallisce se è disallineato).
