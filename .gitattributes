@@ -8,5 +8,6 @@
 *.md        text
 *.yml       text eol=lf
 *.psd1      text eol=lf
+*.psm1      text eol=lf
 # I file batch restano CRLF (formato Windows).
 *.bat       text eol=crlf
