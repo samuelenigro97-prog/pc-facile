@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "7.6 (2026-08-05)"
+$SCRIPT_VERSION = "7.7 (2026-08-05)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -235,13 +235,14 @@ function New-PasswordCliente {
     return "${b}123!"
 }
 
-# Email suggerita per un nuovo account (outlook.com) dal nome cliente + numero.
+# Email suggerita per un nuovo account dal nome cliente + numero. Il dominio
+# dipende dal provider scelto (outlook.com, gmail.com, proton.me, ...).
 function New-EmailCliente {
-    param([string]$Base)
+    param([string]$Base, [string]$Dominio = "outlook.com")
     $e = ($Base -replace '[^A-Za-z0-9]', '').ToLower()
     if (-not $e) { $e = "cliente" }
     if ($e.Length -gt 15) { $e = $e.Substring(0, 15) }
-    return "$e$(Get-Random -Minimum 10 -Maximum 999)@outlook.com"
+    return "$e$(Get-Random -Minimum 10 -Maximum 999)@$Dominio"
 }
 
 # Rileva una GPU NVIDIA: serve a capire se e' un PC da gaming e installare l'app
@@ -1405,23 +1406,42 @@ Save-Fase 1 "Nome cliente e PC"
 # dopo Office e antivirus fanno 'Accedi con Microsoft' senza altri OTP).
 # =============================================================================
 
-if (Test-FaseFatta 2) { Write-Info "Account Microsoft: gia' fatto nella sessione precedente, salto." }
+if (Test-FaseFatta 2) { Write-Info "Account/email cliente: gia' fatto nella sessione precedente, salto." }
 else {
 
-Write-Titolo "Account Microsoft"
+Write-Titolo "Account / Email cliente"
 
-Write-Host "Crea/accedi ORA all'account: dopo Office e antivirus lo riusano senza altri OTP." -ForegroundColor White
+Write-Host "Crea/accedi ORA all'account del cliente. Scegli quale aprire:" -ForegroundColor White
+Write-Host "  1) Microsoft   (consigliato: serve per Office e antivirus)" -ForegroundColor White
+Write-Host "  2) Google / Gmail" -ForegroundColor White
+Write-Host "  3) Proton Mail" -ForegroundColor White
+Write-Host "  4) Outlook.com (nuova email Microsoft)" -ForegroundColor White
+Write-Host "  S) Salta" -ForegroundColor White
 Write-Host ""
 
-$vuoiMs = Chiedi "Aprire il login account Microsoft ora? (S/N)" "S"
-if ($vuoiMs -match "^[Ss]") {
-    Start-Process "https://account.microsoft.com"
-    Write-OK "Aperto account.microsoft.com nel browser."
+$sceltaAcc = Chiedi "Scelta (1-4, S salta)" "1"
+
+# Mappa scelta -> nome provider, pagina da aprire e dominio email suggerito.
+$prov = switch -Regex ($sceltaAcc) {
+    '^1' { @{ Nome = "Microsoft"; Url = "https://account.microsoft.com";                 Dominio = "outlook.com" } }
+    '^2' { @{ Nome = "Google";    Url = "https://accounts.google.com/signup";             Dominio = "gmail.com" } }
+    '^3' { @{ Nome = "Proton";    Url = "https://account.proton.me/signup";               Dominio = "proton.me" } }
+    '^4' { @{ Nome = "Outlook";   Url = "https://signup.live.com";                        Dominio = "outlook.com" } }
+    default { $null }
+}
+
+if ($prov) {
+    Start-Process $prov.Url
+    Write-OK "Aperto $($prov.Url) nel browser ($($prov.Nome))."
+    if ($prov.Nome -ne "Microsoft") {
+        Write-Info "NB: per attivare Office/antivirus serve comunque un account Microsoft;"
+        Write-Info "    con $($prov.Nome) crei solo l'email del cliente."
+    }
 
     # Credenziali per il riepilogo. Due casi:
     #  - il cliente ha GIA' una sua email/password che usa -> le inserisci tu
     #    (le detta lui) e finiscono nel riepilogo;
-    #  - account NUOVO -> le genera lo script (email + Nome123!).
+    #  - account NUOVO -> le genera lo script (email col dominio del provider + Nome123!).
     # In entrambi i casi niente lette dal browser. Questa domanda resta anche in
     # Veloce perche' cambia da cliente a cliente.
     if ($RunReale) {
@@ -1431,7 +1451,7 @@ if ($vuoiMs -match "^[Ss]") {
             $credMsPassword = (Attendi-Risposta "  Password del cliente").Trim()
             Write-OK "Uso le credenziali del cliente (finiscono nel riepilogo)."
         } else {
-            $credMsAccount  = New-EmailCliente -Base $nomeCliente
+            $credMsAccount  = New-EmailCliente -Base $nomeCliente -Dominio $prov.Dominio
             $credMsPassword = New-PasswordCliente -Base $nomeCliente
             Write-Host ""
             Write-Host "  Credenziali SUGGERITE per il nuovo account (gia' nel riepilogo):" -ForegroundColor White
@@ -1445,15 +1465,15 @@ if ($vuoiMs -match "^[Ss]") {
     }
 
     Write-Info "Accedi o crea l'account, poi torna qui. Usa lo stesso browser per i login dopo."
-    Add-Report "Account Microsoft" "OK"
+    Add-Report "Account $($prov.Nome)" "OK"
 } else {
-    Write-Info "Account Microsoft saltato."
-    Add-Report "Account Microsoft" "SALTATO"
+    Write-Info "Account/email saltato."
+    Add-Report "Account cliente" "SALTATO"
 }
 
-if ($vuoiMs -match "^[Ss]") { Pausa }
+if ($prov) { Pausa }
 
-Save-Fase 2 "Account Microsoft"
+Save-Fase 2 "Account/email cliente"
 }
 
 # =============================================================================
@@ -2673,7 +2693,7 @@ if ($RunReale) {
         $haCred = ($credMsAccount -or $credMsPassword -or $credAltro)
         $f += "NOTE / CREDENZIALI$(if ($haCred) { ' - CONTIENE DATI IN CHIARO: ELIMINA IL FILE DOPO LA CONSEGNA' } else { ' (da compilare a mano)' })"
         $f += $sep
-        $f += "  Account Microsoft : $(if ($credMsAccount) { $credMsAccount } else { $blank })"
+        $f += "  Account / email   : $(if ($credMsAccount) { $credMsAccount } else { $blank })"
         $f += "  Password          : $(if ($credMsPassword) { $credMsPassword } else { $blank })"
         # Campi dedicati per ogni antivirus/protezione attivato in questa sessione.
         # Antivirus (McAfee/Norton): stesse credenziali dell'account Microsoft.
