@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "8.0 (2026-08-12)"
+$SCRIPT_VERSION = "8.1 (2026-08-12)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -495,6 +495,15 @@ $credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
 
 # Contatore app che NON si sono installate (per l'avviso rete a fine passo App).
 $Global:AppFallite = 0
+# Esito dell'ultima Installa-Pacchetto ($true = installata o gia' presente).
+# Serve al passo App per segnare come "fatta" solo cio' che e' andato a buon
+# fine, cosi' su una ripresa si riscaricano SOLO le app davvero mancanti.
+$Global:UltimaInstallOk = $false
+# Ripresa FINE dentro il passo App: profilo scelto, piano di installazione e
+# app gia' completate nella sessione interrotta (caricati dal checkpoint).
+$Global:AppProfiloRipresa = ""
+$Global:AppListaRipresa   = @()
+$Global:AppFatteRipresa   = @()
 
 # =============================================================================
 # RIPRESA SESSIONE: se lo script viene chiuso a meta' (crash, riavvio, blocco
@@ -526,6 +535,27 @@ function Save-Fase {
 
 # Vero se il passo era gia' stato completato nella sessione ripresa.
 function Test-FaseFatta { param([int]$Fase) return ($Global:FaseRipresa -ge $Fase) }
+
+# Sotto-checkpoint DENTRO il passo App: salva profilo scelto, piano completo e
+# app gia' installate, senza chiudere il passo (Fase resta 7 = si riparte dal
+# passo App). Cosi' una chiusura a meta' installazione riparte dall'app esatta.
+function Save-AppProgresso {
+    param([string]$Profilo, [array]$Lista, [string[]]$Fatte)
+    if (-not $RunReale) { return }
+    try {
+        $dir = Split-Path $Global:StatoFile
+        if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
+        [pscustomobject]@{
+            Fase = 7; FaseNome = "Applicazioni (installazione in corso)"
+            Data = (Get-Date -Format 'dd/MM/yyyy HH:mm')
+            NomeCliente = $nomeCliente
+            CredAccount = $credMsAccount; CredPassword = $credMsPassword
+            AppProfilo = $Profilo
+            AppLista   = @($Lista)
+            AppFatte   = @($Fatte)
+        } | ConvertTo-Json -Depth 4 | Set-Content -Path $Global:StatoFile -Encoding UTF8
+    } catch {}
+}
 
 # =============================================================================
 # CATALOGO PACCHETTI - UNICA FONTE (usato da STEP 3/5/6 e dalla Diagnostica)
@@ -1126,12 +1156,17 @@ function Installa-Pacchetto {
     if ($WingetId -match '^[A-Z0-9]{12}$') { $sorgente = @('--source', 'msstore') }
     else { $sorgente = @('--source', 'winget') }
 
+    # Esito di default: fallito. Lo porto a $true solo sui rientri di successo,
+    # cosi' il passo App puo' segnare come "fatta" solo cio' che e' riuscito.
+    $Global:UltimaInstallOk = $false
+
     # Gia' installato? (--exact: evita falsi positivi da match parziale dell'ID)
     winget list --exact --id $WingetId @sorgente --accept-source-agreements 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) {
         Write-OK "$Nome gia' installato. Salto."
         Add-Report "$Nome (installazione)" "OK"
         Add-IconaDesktop -Nome $Nome
+        $Global:UltimaInstallOk = $true
         return
     }
 
@@ -1162,6 +1197,7 @@ function Installa-Pacchetto {
             }
             Add-Report "$Nome (installazione)" "OK"
             Add-IconaDesktop -Nome $Nome -LnkPrima $lnkPrima
+            $Global:UltimaInstallOk = $true
             return
         }
 
@@ -1172,6 +1208,7 @@ function Installa-Pacchetto {
             Write-OK "$Nome installato."
             Add-Report "$Nome (installazione)" "OK"
             Add-IconaDesktop -Nome $Nome -LnkPrima $lnkPrima
+            $Global:UltimaInstallOk = $true
             return
         }
 
@@ -1309,6 +1346,14 @@ if ($RunReale) {
                 if ($st.NomeCliente)  { $nomeCliente    = [string]$st.NomeCliente }
                 if ($st.CredAccount)  { $credMsAccount  = [string]$st.CredAccount }
                 if ($st.CredPassword) { $credMsPassword = [string]$st.CredPassword }
+                # Ripresa FINE del passo App: se la sessione si e' chiusa a meta'
+                # dell'installazione app, recupero profilo + piano + app gia' fatte,
+                # cosi' non richiedo il profilo e riparto dall'app esatta rimasta.
+                if ($st.PSObject.Properties.Name -contains 'AppProfilo' -and $st.AppProfilo) {
+                    $Global:AppProfiloRipresa = [string]$st.AppProfilo
+                    $Global:AppListaRipresa   = @($st.AppLista)
+                    $Global:AppFatteRipresa   = @($st.AppFatte)
+                }
                 Write-OK "Riprendo: i passi gia' completati verranno saltati."
             } else {
                 Remove-Item $Global:StatoFile -Force -ErrorAction SilentlyContinue
@@ -2304,65 +2349,80 @@ $profili = [ordered]@{
     "GAMING"  = @($CatalogoApp | Where-Object { $_.Profili -contains "GAMING" }  | ForEach-Object { $_.Id })
 }
 
-# Installa gli app della lista il cui Id e' nel set passato
-function Installa-Set {
-    param([string[]]$Ids)
-    if (-not (Confirm-Winget)) { Write-Errore "Winget non disponibile."; return }
+# Costruisce il PIANO ordinato di installazione (browser in testa) per il
+# profilo scelto: una lista di @{Nome;Id} che il loop installa in sequenza e su
+# cui salva i progressi. Cosi' la ripresa sa esattamente cosa resta da fare.
+function Costruisci-PianoApp {
+    param([string]$Scelta)
+    $piano = @()
+    # Browser automatico: Opera GX per il GAMING (3), Chrome per gli altri.
+    if ($Scelta -eq "3") { $piano += @{ Nome = "Opera GX"; Id = "Opera.OperaGX" } }
+    else                 { $piano += @{ Nome = "Google Chrome"; Id = "Google.Chrome" } }
     foreach ($app in $appsDisponibili) {
-        if ($Ids -contains $app.Id) {
-            Installa-Pacchetto -Nome $app.Nome -WingetId $app.Id
+        $prendi = switch ($Scelta) {
+            "1" { $profili["BASE"]    -contains $app.Id }
+            "2" { $profili["UFFICIO"] -contains $app.Id }
+            "3" { $profili["GAMING"]  -contains $app.Id }
+            "4" { $true }   # COMPLETO: tutte le app del catalogo
+            default { $false }
         }
+        if ($prendi) { $piano += @{ Nome = $app.Nome; Id = $app.Id } }
     }
+    return $piano
 }
 
 $Global:AppFallite = 0   # azzero: conto solo i fallimenti di QUESTO passo
-Write-Host "Scegli come installare le applicazioni (browser incluso in automatico):" -ForegroundColor White
-Write-Host "  1) PROFILO BASE     (Chrome + VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, Zoom, AnyDesk)"
-Write-Host "  2) PROFILO UFFICIO  (Chrome + BASE + GIMP, Sumatra PDF)"
-Write-Host "  3) PROFILO GAMING   (Opera GX + BASE + Steam, Epic, Discord, qBittorrent)"
-Write-Host "  4) COMPLETO         (Chrome + tutte le app in lista)"
-Write-Host "  5) MANUALE          (Chrome + scelgo io i singoli numeri)"
-Write-Host "  S) Salta"
-Write-Host ""
 
-$sceltaApps = Attendi-Risposta "Scelta (1-5 - S salta - B indietro)"
-if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
+# --- Determino il PIANO (lista ordinata di @{Nome;Id}) e le app gia' fatte. ---
+# Se sto RIPRENDENDO il passo App dopo una chiusura, riuso profilo + piano dal
+# checkpoint e salto le app gia' installate; altrimenti mostro il menu di scelta.
+$pianoApp  = @()
+$appFatte  = @()
+$etichetta = ""
 
-# BROWSER automatico (unito al profilo app): Opera GX per il GAMING, Chrome per
-# tutti gli altri profili. Salta (S) o scelta non valida = nessun browser.
-# Installato un browser nostro, tolgo l'icona di Edge dal Desktop (superflua).
-if ($sceltaApps -match "^[1-5]$") {
-    if ($sceltaApps -eq "3") { Installa-Pacchetto -Nome "Opera GX" -WingetId "Opera.OperaGX" }
-    else { Installa-Pacchetto -Nome "Google Chrome" -WingetId "Google.Chrome" }
-    Remove-EdgeDaDesktop
-}
+if ($Global:AppProfiloRipresa) {
+    $etichetta = [string]$Global:AppProfiloRipresa
+    $pianoApp  = @($Global:AppListaRipresa | ForEach-Object { @{ Nome = [string]$_.Nome; Id = [string]$_.Id } })
+    $appFatte  = @($Global:AppFatteRipresa | ForEach-Object { [string]$_ })
+    # Consumo la ripresa: eventuali rientri successivi ripartono puliti dal menu.
+    $Global:AppProfiloRipresa = ""; $Global:AppListaRipresa = @(); $Global:AppFatteRipresa = @()
+    $rimaste = @($pianoApp | Where-Object { $appFatte -notcontains $_.Id }).Count
+    Write-OK "Riprendo l'installazione app (profilo $etichetta): $rimaste da completare."
+    Write-Info "Le app gia' installate le salto: riparto dall'esatta app rimasta."
+} else {
+    Write-Host "Scegli come installare le applicazioni (browser incluso in automatico):" -ForegroundColor White
+    Write-Host "  1) PROFILO BASE     (Chrome + VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, Zoom, AnyDesk)"
+    Write-Host "  2) PROFILO UFFICIO  (Chrome + BASE + GIMP, Sumatra PDF)"
+    Write-Host "  3) PROFILO GAMING   (Opera GX + BASE + Steam, Epic, Discord, qBittorrent)"
+    Write-Host "  4) COMPLETO         (Chrome + tutte le app in lista)"
+    Write-Host "  5) MANUALE          (Chrome + scelgo io i singoli numeri)"
+    Write-Host "  S) Salta"
+    Write-Host ""
 
-switch ($sceltaApps) {
-    "1" { Installa-Set -Ids $profili["BASE"] }
-    "2" { Installa-Set -Ids $profili["UFFICIO"] }
-    "3" { Installa-Set -Ids $profili["GAMING"] }   # l'app NVIDIA la mette il passo Driver
-    "4" {
-        if (Confirm-Winget) {
-            foreach ($app in $appsDisponibili) { Installa-Pacchetto -Nome $app.Nome -WingetId $app.Id }
-        } else {
-            Write-Errore "Winget non disponibile."
+    $sceltaApps = Attendi-Risposta "Scelta (1-5 - S salta - B indietro)"
+    if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
+
+    switch -Regex ($sceltaApps) {
+        "^[1-4]$" {
+            $etichetta = @{ "1" = "BASE"; "2" = "UFFICIO"; "3" = "GAMING"; "4" = "COMPLETO" }[$sceltaApps]
+            $pianoApp  = @(Costruisci-PianoApp -Scelta $sceltaApps)
         }
-    }
-    "5" {
-        Write-Host ""
-        Write-Host "App disponibili:" -ForegroundColor White
-        for ($i = 0; $i -lt $appsDisponibili.Count; $i++) {
-            Write-Host "  $($i + 1)) $($appsDisponibili[$i].Nome)"
-        }
-        $sceltaManuale = Attendi-Risposta "Numeri separati da virgola (es: 1,3,5)"
-        $indici = $sceltaManuale -split "," | ForEach-Object { $_.Trim() }
-        if (Confirm-Winget) {
+        "^5$" {
+            $etichetta = "MANUALE"
+            $pianoApp += @{ Nome = "Google Chrome"; Id = "Google.Chrome" }   # browser sempre
+            Write-Host ""
+            Write-Host "App disponibili:" -ForegroundColor White
+            for ($i = 0; $i -lt $appsDisponibili.Count; $i++) {
+                Write-Host "  $($i + 1)) $($appsDisponibili[$i].Nome)"
+            }
+            $sceltaManuale = Attendi-Risposta "Numeri separati da virgola (es: 1,3,5)"
+            $indici = $sceltaManuale -split "," | ForEach-Object { $_.Trim() }
             foreach ($indice in $indici) {
                 $num = 0
                 if ($indice -match "^\d+$" -and [int]::TryParse($indice, [ref]$num)) {
                     $idx = $num - 1
                     if ($idx -ge 0 -and $idx -lt $appsDisponibili.Count) {
-                        Installa-Pacchetto -Nome $appsDisponibili[$idx].Nome -WingetId $appsDisponibili[$idx].Id
+                        $pianoApp += @{ Nome = $appsDisponibili[$idx].Nome; Id = $appsDisponibili[$idx].Id }
                     } else {
                         Write-Errore "Numero non valido: $indice"
                     }
@@ -2370,15 +2430,39 @@ switch ($sceltaApps) {
                     Write-Errore "Valore non riconosciuto: $indice"
                 }
             }
-        } else {
-            Write-Errore "Winget non disponibile."
+        }
+        default {
+            if ($sceltaApps -match "^[Ss]$") {
+                Write-Info "Applicazioni saltate."
+            } else {
+                Write-Info "Scelta non valida: applicazioni saltate."
+            }
         }
     }
-    default {
-        if ($sceltaApps -match "^[Ss]$") {
-            Write-Info "Applicazioni saltate."
-        } else {
-            Write-Info "Scelta non valida: applicazioni saltate."
+}
+
+# --- Eseguo il PIANO: installo in ordine, salto quelle gia' fatte, e dopo OGNI
+#     app riuscita salvo il progresso -> se si chiude, si riparte dall'app esatta.
+if ($pianoApp.Count -gt 0) {
+    if (-not (Confirm-Winget)) {
+        Write-Errore "Winget non disponibile: impossibile installare le applicazioni."
+    } else {
+        # Installato un browser nostro, tolgo l'icona di Edge dal Desktop (superflua).
+        if ($pianoApp | Where-Object { $_.Id -eq "Google.Chrome" -or $_.Id -eq "Opera.OperaGX" }) {
+            Remove-EdgeDaDesktop
+        }
+        foreach ($app in $pianoApp) {
+            if ($appFatte -contains $app.Id) {
+                Write-Info "$($app.Nome): gia' installato in questa sessione, salto."
+                continue
+            }
+            Installa-Pacchetto -Nome $app.Nome -WingetId $app.Id
+            # Segno "fatta" e salvo SOLO se e' andata a buon fine: cosi' una ripresa
+            # ritenta le app fallite (rete) e salta solo quelle davvero installate.
+            if ($Global:UltimaInstallOk) {
+                $appFatte += $app.Id
+                Save-AppProgresso -Profilo $etichetta -Lista $pianoApp -Fatte $appFatte
+            }
         }
     }
 }
