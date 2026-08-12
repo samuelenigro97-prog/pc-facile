@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "8.5 (2026-08-12)"
+$SCRIPT_VERSION = "8.6 (2026-08-12)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -229,20 +229,24 @@ function Pausa {
 # e la scrive nel riepilogo): NON legge nulla dal browser.
 function New-PasswordCliente {
     param([string]$Base)
-    $b = ($Base -replace '[^A-Za-z]', '')
+    # Convenzione del negozio: "Nome123!" -> SOLO il primo nome (prima parola),
+    # prima lettera maiuscola, il resto minuscolo. Es. "Mario Rossi" -> "Mario123!".
+    $primo = @($Base -split '\s+' | Where-Object { $_ })[0]
+    $b = ($primo -replace '[^A-Za-z]', '')
     if ($b.Length -lt 1) { $b = "Cliente" }
     $b = $b.Substring(0, 1).ToUpper() + $b.Substring(1).ToLower()
     return "${b}123!"
 }
 
-# Email suggerita per un nuovo account dal nome cliente + numero. Il dominio
-# dipende dal provider scelto (outlook.com, gmail.com, proton.me, ...).
+# Email suggerita per un nuovo account: convenzione del negozio "nomecognome"
+# tutto attaccato e minuscolo, senza numeri. Il dominio dipende dal provider
+# scelto (outlook.it, gmail.com, proton.me). Es. "Mario Rossi" -> mariorossi@outlook.it.
 function New-EmailCliente {
-    param([string]$Base, [string]$Dominio = "outlook.com")
+    param([string]$Base, [string]$Dominio = "outlook.it")
     $e = ($Base -replace '[^A-Za-z0-9]', '').ToLower()
     if (-not $e) { $e = "cliente" }
-    if ($e.Length -gt 15) { $e = $e.Substring(0, 15) }
-    return "$e$(Get-Random -Minimum 10 -Maximum 999)@$Dominio"
+    if ($e.Length -gt 20) { $e = $e.Substring(0, 20) }
+    return "$e@$Dominio"
 }
 
 # Rileva una GPU NVIDIA: serve a capire se e' un PC da gaming e installare l'app
@@ -1509,10 +1513,10 @@ if ($RunReale -and [string]::IsNullOrWhiteSpace($sceltaAcc)) { $sceltaAcc = "1" 
 
 # Mappa scelta -> nome provider, pagina da aprire e dominio email suggerito.
 $prov = switch -Regex ($sceltaAcc) {
-    '^1' { @{ Nome = "Microsoft"; Url = "https://account.microsoft.com";                 Dominio = "outlook.com" } }
+    '^1' { @{ Nome = "Microsoft"; Url = "https://account.microsoft.com";                 Dominio = "outlook.it" } }
     '^2' { @{ Nome = "Google";    Url = "https://accounts.google.com/signup";             Dominio = "gmail.com" } }
     '^3' { @{ Nome = "Proton";    Url = "https://account.proton.me/signup";               Dominio = "proton.me" } }
-    '^4' { @{ Nome = "Outlook";   Url = "https://signup.live.com";                        Dominio = "outlook.com" } }
+    '^4' { @{ Nome = "Outlook";   Url = "https://signup.live.com";                        Dominio = "outlook.it" } }
     default { $null }
 }
 
