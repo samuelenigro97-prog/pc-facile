@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "8.6 (2026-08-12)"
+$SCRIPT_VERSION = "8.7 (2026-08-12)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -2199,24 +2199,52 @@ function Test-Indietro { param([string]$v) return ($v -match '^\s*[Bb]\s*$') }
 # Mostra le credenziali da usare in una pagina web e le mette PRONTE negli
 # appunti, cosi' l'operatore incolla con CTRL+V invece di digitarle (non e'
 # possibile compilare da soli i campi di siti terzi in modo affidabile: questo
-# e' l'aiuto concreto e sicuro). Prima copia l'email (primo campo), poi con un
-# INVIO copia la password.
+# e' l'aiuto concreto e sicuro).
+#
+# MENU APPUNTI che RESTA attivo: premi E o P per (ri)copiare Email o Password
+# quante volte vuoi e in QUALSIASI ordine (comodo per il campo "conferma
+# password" o se sbagli campo), INVIO quando hai finito. Le credenziali restano
+# scritte a schermo per averle sott'occhio.
 function Mostra-CredenzialiPagina {
     param([string]$Utente, [string]$Password)
     if (-not ($Utente -or $Password)) { return }
     Write-Host ""
     Write-Host "  +--------------------------------------------------------+" -ForegroundColor Yellow
-    Write-Host "  |  CREDENZIALI DA USARE NELLA PAGINA (gia' pronte)       |" -ForegroundColor Yellow
+    Write-Host "  |  CREDENZIALI DA INCOLLARE NELLA PAGINA                  |" -ForegroundColor Yellow
     Write-Host "  +--------------------------------------------------------+" -ForegroundColor Yellow
     if ($Utente)   { Write-Host "     Email / utente : $Utente" -ForegroundColor White }
     if ($Password) { Write-Host "     Password      : $Password" -ForegroundColor White }
     if (-not $RunReale) { return }
-    if ($Utente) {
-        try { Set-Clipboard -Value $Utente; Write-OK "Email copiata: incollala con CTRL+V nel campo email." } catch {}
-    }
-    if ($Password) {
-        [void](Attendi-Risposta "Premi INVIO per copiare la PASSWORD negli appunti")
-        try { Set-Clipboard -Value $Password; Write-OK "Password copiata: incollala con CTRL+V nel campo password." } catch {}
+    # Copio subito l'email (di solito e' il primo campo), poi lascio il menu.
+    if ($Utente) { try { Set-Clipboard -Value $Utente } catch {} }
+    Write-Host ""
+    $opz = @()
+    if ($Utente)   { $opz += "E = copia EMAIL" }
+    if ($Password) { $opz += "P = copia PASSWORD" }
+    $opz += "INVIO = ho finito"
+    Write-Host ("  Premi:  " + ($opz -join "    ")) -ForegroundColor Cyan
+    if ($Utente) { Write-OK "Email gia' copiata: incolla con CTRL+V." }
+    while ($true) {
+        $ch = ""; $isEnter = $false
+        try {
+            $key = [Console]::ReadKey($true)
+            $ch = "$($key.KeyChar)".ToUpper()
+            if ($key.Key -eq 'Enter') { $isEnter = $true }
+        } catch {
+            # Fallback senza ReadKey: riga di testo, vuoto = ho finito.
+            $ch = (Read-Host "  E / P / INVIO").ToUpper()
+            if ($ch -eq "") { $isEnter = $true }
+        }
+        if ($isEnter) { break }
+        elseif ($ch -eq "E") {
+            if ($Utente) { try { Set-Clipboard -Value $Utente; Write-OK "Email copiata: incolla con CTRL+V." } catch {} }
+            else { Write-Info "Nessuna email da copiare." }
+        }
+        elseif ($ch -eq "P") {
+            if ($Password) { try { Set-Clipboard -Value $Password; Write-OK "Password copiata: incolla con CTRL+V." } catch {} }
+            else { Write-Info "Per questo servizio la password la crea il sito (arriva via email)." }
+        }
+        # ogni altro tasto: ignorato, il menu resta attivo
     }
     Write-Host ""
 }
