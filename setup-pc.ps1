@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "7.7 (2026-08-05)"
+$SCRIPT_VERSION = "7.9 (2026-08-12)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -861,7 +861,10 @@ function Confirm-Winget {
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         Write-OK "Winget trovato."
         $Global:WingetOk = $true
-        Repair-WingetSources
+        # NIENTE 'source reset+update' proattivo: ri-scaricava ogni volta l'intero
+        # indice sorgenti (lento su rete lenta). winget aggiorna le sorgenti da
+        # solo all'installazione; la riparazione parte SOLO se un install fallisce
+        # per errore sorgente (vedi Installa-Pacchetto).
         return $true
     }
 
@@ -887,7 +890,6 @@ function Confirm-Winget {
         if (Get-Command winget -ErrorAction SilentlyContinue) {
             Write-OK "Winget installato con successo."
             $Global:WingetOk = $true
-            Repair-WingetSources
             return $true
         } else {
             Write-Errore "Installazione Winget fallita."
@@ -1003,17 +1005,52 @@ function Get-StartMenuLnks {
 #  2) app dello Store (MSIX, niente .lnk) -> Get-StartApps + shell:AppsFolder.
 # Salta i doppioni. Un breve retry copre il caso in cui il collegamento non e'
 # ancora stato scritto subito dopo la fine di winget.
+# Icone (.lnk) presenti sul Desktop VISTO dal cliente = Desktop utente PIU'
+# Desktop pubblico (C:\Users\Public\Desktop): Windows li fonde. Molti installer
+# (Chrome, AnyDesk, Steam...) mettono l'icona sul PUBBLICO, quindi il controllo
+# anti-doppione deve guardare entrambi, altrimenti si finisce con due icone.
+function Get-DesktopLnks {
+    $dirs = @((Get-DesktopDir),
+              [Environment]::GetFolderPath('CommonDesktopDirectory')) |
+            Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+    $res = @()
+    foreach ($d in $dirs) {
+        $res += Get-ChildItem -Path $d -Filter *.lnk -ErrorAction SilentlyContinue
+    }
+    return $res
+}
+
+# Pulizia doppioni: se la STESSA app ha un'icona sia sul Desktop pubblico (messa
+# dall'installer) sia su quello utente (copiata da noi), tolgo quella UTENTE e
+# lascio l'originale del pubblico. Da lanciare DOPO le installazioni: copre anche
+# il caso in cui l'installer crea la sua icona un attimo dopo il nostro controllo.
+function Remove-IconeDoppieDesktop {
+    if (-not $RunReale) { return }
+    try {
+        $userD = Get-DesktopDir
+        $pubD  = [Environment]::GetFolderPath('CommonDesktopDirectory')
+        if (-not ($pubD -and (Test-Path $pubD))) { return }
+        $userLnks = @(Get-ChildItem -Path $userD -Filter *.lnk -ErrorAction SilentlyContinue)
+        $pubLnks  = @(Get-ChildItem -Path $pubD  -Filter *.lnk -ErrorAction SilentlyContinue)
+        foreach ($u in $userLnks) {
+            if ($pubLnks | Where-Object { Test-NomeSimile $_.BaseName $u.BaseName }) {
+                Remove-Item $u.FullName -Force -ErrorAction SilentlyContinue
+            }
+        }
+    } catch {}
+}
+
 function Add-IconaDesktop {
     param([string]$Nome, [string[]]$LnkPrima = @())
     if (-not $RunReale) { return }
     try {
         $desktop = Get-DesktopDir
 
-        # ANTI-DOPPIONE (per PRIMO): se sul Desktop c'e' gia' un'icona che somiglia
-        # al nome dell'app - creata dall'installer stesso (Chrome, AnyDesk, Steam...)
-        # o da un giro precedente - non ne aggiungo una seconda.
-        $gia = Get-ChildItem -Path $desktop -Filter *.lnk -ErrorAction SilentlyContinue |
-            Where-Object { Test-NomeSimile $_.BaseName $Nome } | Select-Object -First 1
+        # ANTI-DOPPIONE (per PRIMO): se su UNO DEI DUE Desktop (utente o pubblico)
+        # c'e' gia' un'icona che somiglia al nome dell'app - creata dall'installer
+        # stesso (Chrome, AnyDesk, Steam...) o da un giro precedente - non ne
+        # aggiungo una seconda.
+        $gia = Get-DesktopLnks | Where-Object { Test-NomeSimile $_.BaseName $Nome } | Select-Object -First 1
         if ($gia) { return }
 
         # 0) DIFF: collegamenti NUOVI creati dall'installazione (max ~4s di attesa).
@@ -1034,7 +1071,7 @@ function Add-IconaDesktop {
                 $scelto = if ($match.Count -gt 0) { $match | Sort-Object { $_.BaseName.Length } | Select-Object -First 1 }
                           else { $nuovi | Sort-Object { $_.BaseName.Length } | Select-Object -First 1 }
                 if ($scelto) {
-                    $giaSimile = Get-ChildItem -Path $desktop -Filter *.lnk -ErrorAction SilentlyContinue |
+                    $giaSimile = Get-DesktopLnks |
                         Where-Object { Test-NomeSimile $_.BaseName $scelto.BaseName } | Select-Object -First 1
                     $dest = Join-Path $desktop $scelto.Name
                     if (-not $giaSimile -and -not (Test-Path $dest)) {
@@ -1110,21 +1147,26 @@ function Installa-Pacchetto {
     for ($tentativo = 1; $tentativo -le $maxTentativi; $tentativo++) {
         $tentativiFatti = $tentativo
         Write-Info "Installo $Nome...$(if ($tentativo -gt 1) { " (tentativo $tentativo)" })"
-        # Nascondo l'output tecnico di winget (hash, licenze, progressi): confonde.
-        # Al suo posto una barra animata di attesa, cosi' si vede che sta lavorando.
         $codeInstall = Invoke-WingetConBarra -Nome $Nome -WingetArgs (@('install', '--exact', '--id', $WingetId) + $sorgente + @('--silent', '--disable-interactivity', '--accept-package-agreements', '--accept-source-agreements'))
-        # VERIFICA REALE: chiedo a winget se ORA il pacchetto e' presente. E' piu'
-        # affidabile del solo exit code: con la barra (Start-Process su un alias di
-        # sistema) il codice a volte torna sballato e segnava ERRORE un programma
-        # che in realta' era stato installato. Se c'e', e' OK a prescindere.
-        winget list --exact --id $WingetId @sorgente --accept-source-agreements 2>$null | Out-Null
-        $presenteOra = ($LASTEXITCODE -eq 0)
-        if (($successo -contains $codeInstall) -or $presenteOra) {
+        # Con winget ora lanciato DIRETTO, l'exit code e' affidabile: se e' un
+        # successo NON serve la seconda 'winget list' di verifica (era li' per il
+        # vecchio bug -999) -> un'interrogazione lenta in meno per ogni app.
+        if ($successo -contains $codeInstall) {
             if ($codeInstall -eq 3010 -or $codeInstall -eq 1641) {
                 Write-OK "$Nome installato (richiede riavvio)."
             } else {
                 Write-OK "$Nome installato."
             }
+            Add-Report "$Nome (installazione)" "OK"
+            Add-IconaDesktop -Nome $Nome -LnkPrima $lnkPrima
+            return
+        }
+
+        # Solo in caso di codice NON di successo ricontrollo se per caso l'app
+        # risulta comunque presente (raro): cosi' non segno ERRORE per sbaglio.
+        winget list --exact --id $WingetId @sorgente --accept-source-agreements 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-OK "$Nome installato."
             Add-Report "$Nome (installazione)" "OK"
             Add-IconaDesktop -Nome $Nome -LnkPrima $lnkPrima
             return
@@ -2324,6 +2366,10 @@ switch ($sceltaApps) {
         }
     }
 }
+
+# Dopo tutte le installazioni del passo: tolgo eventuali icone doppie (una nostra
+# sul Desktop utente + quella dell'installer sul Desktop pubblico).
+Remove-IconeDoppieDesktop
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
