@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "7.7 (2026-08-05)"
+$SCRIPT_VERSION = "7.8 (2026-08-12)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -861,7 +861,10 @@ function Confirm-Winget {
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         Write-OK "Winget trovato."
         $Global:WingetOk = $true
-        Repair-WingetSources
+        # NIENTE 'source reset+update' proattivo: ri-scaricava ogni volta l'intero
+        # indice sorgenti (lento su rete lenta). winget aggiorna le sorgenti da
+        # solo all'installazione; la riparazione parte SOLO se un install fallisce
+        # per errore sorgente (vedi Installa-Pacchetto).
         return $true
     }
 
@@ -887,7 +890,6 @@ function Confirm-Winget {
         if (Get-Command winget -ErrorAction SilentlyContinue) {
             Write-OK "Winget installato con successo."
             $Global:WingetOk = $true
-            Repair-WingetSources
             return $true
         } else {
             Write-Errore "Installazione Winget fallita."
@@ -1110,21 +1112,26 @@ function Installa-Pacchetto {
     for ($tentativo = 1; $tentativo -le $maxTentativi; $tentativo++) {
         $tentativiFatti = $tentativo
         Write-Info "Installo $Nome...$(if ($tentativo -gt 1) { " (tentativo $tentativo)" })"
-        # Nascondo l'output tecnico di winget (hash, licenze, progressi): confonde.
-        # Al suo posto una barra animata di attesa, cosi' si vede che sta lavorando.
         $codeInstall = Invoke-WingetConBarra -Nome $Nome -WingetArgs (@('install', '--exact', '--id', $WingetId) + $sorgente + @('--silent', '--disable-interactivity', '--accept-package-agreements', '--accept-source-agreements'))
-        # VERIFICA REALE: chiedo a winget se ORA il pacchetto e' presente. E' piu'
-        # affidabile del solo exit code: con la barra (Start-Process su un alias di
-        # sistema) il codice a volte torna sballato e segnava ERRORE un programma
-        # che in realta' era stato installato. Se c'e', e' OK a prescindere.
-        winget list --exact --id $WingetId @sorgente --accept-source-agreements 2>$null | Out-Null
-        $presenteOra = ($LASTEXITCODE -eq 0)
-        if (($successo -contains $codeInstall) -or $presenteOra) {
+        # Con winget ora lanciato DIRETTO, l'exit code e' affidabile: se e' un
+        # successo NON serve la seconda 'winget list' di verifica (era li' per il
+        # vecchio bug -999) -> un'interrogazione lenta in meno per ogni app.
+        if ($successo -contains $codeInstall) {
             if ($codeInstall -eq 3010 -or $codeInstall -eq 1641) {
                 Write-OK "$Nome installato (richiede riavvio)."
             } else {
                 Write-OK "$Nome installato."
             }
+            Add-Report "$Nome (installazione)" "OK"
+            Add-IconaDesktop -Nome $Nome -LnkPrima $lnkPrima
+            return
+        }
+
+        # Solo in caso di codice NON di successo ricontrollo se per caso l'app
+        # risulta comunque presente (raro): cosi' non segno ERRORE per sbaglio.
+        winget list --exact --id $WingetId @sorgente --accept-source-agreements 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-OK "$Nome installato."
             Add-Report "$Nome (installazione)" "OK"
             Add-IconaDesktop -Nome $Nome -LnkPrima $lnkPrima
             return
