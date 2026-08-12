@@ -48,8 +48,9 @@ Describe 'New-PasswordCliente' {
     It 'costruisce Nome + 123! con iniziale maiuscola' {
         New-PasswordCliente -Base 'Rossi' | Should -BeExactly 'Rossi123!'
     }
-    It 'toglie spazi e caratteri non alfabetici' {
-        New-PasswordCliente -Base 'de luca' | Should -BeExactly 'Deluca123!'
+    It 'usa solo il PRIMO nome (prima parola)' {
+        New-PasswordCliente -Base 'Mario Rossi' | Should -BeExactly 'Mario123!'
+        New-PasswordCliente -Base 'de luca'     | Should -BeExactly 'De123!'
     }
     It 'usa "Cliente" se il nome e'' vuoto' {
         New-PasswordCliente -Base '' | Should -BeExactly 'Cliente123!'
@@ -64,15 +65,21 @@ Describe 'New-PasswordCliente' {
 }
 
 Describe 'New-EmailCliente' {
-    It 'genera un indirizzo @outlook.com' {
-        New-EmailCliente -Base 'Rossi' | Should -Match '@outlook\.com$'
+    It 'genera un indirizzo @outlook.it di default' {
+        New-EmailCliente -Base 'Rossi' | Should -Match '@outlook\.it$'
     }
-    It 'e'' tutto minuscolo e senza caratteri strani' {
+    It 'e'' nomecognome attaccato, minuscolo e SENZA numeri' {
+        New-EmailCliente -Base 'Mario Rossi' | Should -BeExactly 'mariorossi@outlook.it'
+    }
+    It 'toglie i caratteri strani dalla parte prima della chiocciola' {
         $mail = New-EmailCliente -Base 'De Luca!'
         ($mail -split '@')[0] | Should -Match '^[a-z0-9]+$'
     }
+    It 'rispetta il dominio del provider scelto' {
+        New-EmailCliente -Base 'Rossi' -Dominio 'gmail.com' | Should -BeExactly 'rossi@gmail.com'
+    }
     It 'usa "cliente" se il nome e'' vuoto' {
-        New-EmailCliente -Base '' | Should -Match '^cliente[0-9]+@outlook\.com$'
+        New-EmailCliente -Base '' | Should -BeExactly 'cliente@outlook.it'
     }
 }
 

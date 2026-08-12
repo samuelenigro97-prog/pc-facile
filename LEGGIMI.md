@@ -141,7 +141,7 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 | 9  | **Aggiornamento** di tutte le app installate (`winget upgrade --all`) |
 | 10 | **Driver**: scheda video dedicata (tool del produttore) + driver generici da Windows Update |
 | 11 | **Antivirus** (ultimo passo): McAfee, Norton, o Salta — dopo le altre installazioni, così un AV appena attivato non le blocca |
-| —  | **Report finale**: verifica finale + chiave BitLocker + file riepilogo sul Desktop + riavvio |
+| —  | **Report finale**: verifica finale + chiave BitLocker + **due file sul Desktop** (`Il tuo nuovo PC - <cliente>.txt` con le credenziali IN CIMA, e `Credenziali - <cliente>.txt` dedicato) + riavvio |
 
 **Profili app** (browser incluso: Chrome, o Opera GX per GAMING):
 - **BASE** — VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, Zoom, AnyDesk

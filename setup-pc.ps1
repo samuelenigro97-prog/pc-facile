@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "8.4 (2026-08-12)"
+$SCRIPT_VERSION = "8.6 (2026-08-12)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -229,20 +229,24 @@ function Pausa {
 # e la scrive nel riepilogo): NON legge nulla dal browser.
 function New-PasswordCliente {
     param([string]$Base)
-    $b = ($Base -replace '[^A-Za-z]', '')
+    # Convenzione del negozio: "Nome123!" -> SOLO il primo nome (prima parola),
+    # prima lettera maiuscola, il resto minuscolo. Es. "Mario Rossi" -> "Mario123!".
+    $primo = @($Base -split '\s+' | Where-Object { $_ })[0]
+    $b = ($primo -replace '[^A-Za-z]', '')
     if ($b.Length -lt 1) { $b = "Cliente" }
     $b = $b.Substring(0, 1).ToUpper() + $b.Substring(1).ToLower()
     return "${b}123!"
 }
 
-# Email suggerita per un nuovo account dal nome cliente + numero. Il dominio
-# dipende dal provider scelto (outlook.com, gmail.com, proton.me, ...).
+# Email suggerita per un nuovo account: convenzione del negozio "nomecognome"
+# tutto attaccato e minuscolo, senza numeri. Il dominio dipende dal provider
+# scelto (outlook.it, gmail.com, proton.me). Es. "Mario Rossi" -> mariorossi@outlook.it.
 function New-EmailCliente {
-    param([string]$Base, [string]$Dominio = "outlook.com")
+    param([string]$Base, [string]$Dominio = "outlook.it")
     $e = ($Base -replace '[^A-Za-z0-9]', '').ToLower()
     if (-not $e) { $e = "cliente" }
-    if ($e.Length -gt 15) { $e = $e.Substring(0, 15) }
-    return "$e$(Get-Random -Minimum 10 -Maximum 999)@$Dominio"
+    if ($e.Length -gt 20) { $e = $e.Substring(0, 20) }
+    return "$e@$Dominio"
 }
 
 # Rileva una GPU NVIDIA: serve a capire se e' un PC da gaming e installare l'app
@@ -1509,10 +1513,10 @@ if ($RunReale -and [string]::IsNullOrWhiteSpace($sceltaAcc)) { $sceltaAcc = "1" 
 
 # Mappa scelta -> nome provider, pagina da aprire e dominio email suggerito.
 $prov = switch -Regex ($sceltaAcc) {
-    '^1' { @{ Nome = "Microsoft"; Url = "https://account.microsoft.com";                 Dominio = "outlook.com" } }
+    '^1' { @{ Nome = "Microsoft"; Url = "https://account.microsoft.com";                 Dominio = "outlook.it" } }
     '^2' { @{ Nome = "Google";    Url = "https://accounts.google.com/signup";             Dominio = "gmail.com" } }
     '^3' { @{ Nome = "Proton";    Url = "https://account.proton.me/signup";               Dominio = "proton.me" } }
-    '^4' { @{ Nome = "Outlook";   Url = "https://signup.live.com";                        Dominio = "outlook.com" } }
+    '^4' { @{ Nome = "Outlook";   Url = "https://signup.live.com";                        Dominio = "outlook.it" } }
     default { $null }
 }
 
@@ -2192,10 +2196,37 @@ function Test-Indietro { param([string]$v) return ($v -match '^\s*[Bb]\s*$') }
 # Funzioni dei passi Antivirus/Unieuro: definite QUI (prima del wizard) perche'
 # ora l'Antivirus e' l'ultimo passo mentre Unieuro gira prima e usa
 # Attiva-ServizioWeb: cosi' entrambe sono gia' disponibili quando servono.
+# Mostra le credenziali da usare in una pagina web e le mette PRONTE negli
+# appunti, cosi' l'operatore incolla con CTRL+V invece di digitarle (non e'
+# possibile compilare da soli i campi di siti terzi in modo affidabile: questo
+# e' l'aiuto concreto e sicuro). Prima copia l'email (primo campo), poi con un
+# INVIO copia la password.
+function Mostra-CredenzialiPagina {
+    param([string]$Utente, [string]$Password)
+    if (-not ($Utente -or $Password)) { return }
+    Write-Host ""
+    Write-Host "  +--------------------------------------------------------+" -ForegroundColor Yellow
+    Write-Host "  |  CREDENZIALI DA USARE NELLA PAGINA (gia' pronte)       |" -ForegroundColor Yellow
+    Write-Host "  +--------------------------------------------------------+" -ForegroundColor Yellow
+    if ($Utente)   { Write-Host "     Email / utente : $Utente" -ForegroundColor White }
+    if ($Password) { Write-Host "     Password      : $Password" -ForegroundColor White }
+    if (-not $RunReale) { return }
+    if ($Utente) {
+        try { Set-Clipboard -Value $Utente; Write-OK "Email copiata: incollala con CTRL+V nel campo email." } catch {}
+    }
+    if ($Password) {
+        [void](Attendi-Risposta "Premi INVIO per copiare la PASSWORD negli appunti")
+        try { Set-Clipboard -Value $Password; Write-OK "Password copiata: incollala con CTRL+V nel campo password." } catch {}
+    }
+    Write-Host ""
+}
+
 function Installa-Antivirus {
     param(
         [string]$Nome,
-        [string]$UrlRiscatto
+        [string]$UrlRiscatto,
+        [string]$Utente = "",
+        [string]$Password = ""
     )
 
     Write-Info "Apertura pagina registrazione/riscatto $Nome..."
@@ -2204,7 +2235,9 @@ function Installa-Antivirus {
     Write-Host ""
     Write-Host "Completa registrazione/download nel browser." -ForegroundColor White
     Write-Host "L'installer parte DA SOLO appena finisce di scaricarsi (niente INVIO)." -ForegroundColor White
-    Write-Host ""
+    # Antivirus: l'attivazione si fa accedendo con l'account principale del
+    # cliente. Metto quelle credenziali pronte da incollare.
+    Mostra-CredenzialiPagina -Utente $Utente -Password $Password
 
     # Sorveglio Download e Desktop: appena compare un .exe NUOVO (creato dopo
     # ORA) e il download e' finito (dimensione stabile), lo avvio da solo.
@@ -2242,7 +2275,9 @@ function Installa-Antivirus {
 function Attiva-ServizioWeb {
     param(
         [string]$Nome,
-        [string]$UrlAttivazione
+        [string]$UrlAttivazione,
+        [string]$Utente = "",
+        [string]$Password = ""
     )
 
     Write-Info "Apertura pagina attivazione $Nome..."
@@ -2251,6 +2286,9 @@ function Attiva-ServizioWeb {
     Write-Host ""
     Write-Host "Sul sito: inserisci il codice/PIN e completa i dati richiesti." -ForegroundColor White
     Write-Host "IMPORTANTE: annota le credenziali per l'app mobile e consegnale al cliente." -ForegroundColor Yellow
+    # Registrazione col cliente: uso la sua email come utente (pronta da incollare).
+    # La password del portale spesso la crea il sito e la manda via email.
+    Mostra-CredenzialiPagina -Utente $Utente -Password $Password
     $fatto = Attendi-Risposta "Attivazione completata e credenziali annotate? (S/N)"
     if ($fatto -match "^[Ss]") {
         Write-OK "$Nome attivato."
@@ -2303,10 +2341,10 @@ if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(3, $passo - 1); continue wiz
 #  sono disponibili anche al passo Unieuro che ora gira prima dell'Antivirus.)
 switch ($sceltaAV) {
     "1" {
-        Installa-Antivirus -Nome "McAfee" -UrlRiscatto "https://www.mcafee.com/activate"
+        Installa-Antivirus -Nome "McAfee" -UrlRiscatto "https://www.mcafee.com/activate" -Utente $credMsAccount -Password $credMsPassword
     }
     "2" {
-        Installa-Antivirus -Nome "Norton" -UrlRiscatto "https://www.norton.com/setup"
+        Installa-Antivirus -Nome "Norton" -UrlRiscatto "https://www.norton.com/setup" -Utente $credMsAccount -Password $credMsPassword
     }
     "3" {
         Write-Info "Antivirus saltato."
@@ -2327,13 +2365,15 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 
 Write-Titolo "Unieuro Cyber Protection"
 
-Write-Host "Servizio venduto solo su richiesta: salta se il cliente non l'ha acquistato." -ForegroundColor White
+Write-Host "Servizio venduto solo su richiesta: INVIO per saltare se non l'ha comprato." -ForegroundColor White
 Write-Host ""
 
-$vuoiUnieuro = Chiedi "Attivare Unieuro Cyber Protection? (S/N, B=indietro)" "N"
+# Domanda ESSENZIALE (add-on venduto a parte): la chiedo SEMPRE. INVIO = salta.
+$vuoiUnieuro = Attendi-Risposta "Attivare Unieuro Cyber Protection? (S = si / INVIO = no, B=indietro)"
 if (Test-Indietro $vuoiUnieuro) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 if ($vuoiUnieuro -match "^[Ss]") {
-    Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it"
+    # Solo email pronta da incollare: la password del portale la crea il sito.
+    Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it" -Utente $credMsAccount
 } else {
     Write-Info "Unieuro Cyber Protection saltato."
     Add-Report "Unieuro Cyber Protection" "SALTATO"
@@ -2821,6 +2861,41 @@ if ($RunReale) {
         if (-not $avTxt) { $avTxt = 'nessuno' }
 
         $sep = "------------------------------------------------------------"
+
+        # === CREDENZIALI: raccolgo TUTTO in un unico posto. Vanno IN CIMA al
+        #     riepilogo (le prime cose che deve vedere l'operatore) e in un file
+        #     dedicato. Ordine: account principale, poi Cyber Protection /
+        #     antivirus attivati in questa sessione. ===
+        $blank = "______________________________"
+        $provNome = if ($prov) { $prov.Nome } else { "Microsoft" }
+        $credList = @()
+        $credList += [pscustomobject]@{
+            Servizio = "ACCOUNT PRINCIPALE ($provNome)"
+            Utente   = $credMsAccount; Password = $credMsPassword
+            Extra    = "Serve per Windows, Office e antivirus"
+        }
+        foreach ($a in $av) {
+            $svc = ($a.Voce -replace ' \(antivirus\)', '' -replace ' \(protezione\)', '').Trim()
+            if ($a.Voce -like '*protezione*') {
+                $credList += [pscustomobject]@{ Servizio = "$svc (Cyber Protection)"; Utente = $credMsAccount; Password = "(creata dal sito: arriva via email al cliente)"; Extra = "PIN card grattata: __________" }
+            } else {
+                $credList += [pscustomobject]@{ Servizio = "$svc (Antivirus)"; Utente = $credMsAccount; Password = $credMsPassword; Extra = "Attivato con l'account principale - PIN card: __________" }
+            }
+        }
+        # Blocco testo delle credenziali (riusato in cima al riepilogo e nel file).
+        $credBlocco = @()
+        $credBlocco += "############################################################"
+        $credBlocco += "#   CREDENZIALI E ACCOUNT DEL CLIENTE                       #"
+        $credBlocco += "#   Dati in chiaro: consegnali al cliente, non diffonderli  #"
+        $credBlocco += "############################################################"
+        foreach ($c in $credList) {
+            $credBlocco += ""
+            $credBlocco += ">>> $($c.Servizio)"
+            $credBlocco += "      Email / utente : $(if ($c.Utente)   { $c.Utente }   else { $blank })"
+            $credBlocco += "      Password       : $(if ($c.Password) { $c.Password } else { $blank })"
+            if ($c.Extra) { $credBlocco += "      Nota           : $($c.Extra)" }
+        }
+
         $f = @()
         $f += "============================================================"
         $f += "   IL TUO NUOVO PC E' PRONTO"
@@ -2830,6 +2905,8 @@ if ($RunReale) {
         $f += "Cliente  : $(if ($nomeCliente) { $nomeCliente } else { '(non impostato)' })"
         $f += "Nome PC  : $env:COMPUTERNAME"
         $f += "Utente   : $env:USERNAME"
+        $f += ""
+        $f += $credBlocco
         $f += ""
         $f += $sep
         $f += "STATO SISTEMA"
@@ -2904,34 +2981,15 @@ if ($RunReale) {
         $f += $sep
         foreach ($d in $daFare) { $f += "  [ ] $d" }
 
-        $f += ""
-        $f += $sep
-        $blank = "______________________________"
-        $haCred = ($credMsAccount -or $credMsPassword -or $credAltro)
-        $f += "NOTE / CREDENZIALI$(if ($haCred) { ' - CONTIENE DATI IN CHIARO: ELIMINA IL FILE DOPO LA CONSEGNA' } else { ' (da compilare a mano)' })"
-        $f += $sep
-        $f += "  Account / email   : $(if ($credMsAccount) { $credMsAccount } else { $blank })"
-        $f += "  Password          : $(if ($credMsPassword) { $credMsPassword } else { $blank })"
-        # Campi dedicati per ogni antivirus/protezione attivato in questa sessione.
-        # Antivirus (McAfee/Norton): stesse credenziali dell'account Microsoft.
-        # Cyber protection (Unieuro): la password la CREA il sito e la manda via
-        # email dopo la registrazione, quindi non la conosciamo in anticipo.
-        foreach ($a in $av) {
-            $nomeSvc = ($a.Voce -replace ' \(antivirus\)', '' -replace ' \(protezione\)', '').Trim()
-            $isProtezione = $a.Voce -like '*protezione*'
+        # (Le credenziali complete sono IN CIMA a questo file e nel file dedicato
+        #  "Credenziali - <cliente>.txt" sul Desktop.)
+        if ($credAltro) {
             $f += ""
-            $f += "  [$nomeSvc]"
-            $f += "  Email/utente account : $(if ($credMsAccount) { $credMsAccount } else { $blank })"
-            if ($isProtezione) {
-                $f += "  Password account     : (creata dal sito, arriva via email dopo la registrazione)"
-            } else {
-                $f += "  Password account     : $(if ($credMsPassword) { $credMsPassword } else { $blank })"
-            }
-            $f += "  Codice/PIN licenza   : $blank"
-            $f += "  Credenziali app      : $blank"
+            $f += $sep
+            $f += "ALTRE NOTE"
+            $f += $sep
+            $f += "  $credAltro"
         }
-        $f += ""
-        $f += "  Altro             : $(if ($credAltro) { $credAltro } else { $blank })"
         $f += ""
         if ($Global:ErroriImprevisti.Count -gt 0) {
             $f += $sep
@@ -2960,6 +3018,24 @@ if ($RunReale) {
         $riepFile = Join-Path (Get-DesktopDir) ("$nomeFile.txt")
         $f | Set-Content -Path $riepFile -Encoding UTF8
         Write-OK "Riepilogo salvato sul Desktop: $riepFile"
+
+        # FILE CREDENZIALI DEDICATO (oltre al riepilogo): solo gli account, cosi'
+        # e' comodo da consultare e consegnare. Anche questo sul Desktop.
+        try {
+            $cf = @()
+            $cf += "CREDENZIALI - $(if ($nomeCliente) { $nomeCliente } else { 'cliente' })"
+            $cf += "Data: $(Get-Date -Format 'dd/MM/yyyy HH:mm')    PC: $env:COMPUTERNAME"
+            $cf += ""
+            $cf += $credBlocco
+            $cf += ""
+            $cf += "------------------------------------------------------------"
+            $cf += "ATTENZIONE: contiene password in chiaro. Consegna al cliente."
+            $credNomeFile = if ($nomeCliente) { "Credenziali - $nomeCliente" } else { "Credenziali" }
+            $credNomeFile = ($credNomeFile -replace '[\\/:*?"<>|]', '').Trim()
+            $credFile = Join-Path (Get-DesktopDir) ("$credNomeFile.txt")
+            $cf | Set-Content -Path $credFile -Encoding UTF8
+            Write-OK "Credenziali salvate sul Desktop: $credFile"
+        } catch { Write-Info "File credenziali non salvato: $_" }
 
         # ---------------------------------------------------------------------
         # LOG STRUTTURATO (JSON + CSV) per l'assistenza/statistiche. NON sul
