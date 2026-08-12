@@ -4,6 +4,11 @@ name: CI
 # setup-pc.ps1, esegue PSScriptAnalyzer e i test Pester, e controlla che
 # l'impronta SHA256 pubblicata sia aggiornata. Gira su Windows (come i PC reali).
 
+# Privilegio minimo per il token del workflow: la CI legge soltanto il codice,
+# non scrive nulla nel repository (buona pratica di sicurezza).
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ "**" ]

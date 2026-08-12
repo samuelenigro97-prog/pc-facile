@@ -18,3 +18,4 @@ Tutti i dettagli, i comandi alternativi da PowerShell e la compatibilità Window
 - **CI**: `.github/workflows/ci.yml` gira su ogni push/PR (Windows) — controllo sintassi, PSScriptAnalyzer, Pester e verifica dell'hash.
 - **Dopo aver modificato `setup-pc.ps1`** va rigenerato l'hash:
   `(Get-FileHash ./setup-pc.ps1 -Algorithm SHA256).Hash.ToLower() | Set-Content ./setup-pc.ps1.sha256` (la CI fallisce se è disallineato).
+- **Sicurezza**: distribuzione, integrità e dati sensibili sono descritti in **[SECURITY.md](./SECURITY.md)**.
