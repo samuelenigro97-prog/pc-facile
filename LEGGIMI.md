@@ -54,9 +54,14 @@ https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps
 
 Niente comandi da digitare.
 
-> **Durante la configurazione:** all'inizio scegli **C** (Configura) / **D**
-> (Diagnostica) / **T** (Test). Dentro un passo, digita **B** al prompt per
-> tornare al passo precedente; altrimenti dopo ogni scelta si avanza da solo.
+> **Durante la configurazione:** parte tutto in automatico. Ti fermi **solo**
+> su 5 cose: nome cliente, account, Office, profilo app, antivirus. Il resto
+> (lingua, pulizia, aggiornamenti, driver, ...) va da solo col valore
+> consigliato. Dentro un passo, digita **B** al prompt per tornare indietro;
+> altrimenti dopo ogni scelta si avanza da solo.
+>
+> Le modalità tecniche **Diagnostica** e **Test** ora si avviano solo da riga
+> di comando (`-Diagnostica` / `-Test`, vedi sotto): non servono al banco.
 
 > Se Windows/SmartScreen avvisa sul `.bat`: *Ulteriori info → Esegui comunque*.
 > Se **Smart App Control** blocca tutto → vedi punto 3.
