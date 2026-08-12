@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "8.7 (2026-08-12)"
+$SCRIPT_VERSION = "8.8 (2026-08-12)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -565,7 +565,7 @@ $CatalogoApp = @(
     @{ Nome = "Adobe Acrobat Reader"; Id = "Adobe.Acrobat.Reader.64-bit";  Profili = @("BASE","UFFICIO","GAMING") },
     @{ Nome = "Sumatra PDF";          Id = "SumatraPDF.SumatraPDF";        Profili = @("UFFICIO") },
     @{ Nome = "Spotify";              Id = "Spotify.Spotify";              Profili = @("BASE","UFFICIO","GAMING") },
-    @{ Nome = "AIMP";                 Id = "AIMP.AIMP";                    Profili = @() },
+    @{ Nome = "AIMP";                 Id = "AIMP.AIMP";                    Profili = @("BASE","UFFICIO","GAMING") },
     @{ Nome = "7-Zip";                Id = "7zip.7zip";                    Profili = @("BASE","UFFICIO","GAMING") },
     @{ Nome = "WhatsApp";             Id = "9NKSQGP7F2NH";                 Profili = @("BASE","UFFICIO","GAMING") },  # Microsoft Store (la versione winget falliva spesso)
     @{ Nome = "GIMP";                 Id = "GIMP.GIMP";                    Profili = @("UFFICIO") },
@@ -2467,7 +2467,7 @@ if ($Global:AppProfiloRipresa) {
     Write-Info "Le app gia' installate le salto: riparto dall'esatta app rimasta."
 } else {
     Write-Host "Scegli come installare le applicazioni (browser incluso in automatico):" -ForegroundColor White
-    Write-Host "  1) PROFILO BASE     (Chrome + VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, Zoom, AnyDesk)"
+    Write-Host "  1) PROFILO BASE     (Chrome + VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, AIMP, Zoom, AnyDesk)"
     Write-Host "  2) PROFILO UFFICIO  (Chrome + BASE + GIMP, Sumatra PDF)"
     Write-Host "  3) PROFILO GAMING   (Opera GX + BASE + Steam, Epic, Discord, qBittorrent)"
     Write-Host "  4) COMPLETO         (Chrome + tutte le app in lista)"
