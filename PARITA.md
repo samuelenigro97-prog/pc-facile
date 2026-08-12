@@ -18,7 +18,7 @@ allineati come flusso e funzioni.
 | Unieuro Cyber Protection    | apre portale                              | apre portale (uguale)                         | pari |
 | Browser                     | catalogo winget                           | cask brew                                     | pari |
 | App (BASE/UFFICIO/GAMING)   | winget + tool GPU se dedicata (NVIDIA/Intel Arc/AMD) | brew cask (Mac: GPU integrata) | pari |
-| Aggiornamenti               | `winget upgrade` + driver Windows Update  | `brew upgrade` + `softwareupdate`             | pari |
+| Aggiornamenti               | `winget upgrade` + aggiornamenti sicurezza Windows (COM Microsoft.Update) + driver Windows Update | `brew upgrade` + `softwareupdate` | pari |
 | Chiave di ripristino disco  | **BitLocker** (`manage-bde`/cmdlet)       | **FileVault** (`fdesetup`)                    | pari |
 | Barra attesa download/install| `Show-BarraAttesa` (winget in Start-Process)| — (brew mostra gia' il progresso)             | solo Win |
 | Avviso sonoro fine passo    | `[console]::Beep`                         | `printf '\a'`                                 | pari |
@@ -38,6 +38,7 @@ allineati come flusso e funzioni.
 - **SHA256** (`setup-pc.ps1.sha256`) verificato dal `.bat` allo scaricamento.
 
 ## Solo Windows (non esiste su Mac)
+- **Debloat barra Win11**: nasconde Widget, Chat, Vista attivita' e Ricerca dalla barra (registro HKCU).
 - **Debloat OEM**: macOS non ha crapware del produttore.
 - **Rimozione antivirus di prova**: quasi mai preinstallato su Mac.
 - **Attivazione Office/driver**: Office da web, driver inclusi in macOS.

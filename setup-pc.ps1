@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "8.1 (2026-08-12)"
+$SCRIPT_VERSION = "8.2 (2026-08-12)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -2133,6 +2133,27 @@ $bloatwareAppx = @(
         Add-Report "Configurazione Windows base" "ERRORE"
     }
 
+    # --- PULIZIA BARRA DELLE APPLICAZIONI (Windows 11): tolgo i pulsanti inutili
+    # che confondono il cliente - Widget (meteo/notizie), Chat/Teams, Vista
+    # attivita' e la casella di ricerca (resta comunque la ricerca dal menu
+    # Start). Tutto via registro HKCU: si applica al prossimo accesso/riavvio,
+    # come le altre comodita'. Su Windows 10 alcune chiavi sono ignorate: nessun
+    # problema, restano innocue. ---
+    try {
+        $adv = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+        Set-ItemProperty -Path $adv -Name "TaskbarDa"          -Value 0 -Type DWord -ErrorAction SilentlyContinue   # Widget: nascosto
+        Set-ItemProperty -Path $adv -Name "TaskbarMn"          -Value 0 -Type DWord -ErrorAction SilentlyContinue   # Chat/Teams: nascosto
+        Set-ItemProperty -Path $adv -Name "ShowTaskViewButton" -Value 0 -Type DWord -ErrorAction SilentlyContinue   # Vista attivita': nascosta
+        $srch = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"
+        if (-not (Test-Path $srch)) { New-Item -Path $srch -Force | Out-Null }
+        Set-ItemProperty -Path $srch -Name "SearchboxTaskbarMode" -Value 0 -Type DWord -ErrorAction SilentlyContinue  # Ricerca: nascosta dalla barra
+        Write-OK "Barra applicazioni ripulita (Widget, Chat, Vista attivita', Ricerca)."
+        Add-Report "Pulizia barra applicazioni (Win11)" "OK"
+    } catch {
+        Write-Info "Alcune impostazioni della barra non applicate (versione di Windows diversa)."
+        Add-Report "Pulizia barra applicazioni (Win11)" "AVVISO"
+    }
+
     # DISINSTALLA OneDrive (non solo l'avvio automatico): molti clienti non lo
     # vogliono. Chiudo il processo, lancio il disinstallatore ufficiale, tolgo la
     # versione Store (Appx) e il provisioning (i nuovi utenti non lo riavranno).
@@ -2257,7 +2278,7 @@ function Attiva-ServizioWeb {
 # 7=Antivirus (ultimo). La barra mostra (passo-2) su 5.
 $passo = 3
 # Nomi leggibili dei passi wizard per il checkpoint di ripresa sessione.
-$wizNomi = @{ 3 = "Unieuro Cyber Protection"; 4 = "Applicazioni + browser"; 5 = "Aggiornamento app"; 6 = "Driver"; 7 = "Antivirus" }
+$wizNomi = @{ 3 = "Unieuro Cyber Protection"; 4 = "Applicazioni + browser"; 5 = "Aggiornamenti (app + Windows)"; 6 = "Driver"; 7 = "Antivirus" }
 # Ripresa sessione: fase 7..11 = passo wizard 3..7 completato -> si riparte
 # dal successivo (fase 11 = tutto il wizard fatto, si salta al report).
 if ($Global:FaseRipresa -ge 7) {
@@ -2486,12 +2507,14 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 }
 5 {
 # =============================================================================
-# AGGIORNAMENTO APP INSTALLATE - opzionale
+# AGGIORNAMENTI - app installate (winget) + sicurezza di Windows - opzionale
 # =============================================================================
 
-Write-Titolo "Aggiornamento App Installate"
+Write-Titolo "Aggiornamenti (app + Windows)"
 
-Write-Host "Aggiorna all'ultima versione le app gestite da winget (incluse molte OEM)." -ForegroundColor White
+Write-Host "Due cose, una dopo l'altra (entrambe opzionali):" -ForegroundColor White
+Write-Host "  - App: aggiorna all'ultima versione le app gestite da winget (anche OEM)." -ForegroundColor White
+Write-Host "  - Windows: scarica e installa gli aggiornamenti di SICUREZZA di Windows." -ForegroundColor White
 Write-Host "Puo' richiedere diversi minuti. (I driver hanno il loro passo dedicato dopo.)" -ForegroundColor White
 Write-Host ""
 
@@ -2510,6 +2533,60 @@ if ($vuoiUpgrade -match "^[Ss]") {
 } else {
     Write-Info "Aggiornamento app saltato."
     Add-Report "Aggiornamento app installate" "SALTATO"
+}
+
+# --- AGGIORNAMENTI DI SICUREZZA DI WINDOWS (COM Microsoft.Update, come i driver).
+# Solo aggiornamenti SOFTWARE non installati (i driver hanno il loro passo). Salto
+# quelli che chiederebbero conferme all'utente e accetto le licenze in automatico.
+Write-Host ""
+$vuoiWU = Chiedi "Installare ora gli aggiornamenti di sicurezza di Windows? (S/N)" "S"
+if ($vuoiWU -match "^[Ss]") {
+    try {
+        Write-Info "Ricerca aggiornamenti di Windows (puo' richiedere diversi minuti)..."
+        Start-BarraAnimata "Cerco gli aggiornamenti di Windows"
+        try {
+            $sessWU     = New-Object -ComObject Microsoft.Update.Session
+            $searcherWU = $sessWU.CreateUpdateSearcher()
+            $resWU      = $searcherWU.Search("IsInstalled=0 and Type='Software' and IsHidden=0")
+        } finally { Stop-BarraAnimata }
+        $updWU = New-Object -ComObject Microsoft.Update.UpdateColl
+        foreach ($u in $resWU.Updates) {
+            # Salto quelli che richiederebbero input dell'utente (setup interattivi)
+            if ($u.InstallationBehavior -and $u.InstallationBehavior.CanRequestUserInput) { continue }
+            if (-not $u.EulaAccepted) { try { $u.AcceptEula() } catch {} }
+            Write-Info "Aggiornamento: $($u.Title)"
+            $updWU.Add($u) | Out-Null
+        }
+        if ($updWU.Count -eq 0) {
+            Write-OK "Windows e' gia' aggiornato: nessun aggiornamento da installare."
+            Add-Report "Aggiornamenti di sicurezza Windows" "OK"
+        } else {
+            Write-Info "Download di $($updWU.Count) aggiornamenti..."
+            Start-BarraAnimata "Scarico gli aggiornamenti di Windows"
+            try {
+                $dlWU = $sessWU.CreateUpdateDownloader(); $dlWU.Updates = $updWU; $dlWU.Download() | Out-Null
+            } finally { Stop-BarraAnimata }
+            Write-Info "Installazione aggiornamenti (non spegnere il PC)..."
+            Start-BarraAnimata "Installo gli aggiornamenti di Windows"
+            try {
+                $inWU = $sessWU.CreateUpdateInstaller(); $inWU.Updates = $updWU; $esitoWU = $inWU.Install()
+            } finally { Stop-BarraAnimata }
+            if ($esitoWU.ResultCode -eq 2) {
+                Write-OK "Aggiornamenti di Windows installati ($($updWU.Count))."
+                Add-Report "Aggiornamenti di sicurezza Windows ($($updWU.Count))" "OK"
+            } else {
+                Write-Info "Installazione conclusa (codice $($esitoWU.ResultCode)): alcuni si completano al riavvio."
+                Add-Report "Aggiornamenti di sicurezza Windows" "AVVISO"
+            }
+            if ($esitoWU.RebootRequired) { Write-Info "Alcuni aggiornamenti richiedono un RIAVVIO per completare." }
+        }
+    } catch {
+        Write-Errore "Aggiornamenti di Windows non riusciti: $_"
+        Add-Report "Aggiornamenti di sicurezza Windows" "ERRORE"
+    }
+} else {
+    Write-Info "Aggiornamenti di sicurezza Windows saltati."
+    Add-Report "Aggiornamenti di sicurezza Windows" "SALTATO"
 }
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
