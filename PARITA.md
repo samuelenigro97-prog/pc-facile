@@ -6,7 +6,7 @@ allineati come flusso e funzioni.
 
 | Passo / funzione            | Windows (`setup-pc.ps1`)                  | Mac (`setup-mac.sh`)                          | Note |
 |-----------------------------|-------------------------------------------|-----------------------------------------------|------|
-| Menu C/Veloce/Diag/Test     | `[Console]::ReadKey` + `-Veloce`          | menu + `--veloce`                             | pari |
+| Avvio diretto (no menu)     | doppio click = configura; `-Diagnostica`/`-Test` solo da CLI | menu + `--veloce`                  | Win: flusso unico essenziale |
 | Lingua italiana             | `Install-Language it-IT -CopyToSettings`  | `defaults write AppleLanguages/AppleLocale`   | pari |
 | Sincronizzazione orario     | `w32tm` + W32Time auto + tzautoupdate     | `systemsetup -setusingnetworktime on` + sntp  | pari |
 | Nome cliente + host         | `Set-LocalUser` + `Rename-Computer`       | `scutil --set ComputerName/HostName`          | pari |

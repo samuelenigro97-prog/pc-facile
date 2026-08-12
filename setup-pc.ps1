@@ -9,9 +9,9 @@ param(
     # Diagnostica: controlla ambiente e valida gli ID pacchetti (winget show),
     # senza installare nulla, e mostra cosa e' OK/KO. -File setup-pc.ps1 -Diagnostica
     [switch]$Diagnostica,
-    # Veloce: Configura automatica col profilo tipico del negozio. Chiede SOLO
-    # le 3 cose che cambiano per cliente (nome, antivirus, profilo app); tutto
-    # il resto risponde in automatico. -File setup-pc.ps1 -Veloce
+    # Veloce: ormai e' il comportamento PREDEFINITO (ogni doppio click parte in
+    # automatico e chiede solo l'essenziale). Il parametro resta accettato per
+    # compatibilita' con eventuali scorciatoie/comandi esistenti. -Veloce
     [switch]$Veloce
 )
 
@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "8.3 (2026-08-12)"
+$SCRIPT_VERSION = "8.4 (2026-08-12)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -313,14 +313,15 @@ function Get-AntivirusInstallati {
     return $trovati | Sort-Object Nome -Unique
 }
 
-# Chiede un valore all'operatore, MA in modalita' Veloce risponde da solo con
-# $Auto (senza fermarsi): cosi' il preset Veloce salta le domande che non
-# cambiano da PC a PC. Le 3 domande che restano sempre interattive (nome,
-# antivirus, profilo app) usano Read-Host normale, non questa.
+# Domanda "opzionale": nel flusso automatico (il default del banco) risponde da
+# sola col valore consigliato $Auto, SENZA fermarsi, cosi' l'operatore non deve
+# cliccare per cose che non cambiano da PC a PC. Le domande essenziali (nome,
+# account, Office, profilo app, antivirus) NON usano questa: chiedono davvero.
 function Chiedi {
     param([string]$Prompt, [string]$Auto = "S")
     if ($Veloce) {
-        Write-Host "  $Prompt  [Veloce => '$Auto']" -ForegroundColor Gray
+        $azione = if ($Auto -match '^[Ss]') { "si'" } else { "no" }
+        Write-Host "  - $Prompt  -> automatico: $azione" -ForegroundColor Gray
         return $Auto
     }
     return Attendi-Risposta $Prompt   # bip subito + ribip ogni 2 min se non rispondi
@@ -390,8 +391,9 @@ function Get-BitLockerRecovery {
     return [pscustomobject]$r
 }
 
-# Menu iniziale: se non e' stata scelta una modalita' via parametro, la chiedo.
-# Un solo tasto, senza INVIO: D=diagnostica, T=test, C/INVIO/altro=configura.
+# AVVIO DIRETTO: niente menu. Doppio click = configura subito. Le modalita'
+# tecniche (Diagnostica/Test) restano disponibili solo da riga di comando
+# (-Diagnostica / -Test): non servono al banco. Si mostra solo l'intestazione.
 if (-not $Test -and -not $Diagnostica) {
     try { Clear-Host } catch {}
     $larg = 56
@@ -402,32 +404,8 @@ if (-not $Test -and -not $Diagnostica) {
     Write-Host ("  " + [char]0x2551 + (" " * $padSx) + $titoloB + (" " * $padDx) + [char]0x2551) -ForegroundColor $THEME_TXT
     Write-Host ("$AON  " + [char]0x255A + (([string][char]0x2550) * $larg) + [char]0x255D + "$AOFF") -ForegroundColor $THEME_COL
     Write-Host ""
-    Write-Host "  Premi un tasto:" -ForegroundColor White
-    Write-Host ""
-    Write-Host "$AON    [C]$AOFF" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Configura il PC   (installa e imposta, chiede tutto)" -ForegroundColor White
-    Write-Host "$AON    [V]$AOFF" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Veloce            (automatico: chiede solo nome, antivirus, app)" -ForegroundColor White
-    Write-Host "$AON    [D]$AOFF" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Diagnostica       (controlla, NON installa)" -ForegroundColor White
-    Write-Host "$AON    [T]$AOFF" -ForegroundColor $THEME_COL -NoNewline; Write-Host " Test a vuoto      (percorre tutto, NON installa)" -ForegroundColor White
-    Write-Host ""
-    Write-Host "  (C oppure INVIO = Configura)" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  LEGENDA TASTI:" -ForegroundColor White
-    Write-Host "    Nei menu     : premi la LETTERA o il NUMERO indicato" -ForegroundColor Gray
-    Write-Host "    Nelle domande: S = si, N = no" -ForegroundColor Gray
-    Write-Host "    Fine passo   : si avanza automaticamente" -ForegroundColor Gray
-    Write-Host "    Per uscire   : chiudi la finestra" -ForegroundColor Gray
-
-    $tasto = ""
-    try {
-        $k = [Console]::ReadKey($true)     # legge UN tasto, senza bisogno di INVIO
-        $tasto = "$($k.KeyChar)".ToUpper()
-    } catch {
-        $tasto = (Read-Host "Scelta (C/D/T)").ToUpper()   # fallback se ReadKey non disponibile
-    }
-    if ($tasto -eq "D" -or $tasto -eq "2") { $Diagnostica = $true; Write-Host "$AON  -> Diagnostica$AOFF" -ForegroundColor $THEME_COL }
-    elseif ($tasto -eq "T" -or $tasto -eq "3") { $Test = $true; Write-Host "$AON  -> Test a vuoto$AOFF" -ForegroundColor $THEME_COL }
-    elseif ($tasto -eq "V" -or $tasto -eq "4") { $Veloce = $true; Write-Host "$AON  -> Veloce (automatico)$AOFF" -ForegroundColor $THEME_COL }
-    else { Write-Host "$AON  -> Configura il PC$AOFF" -ForegroundColor $THEME_COL }
+    Write-Host "  Configuro il PC. Ti chiedo solo l'essenziale, il resto lo faccio io." -ForegroundColor White
+    Write-Host "  Nelle domande: S = si, N = no. A fine passo si prosegue da solo." -ForegroundColor Gray
     Write-Host ""
 }
 
@@ -445,11 +423,14 @@ if ($Test -or $Diagnostica) {
     function Pausa { }
 }
 
-# Modalita' VELOCE: e' una Configura reale (installa davvero), ma NON si ferma
-# alle pause tra le sezioni, cosi' scorre da sola. Le domande le gestisce
-# 'Chiedi' (auto) tranne nome/antivirus/app, che restano vere Read-Host.
-if ($Veloce -and -not $Test -and -not $Diagnostica) {
-    Write-Host "*** MODALITA' VELOCE: automatica, chiede solo nome, antivirus e app ***" -ForegroundColor Magenta
+# FLUSSO ESSENZIALE (unico modo del banco): la configurazione reale scorre da
+# sola. Le domande S/N "opzionali" (lingua, ripristino, pulizia, aggiornamenti,
+# driver, ...) le risponde 'Chiedi' col valore consigliato SENZA fermarsi; si
+# ferma SOLO sulle 5 cose essenziali (nome, account, Office, app, antivirus).
+# Tecnicamente si attiva la vecchia "Veloce" per ogni run reale. -Veloce resta
+# accettato per compatibilita' ma ormai e' il comportamento predefinito.
+if (-not $Test -and -not $Diagnostica) {
+    $Veloce = $true
     function Pausa { }
 }
 
@@ -1521,7 +1502,10 @@ Write-Host "  4) Outlook.com (nuova email Microsoft)" -ForegroundColor White
 Write-Host "  S) Salta" -ForegroundColor White
 Write-Host ""
 
-$sceltaAcc = Chiedi "Scelta (1-4, S salta)" "1"
+# Domanda ESSENZIALE: cambia da cliente a cliente, quindi la chiedo SEMPRE
+# (anche nel flusso automatico). INVIO = Microsoft (il caso piu' comune).
+$sceltaAcc = Attendi-Risposta "Scelta (1-4, INVIO = Microsoft, S = salta)"
+if ($RunReale -and [string]::IsNullOrWhiteSpace($sceltaAcc)) { $sceltaAcc = "1" }
 
 # Mappa scelta -> nome provider, pagina da aprire e dominio email suggerito.
 $prov = switch -Regex ($sceltaAcc) {
@@ -1800,7 +1784,10 @@ function Add-CollegamentiOffice {
     }
 }
 
-$sceltaAtt = Chiedi "Scelta (1-5)" "1"
+# Domanda ESSENZIALE: dipende dalla card che ha in mano l'operatore, la chiedo
+# SEMPRE. INVIO = Microsoft 365. Metti 5 se il cliente non ha Office da attivare.
+$sceltaAtt = Attendi-Risposta "Scelta (1-5, INVIO = Microsoft 365, 5 = salta)"
+if ($RunReale -and [string]::IsNullOrWhiteSpace($sceltaAtt)) { $sceltaAtt = "1" }
 switch ($sceltaAtt) {
     "1" {
         # 1/2: INSTALLAZIONE (se manca). Su molti PC nuovi M365 e' preinstallato:
