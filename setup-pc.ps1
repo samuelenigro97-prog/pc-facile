@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "7.8 (2026-08-12)"
+$SCRIPT_VERSION = "7.9 (2026-08-12)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -1005,17 +1005,52 @@ function Get-StartMenuLnks {
 #  2) app dello Store (MSIX, niente .lnk) -> Get-StartApps + shell:AppsFolder.
 # Salta i doppioni. Un breve retry copre il caso in cui il collegamento non e'
 # ancora stato scritto subito dopo la fine di winget.
+# Icone (.lnk) presenti sul Desktop VISTO dal cliente = Desktop utente PIU'
+# Desktop pubblico (C:\Users\Public\Desktop): Windows li fonde. Molti installer
+# (Chrome, AnyDesk, Steam...) mettono l'icona sul PUBBLICO, quindi il controllo
+# anti-doppione deve guardare entrambi, altrimenti si finisce con due icone.
+function Get-DesktopLnks {
+    $dirs = @((Get-DesktopDir),
+              [Environment]::GetFolderPath('CommonDesktopDirectory')) |
+            Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+    $res = @()
+    foreach ($d in $dirs) {
+        $res += Get-ChildItem -Path $d -Filter *.lnk -ErrorAction SilentlyContinue
+    }
+    return $res
+}
+
+# Pulizia doppioni: se la STESSA app ha un'icona sia sul Desktop pubblico (messa
+# dall'installer) sia su quello utente (copiata da noi), tolgo quella UTENTE e
+# lascio l'originale del pubblico. Da lanciare DOPO le installazioni: copre anche
+# il caso in cui l'installer crea la sua icona un attimo dopo il nostro controllo.
+function Remove-IconeDoppieDesktop {
+    if (-not $RunReale) { return }
+    try {
+        $userD = Get-DesktopDir
+        $pubD  = [Environment]::GetFolderPath('CommonDesktopDirectory')
+        if (-not ($pubD -and (Test-Path $pubD))) { return }
+        $userLnks = @(Get-ChildItem -Path $userD -Filter *.lnk -ErrorAction SilentlyContinue)
+        $pubLnks  = @(Get-ChildItem -Path $pubD  -Filter *.lnk -ErrorAction SilentlyContinue)
+        foreach ($u in $userLnks) {
+            if ($pubLnks | Where-Object { Test-NomeSimile $_.BaseName $u.BaseName }) {
+                Remove-Item $u.FullName -Force -ErrorAction SilentlyContinue
+            }
+        }
+    } catch {}
+}
+
 function Add-IconaDesktop {
     param([string]$Nome, [string[]]$LnkPrima = @())
     if (-not $RunReale) { return }
     try {
         $desktop = Get-DesktopDir
 
-        # ANTI-DOPPIONE (per PRIMO): se sul Desktop c'e' gia' un'icona che somiglia
-        # al nome dell'app - creata dall'installer stesso (Chrome, AnyDesk, Steam...)
-        # o da un giro precedente - non ne aggiungo una seconda.
-        $gia = Get-ChildItem -Path $desktop -Filter *.lnk -ErrorAction SilentlyContinue |
-            Where-Object { Test-NomeSimile $_.BaseName $Nome } | Select-Object -First 1
+        # ANTI-DOPPIONE (per PRIMO): se su UNO DEI DUE Desktop (utente o pubblico)
+        # c'e' gia' un'icona che somiglia al nome dell'app - creata dall'installer
+        # stesso (Chrome, AnyDesk, Steam...) o da un giro precedente - non ne
+        # aggiungo una seconda.
+        $gia = Get-DesktopLnks | Where-Object { Test-NomeSimile $_.BaseName $Nome } | Select-Object -First 1
         if ($gia) { return }
 
         # 0) DIFF: collegamenti NUOVI creati dall'installazione (max ~4s di attesa).
@@ -1036,7 +1071,7 @@ function Add-IconaDesktop {
                 $scelto = if ($match.Count -gt 0) { $match | Sort-Object { $_.BaseName.Length } | Select-Object -First 1 }
                           else { $nuovi | Sort-Object { $_.BaseName.Length } | Select-Object -First 1 }
                 if ($scelto) {
-                    $giaSimile = Get-ChildItem -Path $desktop -Filter *.lnk -ErrorAction SilentlyContinue |
+                    $giaSimile = Get-DesktopLnks |
                         Where-Object { Test-NomeSimile $_.BaseName $scelto.BaseName } | Select-Object -First 1
                     $dest = Join-Path $desktop $scelto.Name
                     if (-not $giaSimile -and -not (Test-Path $dest)) {
@@ -2331,6 +2366,10 @@ switch ($sceltaApps) {
         }
     }
 }
+
+# Dopo tutte le installazioni del passo: tolgo eventuali icone doppie (una nostra
+# sul Desktop utente + quella dell'installer sul Desktop pubblico).
+Remove-IconeDoppieDesktop
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
