@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "8.2 (2026-08-12)"
+$SCRIPT_VERSION = "8.3 (2026-08-12)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -2512,17 +2512,18 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 
 Write-Titolo "Aggiornamenti (app + Windows)"
 
-Write-Host "Due cose, una dopo l'altra (entrambe opzionali):" -ForegroundColor White
-Write-Host "  - App: aggiorna all'ultima versione le app gestite da winget (anche OEM)." -ForegroundColor White
-Write-Host "  - Windows: scarica e installa gli aggiornamenti di SICUREZZA di Windows." -ForegroundColor White
+Write-Host "Con un solo SI aggiorno, una dopo l'altra:" -ForegroundColor White
+Write-Host "  - App: all'ultima versione le app gestite da winget (anche OEM)." -ForegroundColor White
+Write-Host "  - Windows: gli aggiornamenti di SICUREZZA di Windows." -ForegroundColor White
 Write-Host "Puo' richiedere diversi minuti. (I driver hanno il loro passo dedicato dopo.)" -ForegroundColor White
 Write-Host ""
 
-$vuoiUpgrade = Chiedi "Aggiornare ora tutte le app installate? (S/N, B=indietro)" "S"
+$vuoiUpgrade = Chiedi "Aggiornare ora app e Windows? (S/N, B=indietro)" "S"
 if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 if ($vuoiUpgrade -match "^[Ss]") {
+    # 1) APP INSTALLATE (winget)
     if (Confirm-Winget) {
-        Write-Info "Aggiornamento in corso (puo' richiedere diversi minuti)..."
+        Write-Info "Aggiornamento app in corso (puo' richiedere diversi minuti)..."
         $null = Invoke-WingetConBarra -Nome "aggiornamenti app" -WingetArgs @('upgrade', '--all', '--silent', '--disable-interactivity', '--accept-package-agreements', '--accept-source-agreements', '--include-unknown')
         Write-OK "Aggiornamento app completato."
         Add-Report "Aggiornamento app installate" "OK"
@@ -2530,17 +2531,11 @@ if ($vuoiUpgrade -match "^[Ss]") {
         Write-Errore "Winget non disponibile."
         Add-Report "Aggiornamento app installate" "ERRORE"
     }
-} else {
-    Write-Info "Aggiornamento app saltato."
-    Add-Report "Aggiornamento app installate" "SALTATO"
-}
 
-# --- AGGIORNAMENTI DI SICUREZZA DI WINDOWS (COM Microsoft.Update, come i driver).
-# Solo aggiornamenti SOFTWARE non installati (i driver hanno il loro passo). Salto
-# quelli che chiederebbero conferme all'utente e accetto le licenze in automatico.
-Write-Host ""
-$vuoiWU = Chiedi "Installare ora gli aggiornamenti di sicurezza di Windows? (S/N)" "S"
-if ($vuoiWU -match "^[Ss]") {
+    # 2) AGGIORNAMENTI DI SICUREZZA DI WINDOWS (COM Microsoft.Update, come i driver).
+    # Solo aggiornamenti SOFTWARE non installati (i driver hanno il loro passo). Salto
+    # quelli che chiederebbero conferme all'utente e accetto le licenze in automatico.
+    Write-Host ""
     try {
         Write-Info "Ricerca aggiornamenti di Windows (puo' richiedere diversi minuti)..."
         Start-BarraAnimata "Cerco gli aggiornamenti di Windows"
@@ -2585,7 +2580,8 @@ if ($vuoiWU -match "^[Ss]") {
         Add-Report "Aggiornamenti di sicurezza Windows" "ERRORE"
     }
 } else {
-    Write-Info "Aggiornamenti di sicurezza Windows saltati."
+    Write-Info "Aggiornamenti saltati (app e Windows)."
+    Add-Report "Aggiornamento app installate" "SALTATO"
     Add-Report "Aggiornamenti di sicurezza Windows" "SALTATO"
 }
 
