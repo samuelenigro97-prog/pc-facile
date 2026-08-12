@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "7.9 (2026-08-12)"
+$SCRIPT_VERSION = "8.0 (2026-08-12)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -493,6 +493,9 @@ trap {
 # passo viene saltato (restano vuote nel file).
 $credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
 
+# Contatore app che NON si sono installate (per l'avviso rete a fine passo App).
+$Global:AppFallite = 0
+
 # =============================================================================
 # RIPRESA SESSIONE: se lo script viene chiuso a meta' (crash, riavvio, blocco
 # antivirus), al lancio successivo riparte da dove era arrivato. Dopo ogni
@@ -549,7 +552,7 @@ $CatalogoApp = @(
     @{ Nome = "Spotify";              Id = "Spotify.Spotify";              Profili = @("BASE","UFFICIO","GAMING") },
     @{ Nome = "AIMP";                 Id = "AIMP.AIMP";                    Profili = @() },
     @{ Nome = "7-Zip";                Id = "7zip.7zip";                    Profili = @("BASE","UFFICIO","GAMING") },
-    @{ Nome = "WhatsApp";             Id = "WhatsApp.WhatsApp";            Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "WhatsApp";             Id = "9NKSQGP7F2NH";                 Profili = @("BASE","UFFICIO","GAMING") },  # Microsoft Store (la versione winget falliva spesso)
     @{ Nome = "GIMP";                 Id = "GIMP.GIMP";                    Profili = @("UFFICIO") },
     @{ Nome = "Steam";                Id = "Valve.Steam";                  Profili = @("GAMING") },
     @{ Nome = "Epic Games Launcher";  Id = "EpicGames.EpicGamesLauncher";  Profili = @("GAMING") },
@@ -1182,16 +1185,28 @@ function Installa-Pacchetto {
             continue
         }
 
+        # CONNESSIONE CADUTA? Molti fallimenti (revoca certificato, hash, download
+        # interrotto) sono di rete. Avviso FORTE e aspetto che torni (max ~90s).
         if (-not (Test-Rete)) {
-            Write-Info "Rete assente. Attendo 10s e riprovo..."
-            Start-Sleep -Seconds 10
-        } else {
-            break  # errore non dovuto alla rete/sorgente, inutile ritentare
+            Write-Errore "!!  CONNESSIONE ASSENTE  !!  Ricollega il WiFi o il cavo di rete."
+            Beep-Attesa
+            $attesaRete = 0
+            while ((-not (Test-Rete)) -and $attesaRete -lt 90) { Start-Sleep -Seconds 5; $attesaRete += 5 }
+            if (Test-Rete) { Write-OK "Connessione tornata: riprovo." }
+            else { Write-Info "Ancora senza rete: faccio un ultimo tentativo." }
+        }
+
+        # Ritento comunque (anche con rete presente): gli errori transitori di
+        # download/certificato spesso passano al secondo o terzo colpo.
+        if ($tentativo -lt $maxTentativi) {
+            Write-Info "Riprovo l'installazione (tentativo $($tentativo + 1) di $maxTentativi)..."
+            Start-Sleep -Seconds 3
         }
     }
 
-    Write-Errore "$Nome NON installato (tentativi: $tentativiFatti)."
+    Write-Errore "$Nome NON installato dopo $tentativiFatti tentativi."
     Add-Report "$Nome (installazione)" "ERRORE"
+    $Global:AppFallite++
 }
 
 # =============================================================================
@@ -2300,6 +2315,7 @@ function Installa-Set {
     }
 }
 
+$Global:AppFallite = 0   # azzero: conto solo i fallimenti di QUESTO passo
 Write-Host "Scegli come installare le applicazioni (browser incluso in automatico):" -ForegroundColor White
 Write-Host "  1) PROFILO BASE     (Chrome + VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, Zoom, AnyDesk)"
 Write-Host "  2) PROFILO UFFICIO  (Chrome + BASE + GIMP, Sumatra PDF)"
@@ -2370,6 +2386,17 @@ switch ($sceltaApps) {
 # Dopo tutte le installazioni del passo: tolgo eventuali icone doppie (una nostra
 # sul Desktop utente + quella dell'installer sul Desktop pubblico).
 Remove-IconeDoppieDesktop
+
+# Se PIU' app sono fallite, quasi sempre e' la RETE (proxy/filtro/ispezione SSL
+# del negozio che blocca certi download): lo dico chiaro all'operatore.
+if ($Global:AppFallite -ge 2) {
+    Write-Host ""
+    Write-Errore "$($Global:AppFallite) app non installate: probabile RETE con proxy/filtro."
+    Write-Info "Collega il PC a un'altra rete (HOTSPOT del telefono o linea senza filtri)"
+    Write-Info "e rilancia PC Facile: rispondi S a 'Riprendere da dove eri arrivato?' -"
+    Write-Info "le app gia' installate si saltano da sole, riscarica solo le mancanti."
+    Add-Report "App non installate ($($Global:AppFallite)): probabile rete" "AVVISO"
+}
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
