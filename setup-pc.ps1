@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "8.8 (2026-08-12)"
+$SCRIPT_VERSION = "8.9 (2026-08-13)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -238,13 +238,23 @@ function New-PasswordCliente {
     return "${b}123!"
 }
 
-# Email suggerita per un nuovo account: convenzione del negozio "nomecognome"
-# tutto attaccato e minuscolo, senza numeri. Il dominio dipende dal provider
-# scelto (outlook.it, gmail.com, proton.me). Es. "Mario Rossi" -> mariorossi@outlook.it.
+# Email suggerita per un nuovo account: convenzione del negozio "cognomenome"
+# (COGNOME poi NOME) tutto attaccato e minuscolo, senza numeri. L'operatore
+# digita "Nome Cognome": prendo l'ULTIMA parola come cognome e la metto davanti.
+# Il dominio dipende dal provider scelto (outlook.it, gmail.com, proton.me).
+# Es. "Mario Rossi" -> rossimario@outlook.it.
 function New-EmailCliente {
     param([string]$Base, [string]$Dominio = "outlook.it")
-    $e = ($Base -replace '[^A-Za-z0-9]', '').ToLower()
-    if (-not $e) { $e = "cliente" }
+    $parti = @($Base -split '\s+' | ForEach-Object { $_ -replace '[^A-Za-z0-9]', '' } | Where-Object { $_ })
+    if ($parti.Count -ge 2) {
+        $cognome = $parti[-1]
+        $nome    = ($parti[0..($parti.Count - 2)] -join '')
+        $e = ($cognome + $nome).ToLower()
+    } elseif ($parti.Count -eq 1) {
+        $e = $parti[0].ToLower()
+    } else {
+        $e = "cliente"
+    }
     if ($e.Length -gt 20) { $e = $e.Substring(0, 20) }
     return "$e@$Dominio"
 }
@@ -1599,20 +1609,39 @@ if ($impostaLingua -match "^[Ss]") {
     #     nuovi utenti in un colpo (il modo affidabile). Serve Internet. ---
     $packOk = $false
     if (Get-Command Install-Language -ErrorAction SilentlyContinue) {
-        try {
-            Write-Info "Installazione/applicazione language pack it-IT (qualche minuto, serve Internet)..."
-            Start-BarraAnimata "Installo la lingua italiana"
+        # Il download del pack fallisce spesso per cali di rete del negozio:
+        # ritento fino a 3 volte e, se la rete e' assente, aspetto che torni.
+        $maxTentLingua = 3
+        for ($tLingua = 1; $tLingua -le $maxTentLingua; $tLingua++) {
             try {
+                Write-Info "Installazione/applicazione language pack it-IT (qualche minuto, serve Internet)...$(if ($tLingua -gt 1) { " (tentativo $tLingua)" })"
+                Start-BarraAnimata "Installo la lingua italiana"
                 try {
-                    # Modo moderno e affidabile
-                    Install-Language it-IT -CopyToSettings -ErrorAction Stop | Out-Null
-                } catch {
-                    # -CopyToSettings non c'e' su tutte le build: fallback senza flag
-                    Install-Language it-IT -ErrorAction Stop | Out-Null
-                }
-            } finally { Stop-BarraAnimata }
+                    try {
+                        # Modo moderno e affidabile
+                        Install-Language it-IT -CopyToSettings -ErrorAction Stop | Out-Null
+                    } catch {
+                        # -CopyToSettings non c'e' su tutte le build: fallback senza flag
+                        Install-Language it-IT -ErrorAction Stop | Out-Null
+                    }
+                } finally { Stop-BarraAnimata }
+            } catch {}
             $packOk = ((Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId -contains "it-IT")
-        } catch {
+            if ($packOk) { break }
+            # Non riuscito: se manca la rete, avviso e aspetto che torni, poi ritento.
+            if ($tLingua -lt $maxTentLingua) {
+                if (-not (Test-Rete)) {
+                    Write-Errore "!!  CONNESSIONE ASSENTE  !!  Ricollega il WiFi o il cavo di rete."
+                    Beep-Attesa
+                    $attLingua = 0
+                    while ((-not (Test-Rete)) -and $attLingua -lt 90) { Start-Sleep -Seconds 5; $attLingua += 5 }
+                    if (Test-Rete) { Write-OK "Connessione tornata: riprovo la lingua." }
+                }
+                Write-Info "Riprovo l'installazione della lingua (tentativo $($tLingua + 1) di $maxTentLingua)..."
+                Start-Sleep -Seconds 3
+            }
+        }
+        if (-not $packOk) {
             Write-Errore "Language pack it-IT NON installato (Internet assente o bloccato)."
         }
     } else {

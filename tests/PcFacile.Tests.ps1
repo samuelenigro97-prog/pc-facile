@@ -68,8 +68,8 @@ Describe 'New-EmailCliente' {
     It 'genera un indirizzo @outlook.it di default' {
         New-EmailCliente -Base 'Rossi' | Should -Match '@outlook\.it$'
     }
-    It 'e'' nomecognome attaccato, minuscolo e SENZA numeri' {
-        New-EmailCliente -Base 'Mario Rossi' | Should -BeExactly 'mariorossi@outlook.it'
+    It 'e'' COGNOME+NOME attaccato, minuscolo e SENZA numeri' {
+        New-EmailCliente -Base 'Mario Rossi' | Should -BeExactly 'rossimario@outlook.it'
     }
     It 'toglie i caratteri strani dalla parte prima della chiocciola' {
         $mail = New-EmailCliente -Base 'De Luca!'
