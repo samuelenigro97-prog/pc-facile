@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "8.9 (2026-08-13)"
+$SCRIPT_VERSION = "9.0 (2026-08-13)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -1649,33 +1649,42 @@ if ($impostaLingua -match "^[Ss]") {
         $packDaAggiungere = $true
     }
 
-    # --- 2) Lingua UI di sistema + override utente (DOPO il pack, cosi' aggancia) ---
-    if (Get-Command Set-SystemPreferredUILanguage -ErrorAction SilentlyContinue) {
-        try { Set-SystemPreferredUILanguage it-IT } catch {}
-    }
-    try { Set-WinUILanguageOverride -Language it-IT } catch {}
-
-    # --- 3) Propaga a login + nuovi utenti (ridondante se -CopyToSettings ha funzionato) ---
-    if (Get-Command Copy-UserInternationalSettingsToSystem -ErrorAction SilentlyContinue) {
-        try { Copy-UserInternationalSettingsToSystem -WelcomeScreen $true -NewUser $true } catch {}
-    }
-
-    # --- 4) Tastiera italiana, formati, regione, locale di sistema, fuso (sempre) ---
+    # --- 2) UNA SOLA lingua: ITALIANO. Tolgo l'inglese (e ogni altra) dall'elenco
+    #     preferito, cosi' le parti non ancora tradotte NON cadono sull'inglese:
+    #     era QUESTA la causa del "meta' italiano meta' inglese". Metto anche la
+    #     tastiera italiana. -Force sostituisce l'intero elenco con solo it-IT. ---
     try {
         $lista = New-WinUserLanguageList it-IT
         $lista[0].InputMethodTips.Clear()
         $lista[0].InputMethodTips.Add("0410:00000410")   # tastiera italiana
         Set-WinUserLanguageList $lista -Force
-        Set-Culture it-IT
-        Set-WinHomeLocation -GeoId 118    # Italia
-    } catch { Write-Info "Alcune impostazioni tastiera/formati non applicate: $_" }
+    } catch { Write-Info "Elenco lingue non impostato: $_" }
+
+    # --- 3) Lingua UI (utente + sistema), formati, regione, locale, fuso ---
+    try { Set-WinUILanguageOverride -Language it-IT } catch {}
+    if (Get-Command Set-SystemPreferredUILanguage -ErrorAction SilentlyContinue) {
+        try { Set-SystemPreferredUILanguage it-IT } catch {}
+    }
+    try { Set-Culture it-IT } catch {}
+    try { Set-WinHomeLocation -GeoId 118 } catch {}      # Italia
     try { Set-WinSystemLocale it-IT } catch {}
     try { Set-TimeZone -Id "W. Europe Standard Time" -ErrorAction Stop; Write-OK "Fuso orario Italia (CET)." } catch {}
+    # Rinforzo via registro: lingua UI preferita dell'utente = solo it-IT.
+    try { Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'PreferredUILanguages' -Value @('it-IT') -Type MultiString -Force -ErrorAction SilentlyContinue } catch {}
+
+    # --- 4) SOLO ORA propago a schermata di LOGIN e NUOVI UTENTI: cosi' copio la
+    #     configurazione GIA' tutta italiana. (Prima veniva fatto troppo presto,
+    #     copiando ancora l'inglese: ecco perche' login/nuovi utenti restavano
+    #     misti.) ---
+    if (Get-Command Copy-UserInternationalSettingsToSystem -ErrorAction SilentlyContinue) {
+        try { Copy-UserInternationalSettingsToSystem -WelcomeScreen $true -NewUser $true } catch {}
+    }
 
     # --- Esito CHIARO: se il pack non c'e', l'utente deve sapere PERCHE' resta inglese ---
     if ($packOk) {
-        Write-OK "Italiano impostato: display, tastiera e formati. Attivo del tutto dopo il RIAVVIO."
-        Add-Report "Lingua italiana (it-IT)" "OK"
+        Write-OK "Italiano forzato ovunque (solo it-IT, niente inglese di riserva): display,"
+        Write-OK "tastiera, formati, login e nuovi utenti. Attivo del tutto dopo il RIAVVIO."
+        Add-Report "Lingua italiana (it-IT, forzata)" "OK"
     } elseif ($packDaAggiungere) {
         Write-Info "Tastiera e formati in italiano OK. L'INTERFACCIA resta inglese: su Windows 10 va aggiunto il pacchetto lingua a mano."
         Add-Report "Lingua italiana (display da completare)" "AVVISO"
