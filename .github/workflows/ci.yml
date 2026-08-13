@@ -37,7 +37,12 @@ jobs:
       - name: PSScriptAnalyzer
         shell: pwsh
         run: |
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          # Alcuni runner ogni tanto non hanno PSGallery registrato: lo (ri)registro
+          # prima di usarlo, cosi' la CI non fallisce per un intoppo dell'ambiente.
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+            Register-PSRepository -Default -ErrorAction SilentlyContinue
+          }
+          Set-PSRepository PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
           Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
           $res = Invoke-ScriptAnalyzer -Path './setup-pc.ps1' -Settings './PSScriptAnalyzerSettings.psd1'
           $res | Format-Table -AutoSize | Out-String | Write-Host
@@ -48,7 +53,10 @@ jobs:
       - name: Test Pester
         shell: pwsh
         run: |
-          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+            Register-PSRepository -Default -ErrorAction SilentlyContinue
+          }
+          Set-PSRepository PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
           Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5.0.0 -SkipPublisherCheck
           Import-Module Pester -MinimumVersion 5.0.0
           $cfg = New-PesterConfiguration
