@@ -17,6 +17,13 @@ REM     finestra corrente e' nata prima del reg e resterebbe col blu chiaro.
 REM     La sentinella "run" evita di ripetere all'infinito. ---
 if /i "%~1"=="run" goto :run
 
+REM Uso opzionale: "PC Facile.bat skipRestore" salta la creazione del punto di
+REM ripristino (viene passato allo script come -skipRestore). La variabile
+REM EXTRAPS1 sopravvive ai ri-launch (start + UAC) perche' le finestre figlie
+REM ereditano l'ambiente; qui sotto NON viene re-inizializzata nei ri-launch.
+set "EXTRAPS1="
+if /i "%~1"=="skipRestore" set "EXTRAPS1=-skipRestore"
+
 REM Virtual Terminal ON (colori ANSI truecolor: arancione Unieuro esatto)
 reg add "HKCU\Console" /v VirtualTerminalLevel /t REG_DWORD /d 1 /f >nul 2>&1
 REM Slot "DarkBlue" (indice 1) rimappato al navy SCURO #0A0E24.
@@ -55,14 +62,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $t=(Get-Date -UFor
 
 REM --- Se il download e' riuscito uso quello (SEMPRE aggiornato) ---
 if exist "%PS1%" (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" %EXTRAPS1%
     goto :fine
 )
 
 REM --- Offline: fallback sulla copia accanto al .bat (chiavetta) ---
 if exist "%~dp0setup-pc.ps1" (
     echo Offline: uso la copia sulla chiavetta ^(potrebbe non essere l'ultima^).
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1"
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" %EXTRAPS1%
 ) else (
     echo.
     echo Impossibile scaricare lo script: controlla la connessione a Internet,

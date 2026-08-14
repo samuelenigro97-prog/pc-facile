@@ -12,7 +12,11 @@ param(
     # Veloce: ormai e' il comportamento PREDEFINITO (ogni doppio click parte in
     # automatico e chiede solo l'essenziale). Il parametro resta accettato per
     # compatibilita' con eventuali scorciatoie/comandi esistenti. -Veloce
-    [switch]$Veloce
+    [switch]$Veloce,
+    # Salta la creazione del punto di ripristino (utile se la protezione sistema
+    # e' disattivata o su reti particolari dove Checkpoint-Computer resta in
+    # attesa). -File setup-pc.ps1 -skipRestore
+    [switch]$skipRestore
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -20,7 +24,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "9.0 (2026-08-13)"
+$SCRIPT_VERSION = "9.4 (2026-08-14)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -865,16 +869,30 @@ $Global:LogFile = $null
 # Ripara le sorgenti winget (una volta per sessione, o forzato su errore).
 # Risolve gli errori di integrita' sorgente/certificato (es. 0x8A15005E) su
 # sorgenti corrotte o non aggiornate, tipici su PC nuovi.
+# Primo tentativo SOLO aggiornamento: il "reset" azzera anche gli accordi e va
+# usato solo se davvero serve (cioe' se l'aggiornamento fallisce). Se qualcosa
+# fallisce, l'errore reale di winget diventa VISIBILE (non piu' nascosto).
 function Repair-WingetSources {
     param([switch]$Forza)
     if ($Global:WingetRiparato -and -not $Forza) { return }
     $Global:WingetRiparato = $true
-    Write-Info "Riparazione sorgenti winget (reset + update)..."
+    Write-Info "Riparazione sorgenti winget (update, poi reset solo se serve)..."
     Start-BarraAnimata "Riparo le sorgenti winget"
     try {
-        winget source reset --force 2>&1 | Out-Null
-        winget source update 2>&1 | Out-Null
-        Write-OK "Sorgenti winget ripristinate."
+        $out = winget source update 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-OK "Sorgenti winget aggiornate."
+        } else {
+            Write-Info "Aggiornamento sorgenti fallito: provo il reset delle sorgenti (forzato)..."
+            winget source reset --force 2>&1 | Out-Null
+            $out = winget source update 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-OK "Sorgenti winget ripristinate."
+            } else {
+                Write-Errore "Sorgenti winget NON funzionanti sul PC (vedi sotto)."
+            }
+            $out | Select-Object -Last 4 | ForEach-Object { Write-Host "     $_" -ForegroundColor Gray }
+        }
     } catch {
         Write-Info "Riparazione sorgenti non riuscita: $_"
     } finally { Stop-BarraAnimata }
@@ -1147,6 +1165,9 @@ function Installa-Pacchetto {
     # tutto il resto -> winget. Senza --source, winget da' errore -1978335138
     # ("specify --source") quando lo stesso ID compare in piu' sorgenti, ed evita
     # anche di interrogare msstore (dove capitano errori di certificato/CDN).
+    # SE l'app non si trova nella sorgente forzata, sotto si RITENTA senza --source
+    # (winget cerca in tutte le fonti, incluso lo Store): cosi' funzionano anche
+    # le app solo-Store del catalogo (es. WhatsApp).
     $sorgente = @()
     if ($WingetId -match '^[A-Z0-9]{12}$') { $sorgente = @('--source', 'msstore') }
     else { $sorgente = @('--source', 'winget') }
@@ -1155,8 +1176,11 @@ function Installa-Pacchetto {
     # cosi' il passo App puo' segnare come "fatta" solo cio' che e' riuscito.
     $Global:UltimaInstallOk = $false
 
-    # Gia' installato? (--exact: evita falsi positivi da match parziale dell'ID)
-    winget list --exact --id $WingetId @sorgente --accept-source-agreements 2>$null | Out-Null
+    # Gia' installato? SENZA --source: becca le app installate da QUALSIASI
+    # origine (winget, Store, OEM, installer), non solo da winget. Con la
+    # sorgente forzata, invece, un'app gia' presente da un'altra origine veniva
+    # considerata "da installare" e falliva con codici tipo "gia' installato".
+    winget list --exact --id $WingetId --accept-source-agreements 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) {
         Write-OK "$Nome gia' installato. Salto."
         Add-Report "$Nome (installazione)" "OK"
@@ -1171,9 +1195,13 @@ function Installa-Pacchetto {
 
     # Codici che indicano successo (0) o successo con riavvio richiesto (3010/1641)
     $successo = @(0, 3010, 1641)
+    # Gia' presente (stessa versione o da un'altra sorgente): per noi e' OK.
+    # -1978335189 = "no applicable update", -1978335135 = "package already installed"
+    $giaInstallato = @(-1978335189, -1978335135)
     # Errori di integrita'/certificato/sorgente: si risolvono riparando le sorgenti
     $erroriSorgente = @(-1978335138, -1978335215, -1978335216)  # 0x8A15005E e simili
     $riparatoQui = $false
+    $ritentoSenzaSorgente = $false
 
     $maxTentativi = 3
     $tentativiFatti = 0
@@ -1196,15 +1224,37 @@ function Installa-Pacchetto {
             return
         }
 
-        # Solo in caso di codice NON di successo ricontrollo se per caso l'app
-        # risulta comunque presente (raro): cosi' non segno ERRORE per sbaglio.
-        winget list --exact --id $WingetId @sorgente --accept-source-agreements 2>$null | Out-Null
+        # -1978335189 ("no applicable update") e -1978335135 ("gia' installato"):
+        # l'app e' gia' presente (stessa versione o da un'altra origine), per noi
+        # e' comunque OK, non un errore.
+        if ($giaInstallato -contains $codeInstall) {
+            Write-OK "$Nome gia' installato. Salto."
+            Add-Report "$Nome (installazione)" "OK"
+            Add-IconaDesktop -Nome $Nome -LnkPrima $lnkPrima
+            $Global:UltimaInstallOk = $true
+            return
+        }
+
+        # Ricontrollo con 'winget list' SENZA sorgente forzata: se l'app risulta
+        # comunque presente (raro), non segno ERRORE per sbaglio.
+        winget list --exact --id $WingetId --accept-source-agreements 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) {
             Write-OK "$Nome installato."
             Add-Report "$Nome (installazione)" "OK"
             Add-IconaDesktop -Nome $Nome -LnkPrima $lnkPrima
             $Global:UltimaInstallOk = $true
             return
+        }
+
+        # App non trovata nella sorgente forzata (esiste solo in un'altra fonte,
+        # tipicamente lo Store): ritento SENZA --source, cosi' winget la cerca
+        # ovunque. Prima del messaggio d'errore, per non spaventare l'utente con
+        # un rosso che poi si risolve subito.
+        if (($codeInstall -eq -1978335212) -and -not $ritentoSenzaSorgente) {
+            Write-Info "App non trovata in questa sorgente: riprovo senza forzarla..."
+            $ritentoSenzaSorgente = $true
+            $sorgente = @()
+            continue
         }
 
         Write-Errore "Installazione $Nome fallita (codice: $codeInstall)."
@@ -1234,6 +1284,17 @@ function Installa-Pacchetto {
             Write-Info "Riprovo l'installazione (tentativo $($tentativo + 1) di $maxTentativi)..."
             Start-Sleep -Seconds 3
         }
+    }
+
+    # VERIFICA finale con 'winget list' SENZA sorgente forzata: a volte l'app si
+    # installa davvero ma winget ritorna un codice strano (o era gia' presente
+    # da un'altra origine). Se ora risulta presente, per noi e' un successo.
+    winget list --exact --id $WingetId --accept-source-agreements 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-OK "$Nome risulta installato (verificato)."
+        Add-Report "$Nome (installazione)" "OK"
+        Add-IconaDesktop -Nome $Nome -LnkPrima $lnkPrima
+        return
     }
 
     Write-Errore "$Nome NON installato dopo $tentativiFatti tentativi."
@@ -1722,15 +1783,23 @@ Save-Fase 3 "Lingua e regione"
 # =============================================================================
 
 if (Test-FaseFatta 4) { Write-Info "Punto di ripristino: gia' fatto nella sessione precedente, salto." }
-else {
+elseif ($skipRestore) {
+    Write-Info "Punto di ripristino saltato (flag -skipRestore)."
+    Add-Report "Punto di ripristino" "SALTATO"
+    Save-Fase 4 "Punto di ripristino"
+} else {
 
 Write-Titolo "Punto di Ripristino"
 
 Write-Host "Crea un punto di ripristino: se qualcosa va storto puoi tornare indietro." -ForegroundColor White
 Write-Host ""
+Write-Host "  Rispondi S per crearlo (consigliato) oppure N per saltare, poi premi INVIO." -ForegroundColor Gray
 
+# Chiedi/Read-Host accettano SOLO input da tastiera (niente finestra GUI con
+# pulsanti): la conferma si da' scrivendo S o N e premendo INVIO. Enter senza
+# testo = S (predefinito, come indicato in "consigliato").
 $vuoiRestore = Chiedi "Creare un punto di ripristino ora? (consigliato) (S/N)" "S"
-if ($vuoiRestore -match "^[Ss]") {
+if (($vuoiRestore -match "^[Ss]") -or ($vuoiRestore.Trim() -eq '')) {
     try {
         Enable-ComputerRestore -Drive "$env:SystemDrive\" -ErrorAction SilentlyContinue
         # Rimuove il limite di 1 punto ogni 24h, solo per crearne uno adesso
@@ -1738,12 +1807,41 @@ if ($vuoiRestore -match "^[Ss]") {
             -Name "SystemRestorePointCreationFrequency" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
         Write-Info "Creazione punto di ripristino (puo' richiedere un minuto)..."
         Start-BarraAnimata "Creo il punto di ripristino"
-        try { Checkpoint-Computer -Description "Prima di setup-pc" -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop }
-        finally { Stop-BarraAnimata }
-        Write-OK "Punto di ripristino creato."
-        Add-Report "Punto di ripristino" "OK"
+        # Checkpoint-Computer su PC piu' lenti (o se VSS resta in attesa) puo'
+        # restare bloccato a lungo: lo eseguo in un job con TIME-OUT, cosi' lo
+        # script non resta mai incastrato su questo passo.
+        $job = $null
+        try {
+            $job = Start-Job -ScriptBlock {
+                param($d, $desc)
+                try { Checkpoint-Computer -Description $desc -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop; return 0 }
+                catch { return 1 }
+            } -ArgumentList "$env:SystemDrive\", "Prima di setup-pc"
+            if (-not (Wait-Job $job -Timeout 90)) {
+                Stop-Job $job
+                Write-Errore "Creazione del punto di ripristino in timeout dopo 90 secondi: salto."
+                Add-Report "Punto di ripristino" "ERRORE"
+            } elseif ((Receive-Job $job) -eq 0) {
+                Write-OK "Punto di ripristino creato."
+                Add-Report "Punto di ripristino" "OK"
+            } else {
+                Write-Errore "NON e' stato possibile creare il punto di ripristino."
+                Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
+                Add-Report "Punto di ripristino" "ERRORE"
+            }
+        } catch {
+            Write-Errore "NON e' stato possibile creare il punto di ripristino."
+            Write-Info "  Causa: $_"
+            Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
+            Add-Report "Punto di ripristino" "ERRORE"
+        } finally {
+            if ($job) { Remove-Job $job -Force -ErrorAction SilentlyContinue }
+            Stop-BarraAnimata
+        }
     } catch {
-        Write-Info "Impossibile creare il punto di ripristino (protezione sistema disattivata?): $_"
+        Write-Errore "NON e' stato possibile creare il punto di ripristino."
+        Write-Info "  Causa: $_"
+        Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
         Add-Report "Punto di ripristino" "ERRORE"
     }
 } else {
@@ -2611,7 +2709,7 @@ Write-Host "  - Windows: gli aggiornamenti di SICUREZZA di Windows." -Foreground
 Write-Host "Puo' richiedere diversi minuti. (I driver hanno il loro passo dedicato dopo.)" -ForegroundColor White
 Write-Host ""
 
-$vuoiUpgrade = Chiedi "Aggiornare ora app e Windows? (S/N, B=indietro)" "S"
+$vuoiUpgrade = Attendi-Risposta "Aggiornare ora app e Windows? (S/N, B=indietro)"
 if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 if ($vuoiUpgrade -match "^[Ss]") {
     # 1) APP INSTALLATE (winget)
@@ -2744,7 +2842,7 @@ switch ($gpuDed) {
     }
 }
 
-$vuoiDriver = Chiedi "Cercare e installare i driver ora? (S/N, B=indietro)" "S"
+$vuoiDriver = Attendi-Risposta "Cercare e installare i driver ora? (S/N, B=indietro)"
 if (Test-Indietro $vuoiDriver) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 if ($vuoiDriver -match "^[Ss]") {
     try {
@@ -2909,10 +3007,26 @@ if ($RunReale) {
         # --- VERIFICA FINALE: le cose importanti sono andate DAVVERO? (ricontrollo
         #     lo stato vero, non mi fido degli esiti dei singoli passi). ---
         $verifica = @()
-        try { $vLang = ((Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId -contains 'it-IT') } catch { $vLang = $null }
+        # Verifica lingua installata: Get-InstalledLanguage non c'e' su tutti i
+        # sistemi (in tal caso cado su DISM Get-WindowsLanguagePack, che elenca i
+        # language pack reali; servono admin, e qui lo siamo). Se proprio nessuno
+        # dei due funziona -> $null e la voce si omette dalla verifica finale.
+        $vLang = $null
+        try {
+            if (Get-Command Get-InstalledLanguage -ErrorAction SilentlyContinue) {
+                $vLang = (@(Get-InstalledLanguage -ErrorAction Stop).LanguageId -contains 'it-IT')
+            } else {
+                $vLang = (@(Get-WindowsLanguagePack -Online -ErrorAction Stop | Where-Object { $_.Language -match '^it-' }).Count -gt 0)
+            }
+        } catch { $vLang = $null }
         if ($null -ne $vLang) { $verifica += [pscustomobject]@{ N = 'Pacchetto lingua italiano'; Ok = $vLang } }
         $verifica += [pscustomobject]@{ N = 'OneDrive rimosso'; Ok = (-not (Test-Path "$env:LOCALAPPDATA\Microsoft\OneDrive\OneDrive.exe")) }
-        $verifica += [pscustomobject]@{ N = 'Antivirus di prova rimossi'; Ok = (@(Get-AntivirusInstallati).Count -eq 0) }
+        # "Antivirus di prova rimossi": conta SOLO i trial NON installati in questa
+        # sessione - un AV scelto al passo Antivirus (McAfee/Norton) e' voluto,
+        # non una prova da togliere, quindi va escluso dai "di prova".
+        $avInstallatiNoi = @($av | ForEach-Object { ($_.Voce -replace ' \(antivirus\)', '' -replace ' \(protezione\)', '').Trim() })
+        $avRestanoProva  = @(Get-AntivirusInstallati | Where-Object { $avInstallatiNoi -notcontains $_.Nome })
+        $verifica += [pscustomobject]@{ N = 'Antivirus di prova rimossi'; Ok = ($avRestanoProva.Count -eq 0) }
         $verifica += [pscustomobject]@{ N = 'Windows attivato'; Ok = $winOk }
 
         # Mostro la verifica anche a schermo (oltre che nel file).
@@ -2922,7 +3036,7 @@ if ($RunReale) {
         # --- Dettagli tecnici per l'assistenza (troubleshooting nello stesso file) ---
         $osInfo = $null; try { $osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue } catch {}
         $wgVer = "n/d"; try { $wgVer = (winget --version) 2>$null } catch {}
-        $resTxt = "n/d"; try { $resTxt = ($hres) } catch {}
+        $resTxt = if ($hres) { "$hres" } else { "n/d" }
         $avTxt = try { (@(Get-AntivirusInstallati).Nome | Select-Object -Unique) -join ', ' } catch { '' }
         if (-not $avTxt) { $avTxt = 'nessuno' }
 
