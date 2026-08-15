@@ -6,6 +6,7 @@ Formato ispirato a [Keep a Changelog](https://keepachangelog.com/it/1.1.0/).
 
 ### Rimosso
 - Creazione automatica dei punti di recupero del sistema su Windows e degli equivalenti locali su macOS, incluse opzioni, messaggi e report dedicati.
+- Gestione FileVault nello script macOS, inclusi attivazione, rigenerazione della chiave, diagnostica e sezioni del report.
 
 ### Aggiunto
 - Licenza MIT (`LICENSE.md`).

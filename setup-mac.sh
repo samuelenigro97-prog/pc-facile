@@ -2,13 +2,13 @@
 # =============================================================================
 # setup-mac.sh - PC Facile per Mac (gemello di setup-pc.ps1)
 # Stesso flusso/menu/report della versione Windows, con gli strumenti nativi
-# di macOS: Homebrew (app), scutil (nome), defaults (impostazioni), fdesetup
-# (FileVault = equivalente di BitLocker), softwareupdate (aggiornamenti).
+# di macOS: Homebrew (app), scutil (nome), defaults (impostazioni) e
+# softwareupdate (aggiornamenti).
 # Gira in zsh nativo: doppio-click su "PC Facile.command". Nessuna dipendenza
 # da installare a parte Homebrew (che lo script installa da solo).
 # =============================================================================
 
-SCRIPT_VERSION="1.1 (2026-07-08)"
+SCRIPT_VERSION="1.2 (2026-08-15)"
 
 # ---- Modalita' (come su Windows): -Test / -Diagnostica / -Veloce -------------
 MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST
@@ -133,7 +133,6 @@ fi
 if [[ "$MODO" == "DIAGNOSTICA" ]]; then
   titolo "DIAGNOSTICA (v$SCRIPT_VERSION) - nessuna modifica"
   if command -v brew >/dev/null 2>&1; then ok "Homebrew presente: $(brew --version | head -1)"; else errore "Homebrew NON installato"; fi
-  info "Stato FileVault:"; fdesetup status 2>/dev/null | sed 's/^/     /'
   info "Validazione cask (brew info):"
   if command -v brew >/dev/null 2>&1; then
     for riga in "${CATALOGO[@]}"; do
@@ -387,37 +386,6 @@ fi
 pausa
 
 # =============================================================================
-# FILEVAULT - CHIAVE DI RIPRISTINO (equivalente di BitLocker)
-# Il piu' tardi possibile. DATO SENSIBILE: la recovery key da' accesso completo
-# al disco; finisce nel report che resta col Mac del cliente (voluto: senza,
-# dopo un reset o un problema il cliente resta chiuso fuori dai dati).
-# =============================================================================
-titolo "FileVault - Chiave di Ripristino"
-FV_STATO="sconosciuto"; FV_KEY=""
-if $RUN_REALE; then
-  FV_STATO="$(fdesetup status 2>/dev/null)"
-  if print -r -- "$FV_STATO" | grep -q "On"; then
-    info "FileVault gia' attivo: rigenero una recovery key personale da salvare."
-    # changerecovery -personal rigenera e STAMPA una nuova personal recovery key
-    out="$(sudo fdesetup changerecovery -personal 2>/dev/null)"
-    FV_KEY="$(print -r -- "$out" | grep -oE '[A-Z0-9]{4}(-[A-Z0-9]{4}){5}' | head -1)"
-  else
-    chiedi "FileVault e' spento. Attivarlo ora e salvare la chiave? (S/N)" "S"
-    if [[ "$REPLY" == [Ss]* ]]; then
-      out="$(sudo fdesetup enable -outputplist 2>/dev/null)"
-      FV_KEY="$(print -r -- "$out" | grep -oE '[A-Z0-9]{4}(-[A-Z0-9]{4}){5}' | head -1)"
-    fi
-  fi
-  if [[ -n "$FV_KEY" ]]; then ok "Chiave FileVault salvata nel riepilogo."; add_report "Chiave di ripristino FileVault" "OK"
-  elif print -r -- "$FV_STATO" | grep -q "On"; then errore "FileVault attivo ma chiave non ottenuta."; add_report "Chiave di ripristino FileVault" "AVVISO"
-  else info "FileVault non attivo: nessuna chiave da salvare."; add_report "Chiave di ripristino FileVault" "SALTATO"; fi
-else
-  dim "(test) leggerei fdesetup status e salverei la recovery key"
-  add_report "Chiave di ripristino FileVault" "SALTATO"
-fi
-pausa
-
-# =============================================================================
 # REPORT FINALE (.txt sul Desktop, come su Windows)
 # =============================================================================
 if $RUN_REALE; then
@@ -441,14 +409,12 @@ if $RUN_REALE; then
     print -r -- "------------------------------------------------------------"
     print -r -- "  Chip        : $(sysctl -n machdep.cpu.brand_string 2>/dev/null)"
     print -r -- "  Disco       : $(df -h / | awk 'NR==2{print $4" liberi"}')"
-    print -r -- "  FileVault   : $(fdesetup status 2>/dev/null | head -1)"
     print -r -- ""
     print -r -- "------------------------------------------------------------"
     print -r -- "VERIFICA FINALE (ricontrollo automatico)"
     print -r -- "------------------------------------------------------------"
     if defaults read NSGlobalDomain AppleLocale 2>/dev/null | grep -qi 'it'; then print -r -- "  [OK       ] Lingua italiana impostata"; else print -r -- "  [DA RIFARE] Lingua italiana"; fi
     if (( ${#INSTALLATE} )); then print -r -- "  [OK       ] App installate (${#INSTALLATE})"; else print -r -- "  [--       ] Nessuna app installata"; fi
-    if fdesetup status 2>/dev/null | grep -q On; then print -r -- "  [OK       ] FileVault attivo"; else print -r -- "  [--       ] FileVault non attivo"; fi
     print -r -- ""
     print -r -- "------------------------------------------------------------"
     print -r -- "SOFTWARE INSTALLATO"
@@ -464,21 +430,9 @@ if $RUN_REALE; then
     print -r -- "DA COMPLETARE A MANO"
     print -r -- "------------------------------------------------------------"
     print -r -- "  [ ] Fare LOGOUT/riavvio: serve per applicare la lingua italiana."
-    [[ -n "$FV_KEY" ]] && print -r -- "  [ ] Consegnare/conservare la recovery key FileVault (qui sotto)."
     print -r -- "  [ ] Verificare accesso Apple ID / iCloud del cliente."
     print -r -- "  [ ] Controllare eventuali voci in ERRORE qui sopra."
     print -r -- ""
-    print -r -- "------------------------------------------------------------"
-    print -r -- "CHIAVE DI RIPRISTINO FILEVAULT  (DATO SENSIBILE: accesso al disco)"
-    print -r -- "------------------------------------------------------------"
-    if [[ -n "$FV_KEY" ]]; then
-      print -r -- "  Recovery key : $FV_KEY"
-      print -r -- "  >> CONSERVA questa chiave: senza, dopo un reset non accedi ai dati."
-    else
-      print -r -- "  (nessuna chiave: FileVault spento o non attivato)"
-    fi
-    print -r -- ""
-    print -r -- "------------------------------------------------------------"
     print -r -- "NOTE / CREDENZIALI"
     print -r -- "------------------------------------------------------------"
     print -r -- "  Account Apple ID : ${CRED_ACCOUNT:-______________________________}"
