@@ -62,6 +62,21 @@ Describe 'Disattivazione BitLocker dopo account Microsoft' {
     }
 }
 
+Describe 'Interfaccia minimale e test su macOS' {
+    It 'applica il registro console soltanto su Windows' {
+        $sorgente = Get-Content $script:SetupPath -Raw
+        $sorgente | Should -Match '\$SuWindows = \(\$env:OS -eq ''Windows_NT''\)'
+        $sorgente | Should -Match 'if \(\$SuWindows\) \{\s+try \{\s+if \(-not \(Test-Path ''HKCU:\\Console''\)\)'
+    }
+
+    It 'usa sfondo nero e un titolo compatto fuori da Windows' {
+        $sorgente = Get-Content $script:SetupPath -Raw
+        $sorgente | Should -Match 'if \(-not \$SuWindows -or \$env:WT_SESSION\)'
+        $sorgente | Should -Match '\$barra = "=" \* 44'
+        $sorgente | Should -Match 'TEST WINDOWS SU MACOS'
+    }
+}
+
 Describe 'New-PasswordCliente' {
     It 'costruisce Nome + 123! con iniziale maiuscola' {
         New-PasswordCliente -Base 'Rossi' | Should -BeExactly 'Rossi123!'

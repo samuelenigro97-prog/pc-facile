@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "9.6 (2026-08-15)"
+$SCRIPT_VERSION = "9.7 (2026-08-15)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -31,6 +31,7 @@ $SYM_INFO  = [char]0x2192                  # freccia
 $BOX_FULL  = [char]0x2588                  # blocco pieno (barra progresso)
 $BOX_EMPTY = [char]0x2591                  # blocco leggero (barra progresso)
 $LINEA_D   = ([string][char]0x2550) * 60   # linea doppia orizzontale
+$SuWindows = ($env:OS -eq 'Windows_NT')    # compatibile con PowerShell 5.1 e 7+
 
 # Tema colori: Unieuro = ARANCIONE (#EE7203) + navy + bianco.
 # La console conhost (parte col doppio-click del .bat) ha solo 16 colori con
@@ -48,18 +49,22 @@ $THEME_TXT = "White"    # testo dei titoli (bianco, come il payoff del logo)
 
 # La chiave vale per le finestre APERTE DOPO averla scritta: il primo giro su
 # un PC nuovo puo' essere ancora ambra, i successivi arancione.
-try {
-    if (-not (Test-Path 'HKCU:\Console')) { New-Item -Path 'HKCU:\Console' -Force | Out-Null }
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -Value 1 -Type DWord -ErrorAction Stop
-    # Rimappa lo slot "DarkBlue" (indice 1) al navy SCURO #0A0E24, cosi' lo
-    # sfondo blu e' un navy vero e non il DarkBlue acceso di default. DWORD in
-    # formato 0x00BBGGRR = 0x00240E0A. Vale dalle finestre aperte dopo.
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -Value 0x00240E0A -Type DWord -ErrorAction SilentlyContinue
-} catch {}
+if ($SuWindows) {
+    try {
+        if (-not (Test-Path 'HKCU:\Console')) { New-Item -Path 'HKCU:\Console' -Force | Out-Null }
+        Set-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -Value 1 -Type DWord -ErrorAction Stop
+        # Rimappa lo slot "DarkBlue" (indice 1) al navy SCURO #0A0E24, cosi' lo
+        # sfondo blu e' un navy vero e non il DarkBlue acceso di default. DWORD in
+        # formato 0x00BBGGRR = 0x00240E0A. Vale dalle finestre aperte dopo.
+        Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -Value 0x00240E0A -Type DWord -ErrorAction SilentlyContinue
+    } catch {}
+}
 
 # Rileva se il VT e' attivo per QUESTA finestra (chiave gia' presente al lancio).
-$vtOn = $false
-try { $vtOn = ((Get-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction Stop).VirtualTerminalLevel -eq 1) } catch {}
+$vtOn = (-not $SuWindows)  # Terminale macOS supporta direttamente i colori ANSI
+if ($SuWindows) {
+    try { $vtOn = ((Get-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction Stop).VirtualTerminalLevel -eq 1) } catch {}
+}
 
 if ($vtOn) {
     $ESC       = [char]27
@@ -79,7 +84,7 @@ if ($vtOn) {
 # NERO (scuro e pulito, il navy pieno non e' forzabile da script in WT); su
 # conhost uso 'DarkBlue' che col ColorTable rimappato diventa navy vero.
 try {
-    if ($env:WT_SESSION) {
+    if (-not $SuWindows -or $env:WT_SESSION) {
         $Host.UI.RawUI.BackgroundColor = 'Black'
     } else {
         $Host.UI.RawUI.BackgroundColor = 'DarkBlue'
@@ -94,14 +99,12 @@ try {
 
 function Write-Titolo {
     param([string]$Testo)
-    # Titolo ben visibile: barra piena arancione + testo MAIUSCOLO su riga sua.
-    # Piu' "grosso" e netto della vecchia doppia linea, si legge a colpo d'occhio.
-    $barra = ([string]$BOX_FULL) * 50
-    Write-Host ""
+    # Titolo minimale ad alto contrasto: una sola riga arancione e testo grande.
+    # Meno blocchi grafici = schermata piu' pulita per chi usa poco il PC.
+    $barra = "=" * 44
     Write-Host ""
     Write-Host "$AON  $barra$AOFF" -ForegroundColor $THEME_COL
-    Write-Host "$AON   $($Testo.ToUpper())$AOFF" -ForegroundColor $THEME_TXT
-    Write-Host "$AON  $barra$AOFF" -ForegroundColor $THEME_COL
+    Write-Host "   $($Testo.ToUpper())" -ForegroundColor $THEME_TXT
     Write-Host ""
 }
 
@@ -569,7 +572,11 @@ $Global:AppFatteRipresa   = @()
 # Antivirus). La fase 4 resta inutilizzata per mantenere compatibili gli stati
 # gia' salvati. Solo nel run reale.
 # =============================================================================
-$Global:StatoFile   = Join-Path $env:ProgramData "PCFacile\stato.json"
+$Global:StatoFile   = if ($SuWindows) {
+    Join-Path $env:ProgramData "PCFacile\stato.json"
+} else {
+    Join-Path ([IO.Path]::GetTempPath()) "PCFacile-stato-test.json"
+}
 $Global:FaseRipresa = 0
 
 # Segna un passo come completato (sovrascrive il checkpoint precedente).
@@ -705,17 +712,23 @@ function Get-DesktopDir {
 # VERIFICA PRIVILEGI AMMINISTRATORE
 # =============================================================================
 
-$currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Errore "Questo script richiede privilegi di amministratore."
-    if ($Test) {
-        Write-Info "Modalita' TEST: proseguo comunque (nessuna operazione admin verra' eseguita)."
-    } else {
-        Write-Info "Riavvia PowerShell come amministratore e riprova."
-        Pausa
-        return  # return (non exit) per non chiudere la finestra se eseguito in memoria
+if ($SuWindows) {
+    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
+    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-Errore "Questo script richiede privilegi di amministratore."
+        if ($Test) {
+            Write-Info "Modalita' TEST: proseguo comunque (nessuna operazione admin verra' eseguita)."
+        } else {
+            Write-Info "Riavvia PowerShell come amministratore e riprova."
+            Pausa
+            return  # return (non exit) per non chiudere la finestra se eseguito in memoria
+        }
     }
+} elseif ($Test) {
+    Write-Host ""
+    Write-Host "$AON  TEST WINDOWS SU MACOS$AOFF" -ForegroundColor $THEME_COL
+    Write-Host "   Flusso simulato: nessuna modifica al Mac." -ForegroundColor White
 }
 
 # =============================================================================
@@ -800,7 +813,7 @@ try {
 } catch {}
 
 Write-Info "PowerShell: $($PSVersionTable.PSVersion) ($($PSVersionTable.PSEdition))"
-if ($PSVersionTable.PSEdition -eq 'Core') {
+if ($SuWindows -and $PSVersionTable.PSEdition -eq 'Core') {
     Write-Info "Consiglio: usa Windows PowerShell 5.1 (PC Facile.bat lo fa gia'). Su PowerShell 7"
     Write-Info "  l'installazione di riserva di winget (Add-AppxPackage) puo' non funzionare."
 }
@@ -2791,10 +2804,8 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 
 Write-Titolo "Driver (Windows Update)"
 
-Write-Host "Cerca e installa i driver mancanti/aggiornati dal catalogo Windows Update." -ForegroundColor White
-Write-Host "Se c'e' una scheda video DEDICATA, uso anche il tool del produttore (Windows" -ForegroundColor White
-Write-Host "Update spesso non ne prende il driver giusto). Puo' richiedere qualche minuto" -ForegroundColor White
-Write-Host "e talvolta un riavvio. Opzionale, ultimo passo." -ForegroundColor White
+Write-Host "Aggiorna i driver del PC tramite Windows Update." -ForegroundColor White
+Write-Host "Se trova una scheda video dedicata, usa anche il programma del produttore." -ForegroundColor Gray
 Write-Host ""
 
 # DRIVER SCHEDA VIDEO DEDICATA: solo se c'e' una GPU dedicata (non l'integrata),
