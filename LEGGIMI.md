@@ -131,7 +131,7 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 | Step | Azione |
 |------|--------|
 | 1  | **Nome cliente** (cambia il "Nome visualizzato" dell'account **e** il nome del PC): serve subito, genera anche le credenziali suggerite |
-| 2  | **Account Microsoft** (subito, col cliente davanti): apre il login/registrazione; genera o annota email + password `Nome123!` nel riepilogo. Così Office e antivirus dopo non richiedono altri OTP |
+| 2  | **Account Microsoft** (subito, col cliente davanti): apre il login/registrazione; genera o annota email + password `Nome123!` nel riepilogo. Dopo il percorso Microsoft chiede se disattivare BitLocker e impedirne la riattivazione automatica. Così Office e antivirus dopo non richiedono altri OTP |
 | 3  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
 | 4  | **App Office**: installa la suite scelta se manca (Office 365, perpetuo, OpenOffice, LibreOffice), poi **attivazione** — card PIN → riscatto web (`microsoft365.com/setup` o `office.com/setup`) + accesso in Word. Crea i collegamenti Office sul Desktop |
 | 5  | **Pulizia e ottimizzazione**: rimuove antivirus di prova, bloatware OEM, promo dal menu Start, disinstalla OneDrive, piccole comodità Windows |

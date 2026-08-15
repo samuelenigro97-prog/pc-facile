@@ -9,6 +9,7 @@ Formato ispirato a [Keep a Changelog](https://keepachangelog.com/it/1.1.0/).
 - Gestione FileVault nello script macOS, inclusi attivazione, rigenerazione della chiave, diagnostica e sezioni del report.
 
 ### Aggiunto
+- Dopo la creazione dell'account Microsoft, richiesta esplicita per disattivare BitLocker, avviare la decifratura e impedirne la riattivazione automatica.
 - Licenza MIT (`LICENSE.md`).
 - Template GitHub per bug report, feature request e pull request.
 - Runbook release manuale in `docs/RELEASE.md`.

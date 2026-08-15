@@ -20,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "9.5 (2026-08-15)"
+$SCRIPT_VERSION = "9.6 (2026-08-15)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -402,6 +402,65 @@ function Get-BitLockerRecovery {
         if (-not $r.Messaggio) { $r.Messaggio = "volume cifrato ma nessuna RecoveryPassword rilevata" }
     }
 
+    return [pscustomobject]$r
+}
+
+# Impedisce la cifratura automatica futura e spegne BitLocker sul volume di
+# sistema. manage-bde e' disponibile anche dove i cmdlet BitLocker non ci sono
+# (per esempio alcune edizioni Home). La disattivazione dei protettori evita una
+# richiesta della recovery key durante la decifratura; -off avvia poi la
+# decifratura completa, che puo' continuare in background.
+function Disable-BitLockerCliente {
+    param([string]$Volume = $env:SystemDrive)
+
+    $r = [ordered]@{ Esito = "AVVISO"; Messaggio = "" }
+    try {
+        $reg = 'HKLM:\SYSTEM\CurrentControlSet\Control\BitLocker'
+        if (-not (Test-Path $reg)) { New-Item -Path $reg -Force -ErrorAction Stop | Out-Null }
+        New-ItemProperty -Path $reg -Name 'PreventDeviceEncryption' -Value 1 `
+            -PropertyType DWord -Force -ErrorAction Stop | Out-Null
+    } catch {
+        $r.Messaggio = "non riesco a impedire la riattivazione automatica: $_"
+        return [pscustomobject]$r
+    }
+
+    try {
+        if (-not (Get-Command manage-bde.exe -ErrorAction SilentlyContinue)) {
+            $r.Messaggio = "manage-bde non disponibile: controllo manuale necessario"
+            return [pscustomobject]$r
+        }
+
+        $stato = & manage-bde.exe -status $Volume 2>$null | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            $r.Messaggio = "stato BitLocker non leggibile (codice $LASTEXITCODE)"
+            return [pscustomobject]$r
+        }
+
+        # La percentuale usa sempre il simbolo %, indipendentemente dalla lingua.
+        $mPerc = [regex]::Match($stato, '(?m)^\s*[^:]+:\s*(\d+(?:[\.,]\d+)?)%\s*$')
+        if ($mPerc.Success -and ([double]($mPerc.Groups[1].Value -replace ',', '.')) -eq 0) {
+            $r.Esito = "OK"
+            $r.Messaggio = "BitLocker gia' disattivato; attivazione automatica bloccata"
+            return [pscustomobject]$r
+        }
+
+        & manage-bde.exe -protectors -disable $Volume 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $r.Messaggio = "impossibile sospendere i protettori BitLocker (codice $LASTEXITCODE)"
+            return [pscustomobject]$r
+        }
+
+        & manage-bde.exe -off $Volume 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $r.Messaggio = "impossibile avviare la decifratura BitLocker (codice $LASTEXITCODE)"
+            return [pscustomobject]$r
+        }
+
+        $r.Esito = "OK"
+        $r.Messaggio = "protezione disattivata e decifratura avviata in background"
+    } catch {
+        $r.Messaggio = "disattivazione BitLocker non riuscita: $_"
+    }
     return [pscustomobject]$r
 }
 
@@ -1630,6 +1689,32 @@ if ($prov) {
 }
 
 if ($prov) { Pausa }
+
+# Solo il percorso 1) Microsoft configura l'account usato per accedere a
+# Windows. Dopo che l'operatore ha concluso quel percorso, chiedo SEMPRE se
+# disattivare BitLocker: non uso Chiedi, quindi il flusso automatico non decide
+# al posto dell'operatore. Outlook/Google/Proton e Salta non entrano qui.
+if ($RunReale -and $prov -and $prov.Nome -eq "Microsoft") {
+    Write-Titolo "Protezione disco BitLocker"
+    Write-Host "Windows puo' attivare automaticamente la cifratura dopo l'accesso" -ForegroundColor White
+    Write-Host "all'account Microsoft. Disattivandola si evita che il cliente resti" -ForegroundColor White
+    Write-Host "bloccato alla richiesta della chiave, ma il disco non sara' cifrato." -ForegroundColor White
+    Write-Host ""
+    $vuoiDisattivareBitLocker = Attendi-Risposta "Disattivare BitLocker e impedire che si riattivi automaticamente? (S/N)"
+    if ($vuoiDisattivareBitLocker -match '^[Ss]') {
+        $disattivazioneBitLocker = Disable-BitLockerCliente -Volume $env:SystemDrive
+        if ($disattivazioneBitLocker.Esito -eq 'OK') {
+            Write-OK $disattivazioneBitLocker.Messaggio
+        } else {
+            Write-Errore $disattivazioneBitLocker.Messaggio
+            Write-Info "Controlla manualmente Impostazioni > Privacy e sicurezza > Crittografia dispositivo."
+        }
+        Add-Report "Disattivazione BitLocker" $disattivazioneBitLocker.Esito
+    } else {
+        Write-Info "BitLocker lasciato invariato."
+        Add-Report "Disattivazione BitLocker" "SALTATO"
+    }
+}
 
 Save-Fase 2 "Account/email cliente"
 }
