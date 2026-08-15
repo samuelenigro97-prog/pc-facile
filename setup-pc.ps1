@@ -12,11 +12,7 @@ param(
     # Veloce: ormai e' il comportamento PREDEFINITO (ogni doppio click parte in
     # automatico e chiede solo l'essenziale). Il parametro resta accettato per
     # compatibilita' con eventuali scorciatoie/comandi esistenti. -Veloce
-    [switch]$Veloce,
-    # Salta la creazione del punto di ripristino (utile se la protezione sistema
-    # e' disattivata o su reti particolari dove Checkpoint-Computer resta in
-    # attesa). -File setup-pc.ps1 -skipRestore
-    [switch]$skipRestore
+    [switch]$Veloce
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -24,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "9.4 (2026-08-14)"
+$SCRIPT_VERSION = "9.5 (2026-08-15)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -172,7 +168,7 @@ function Stop-BipRipetuto {
 }
 
 # BARRA ANIMATA GENERICA per le operazioni lunghe che NON sono installazioni
-# winget (lingua, punto di ripristino, driver, pulizia...). Quelle bloccano il
+# winget (lingua, driver, pulizia...). Quelle bloccano il
 # thread principale e non hanno un processo da "agganciare", percio' l'animazione
 # gira in un RUNSPACE separato (.NET gestito, niente P/Invoke) che disegna una
 # barra "a spola" col tempo trascorso, mentre l'operazione vera lavora nel thread
@@ -442,7 +438,7 @@ if ($Test -or $Diagnostica) {
 }
 
 # FLUSSO ESSENZIALE (unico modo del banco): la configurazione reale scorre da
-# sola. Le domande S/N "opzionali" (lingua, ripristino, pulizia, aggiornamenti,
+# sola. Le domande S/N "opzionali" (lingua, pulizia, aggiornamenti,
 # driver, ...) le risponde 'Chiedi' col valore consigliato SENZA fermarsi; si
 # ferma SOLO sulle 5 cose essenziali (nome, account, Office, app, antivirus).
 # Tecnicamente si attiva la vecchia "Veloce" per ogni run reale. -Veloce resta
@@ -509,9 +505,10 @@ $Global:AppFatteRipresa   = @()
 # antivirus), al lancio successivo riparte da dove era arrivato. Dopo ogni
 # passo completato lo stato (numero passo + nome cliente + credenziali
 # generate) finisce in un file JSON in ProgramData, ELIMINATO a fine lavoro.
-# Fasi: 1=Nome 2=Account 3=Lingua 4=Ripristino 5=Office 6=Pulizia,
+# Fasi: 1=Nome 2=Account 3=Lingua, 5=Office 6=Pulizia,
 # 7..11 = passi wizard 3..7 (Unieuro, App+browser, Aggiornamento, Driver,
-# Antivirus). Solo nel run reale.
+# Antivirus). La fase 4 resta inutilizzata per mantenere compatibili gli stati
+# gia' salvati. Solo nel run reale.
 # =============================================================================
 $Global:StatoFile   = Join-Path $env:ProgramData "PCFacile\stato.json"
 $Global:FaseRipresa = 0
@@ -1777,82 +1774,6 @@ Save-Fase 3 "Lingua e regione"
 }
 
 # (nessuna pausa: si avanza da solo, come nel wizard)
-
-# =============================================================================
-# PUNTO DI RIPRISTINO (rete di sicurezza prima delle modifiche)
-# =============================================================================
-
-if (Test-FaseFatta 4) { Write-Info "Punto di ripristino: gia' fatto nella sessione precedente, salto." }
-elseif ($skipRestore) {
-    Write-Info "Punto di ripristino saltato (flag -skipRestore)."
-    Add-Report "Punto di ripristino" "SALTATO"
-    Save-Fase 4 "Punto di ripristino"
-} else {
-
-Write-Titolo "Punto di Ripristino"
-
-Write-Host "Crea un punto di ripristino: se qualcosa va storto puoi tornare indietro." -ForegroundColor White
-Write-Host ""
-Write-Host "  Rispondi S per crearlo (consigliato) oppure N per saltare, poi premi INVIO." -ForegroundColor Gray
-
-# Chiedi/Read-Host accettano SOLO input da tastiera (niente finestra GUI con
-# pulsanti): la conferma si da' scrivendo S o N e premendo INVIO. Enter senza
-# testo = S (predefinito, come indicato in "consigliato").
-$vuoiRestore = Chiedi "Creare un punto di ripristino ora? (consigliato) (S/N)" "S"
-if (($vuoiRestore -match "^[Ss]") -or ($vuoiRestore.Trim() -eq '')) {
-    try {
-        Enable-ComputerRestore -Drive "$env:SystemDrive\" -ErrorAction SilentlyContinue
-        # Rimuove il limite di 1 punto ogni 24h, solo per crearne uno adesso
-        New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" `
-            -Name "SystemRestorePointCreationFrequency" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
-        Write-Info "Creazione punto di ripristino (puo' richiedere un minuto)..."
-        Start-BarraAnimata "Creo il punto di ripristino"
-        # Checkpoint-Computer su PC piu' lenti (o se VSS resta in attesa) puo'
-        # restare bloccato a lungo: lo eseguo in un job con TIME-OUT, cosi' lo
-        # script non resta mai incastrato su questo passo.
-        $job = $null
-        try {
-            $job = Start-Job -ScriptBlock {
-                param($d, $desc)
-                try { Checkpoint-Computer -Description $desc -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop; return 0 }
-                catch { return 1 }
-            } -ArgumentList "$env:SystemDrive\", "Prima di setup-pc"
-            if (-not (Wait-Job $job -Timeout 90)) {
-                Stop-Job $job
-                Write-Errore "Creazione del punto di ripristino in timeout dopo 90 secondi: salto."
-                Add-Report "Punto di ripristino" "ERRORE"
-            } elseif ((Receive-Job $job) -eq 0) {
-                Write-OK "Punto di ripristino creato."
-                Add-Report "Punto di ripristino" "OK"
-            } else {
-                Write-Errore "NON e' stato possibile creare il punto di ripristino."
-                Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
-                Add-Report "Punto di ripristino" "ERRORE"
-            }
-        } catch {
-            Write-Errore "NON e' stato possibile creare il punto di ripristino."
-            Write-Info "  Causa: $_"
-            Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
-            Add-Report "Punto di ripristino" "ERRORE"
-        } finally {
-            if ($job) { Remove-Job $job -Force -ErrorAction SilentlyContinue }
-            Stop-BarraAnimata
-        }
-    } catch {
-        Write-Errore "NON e' stato possibile creare il punto di ripristino."
-        Write-Info "  Causa: $_"
-        Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
-        Add-Report "Punto di ripristino" "ERRORE"
-    }
-} else {
-    Write-Info "Punto di ripristino saltato."
-    Add-Report "Punto di ripristino" "SALTATO"
-}
-
-Save-Fase 4 "Punto di ripristino"
-}
-
-# (nessuna pausa: si avanza da solo)
 
 # =============================================================================
 # INSTALLAZIONE APP OFFICE: prima si INSTALLA la suite scelta (se manca), poi

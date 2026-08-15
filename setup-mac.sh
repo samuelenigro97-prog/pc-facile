@@ -235,23 +235,6 @@ fi
 pausa
 
 # =============================================================================
-# PUNTO DI RIPRISTINO - snapshot APFS (equivalente del Restore Point Windows)
-# =============================================================================
-titolo "Punto di Ripristino (snapshot)"
-chiedi "Creare uno snapshot di ripristino ora? (consigliato) (S/N)" "S"
-if [[ "$REPLY" == [Ss]* ]]; then
-  if $RUN_REALE; then
-    if sudo tmutil localsnapshot >/dev/null 2>&1; then ok "Snapshot APFS creato."; add_report "Punto di ripristino (snapshot)" "OK"
-    else errore "Snapshot non riuscito (Time Machine/APFS?)."; add_report "Punto di ripristino (snapshot)" "ERRORE"; fi
-  else
-    dim "(test) creerei uno snapshot APFS con tmutil localsnapshot"; add_report "Punto di ripristino (snapshot)" "SALTATO"
-  fi
-else
-  add_report "Punto di ripristino (snapshot)" "SALTATO"
-fi
-pausa
-
-# =============================================================================
 # ACCOUNT / CREDENZIALI (Apple ID via GUI; qui prepariamo le credenziali)
 # =============================================================================
 titolo "Account e Credenziali"

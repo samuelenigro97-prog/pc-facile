@@ -4,6 +4,9 @@ Formato ispirato a [Keep a Changelog](https://keepachangelog.com/it/1.1.0/).
 
 ## [Unreleased]
 
+### Rimosso
+- Creazione automatica dei punti di recupero del sistema su Windows e degli equivalenti locali su macOS, incluse opzioni, messaggi e report dedicati.
+
 ### Aggiunto
 - Licenza MIT (`LICENSE.md`).
 - Template GitHub per bug report, feature request e pull request.

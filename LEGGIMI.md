@@ -133,14 +133,13 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 | 1  | **Nome cliente** (cambia il "Nome visualizzato" dell'account **e** il nome del PC): serve subito, genera anche le credenziali suggerite |
 | 2  | **Account Microsoft** (subito, col cliente davanti): apre il login/registrazione; genera o annota email + password `Nome123!` nel riepilogo. Così Office e antivirus dopo non richiedono altri OTP |
 | 3  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
-| 4  | **Punto di ripristino** (opzionale, consigliato): rete di sicurezza prima delle modifiche |
-| 5  | **App Office**: installa la suite scelta se manca (Office 365, perpetuo, OpenOffice, LibreOffice), poi **attivazione** — card PIN → riscatto web (`microsoft365.com/setup` o `office.com/setup`) + accesso in Word. Crea i collegamenti Office sul Desktop |
-| 6  | **Pulizia e ottimizzazione**: rimuove antivirus di prova, bloatware OEM, promo dal menu Start, disinstalla OneDrive, piccole comodità Windows |
-| 7  | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
-| 8  | **App + browser**: scegli il profilo e il **browser si installa da solo** — **Chrome** per tutti, **Opera GX** se scegli GAMING (niente più passo Browser separato) |
-| 9  | **Aggiornamento** di tutte le app installate (`winget upgrade --all`) |
-| 10 | **Driver**: scheda video dedicata (tool del produttore) + driver generici da Windows Update |
-| 11 | **Antivirus** (ultimo passo): McAfee, Norton, o Salta — dopo le altre installazioni, così un AV appena attivato non le blocca |
+| 4  | **App Office**: installa la suite scelta se manca (Office 365, perpetuo, OpenOffice, LibreOffice), poi **attivazione** — card PIN → riscatto web (`microsoft365.com/setup` o `office.com/setup`) + accesso in Word. Crea i collegamenti Office sul Desktop |
+| 5  | **Pulizia e ottimizzazione**: rimuove antivirus di prova, bloatware OEM, promo dal menu Start, disinstalla OneDrive, piccole comodità Windows |
+| 6  | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
+| 7  | **App + browser**: scegli il profilo e il **browser si installa da solo** — **Chrome** per tutti, **Opera GX** se scegli GAMING (niente più passo Browser separato) |
+| 8  | **Aggiornamento** di tutte le app installate (`winget upgrade --all`) |
+| 9  | **Driver**: scheda video dedicata (tool del produttore) + driver generici da Windows Update |
+| 10 | **Antivirus** (ultimo passo): McAfee, Norton, o Salta — dopo le altre installazioni, così un AV appena attivato non le blocca |
 | —  | **Report finale**: verifica finale + chiave BitLocker + **due file sul Desktop** (`Il tuo nuovo PC - <cliente>.txt` con le credenziali IN CIMA, e `Credenziali - <cliente>.txt` dedicato) + riavvio |
 
 **Profili app** (browser incluso: Chrome, o Opera GX per GAMING):
@@ -242,6 +241,6 @@ errori**, il resto funziona.
 ## 7. Prima prova sicura (dry-run)
 
 Per vedere il flusso senza installare nulla, rispondi:
-Punto di ripristino `N` · STEP 0 `N` · STEP 2 `N` · STEP 3 `4` poi attivazione
+STEP 0 `N` · STEP 2 `N` · STEP 3 `4` poi attivazione
 perpetuo `N` · STEP 4 `3` · STEP 4c `N` · Browser `N`/`N` · STEP 6 `S`.
 Arrivi al report finale senza toccare il PC.
