@@ -10,7 +10,6 @@ allineati come flusso e funzioni.
 | Lingua italiana             | `Install-Language it-IT -CopyToSettings`  | `defaults write AppleLanguages/AppleLocale`   | pari |
 | Sincronizzazione orario     | `w32tm` + W32Time auto + tzautoupdate     | `systemsetup -setusingnetworktime on` + sntp  | pari |
 | Nome cliente + host         | `Set-LocalUser` + `Rename-Computer`       | `scutil --set ComputerName/HostName`          | pari |
-| Punto di ripristino         | `Checkpoint-Computer`                     | `tmutil localsnapshot` (Time Machine)         | pari |
 | Account + credenziali       | Apre account.microsoft.com, genera cred   | Apre appleid.apple.com, genera cred           | pari |
 | Office                      | installa (winget) + riscatto card PIN sul web | — (su Mac Office si scarica da web, opzionale)| solo Win |
 | Pulizia / ottimizzazione    | AV prova + debloat OEM + config Windows   | config `defaults` (no debloat OEM: non esiste)| Mac = solo config |
@@ -19,7 +18,7 @@ allineati come flusso e funzioni.
 | Browser                     | catalogo winget                           | cask brew                                     | pari |
 | App (BASE/UFFICIO/GAMING)   | winget + tool GPU se dedicata (NVIDIA/Intel Arc/AMD) | brew cask (Mac: GPU integrata) | pari |
 | Aggiornamenti               | `winget upgrade` + aggiornamenti sicurezza Windows (COM Microsoft.Update) + driver Windows Update | `brew upgrade` + `softwareupdate` | pari |
-| Chiave di ripristino disco  | **BitLocker** (`manage-bde`/cmdlet)       | **FileVault** (`fdesetup`)                    | pari |
+| Chiave di ripristino disco  | **BitLocker** (`manage-bde`/cmdlet)       | —                                             | solo Win |
 | Barra attesa download/install| `Show-BarraAttesa` (winget in Start-Process)| — (brew mostra gia' il progresso)             | solo Win |
 | Avviso sonoro fine passo    | `[console]::Beep`                         | `printf '\a'`                                 | pari |
 | Bip di richiamo se non rispondi| runspace: dopo 2 min bip corto ogni ~4s | —                                             | solo Win |

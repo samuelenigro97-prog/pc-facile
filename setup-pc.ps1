@@ -12,11 +12,7 @@ param(
     # Veloce: ormai e' il comportamento PREDEFINITO (ogni doppio click parte in
     # automatico e chiede solo l'essenziale). Il parametro resta accettato per
     # compatibilita' con eventuali scorciatoie/comandi esistenti. -Veloce
-    [switch]$Veloce,
-    # Salta la creazione del punto di ripristino (utile se la protezione sistema
-    # e' disattivata o su reti particolari dove Checkpoint-Computer resta in
-    # attesa). -File setup-pc.ps1 -skipRestore
-    [switch]$skipRestore
+    [switch]$Veloce
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -24,7 +20,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "9.4 (2026-08-14)"
+$SCRIPT_VERSION = "9.7 (2026-08-15)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -35,6 +31,7 @@ $SYM_INFO  = [char]0x2192                  # freccia
 $BOX_FULL  = [char]0x2588                  # blocco pieno (barra progresso)
 $BOX_EMPTY = [char]0x2591                  # blocco leggero (barra progresso)
 $LINEA_D   = ([string][char]0x2550) * 60   # linea doppia orizzontale
+$SuWindows = ($env:OS -eq 'Windows_NT')    # compatibile con PowerShell 5.1 e 7+
 
 # Tema colori: Unieuro = ARANCIONE (#EE7203) + navy + bianco.
 # La console conhost (parte col doppio-click del .bat) ha solo 16 colori con
@@ -52,18 +49,22 @@ $THEME_TXT = "White"    # testo dei titoli (bianco, come il payoff del logo)
 
 # La chiave vale per le finestre APERTE DOPO averla scritta: il primo giro su
 # un PC nuovo puo' essere ancora ambra, i successivi arancione.
-try {
-    if (-not (Test-Path 'HKCU:\Console')) { New-Item -Path 'HKCU:\Console' -Force | Out-Null }
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -Value 1 -Type DWord -ErrorAction Stop
-    # Rimappa lo slot "DarkBlue" (indice 1) al navy SCURO #0A0E24, cosi' lo
-    # sfondo blu e' un navy vero e non il DarkBlue acceso di default. DWORD in
-    # formato 0x00BBGGRR = 0x00240E0A. Vale dalle finestre aperte dopo.
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -Value 0x00240E0A -Type DWord -ErrorAction SilentlyContinue
-} catch {}
+if ($SuWindows) {
+    try {
+        if (-not (Test-Path 'HKCU:\Console')) { New-Item -Path 'HKCU:\Console' -Force | Out-Null }
+        Set-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -Value 1 -Type DWord -ErrorAction Stop
+        # Rimappa lo slot "DarkBlue" (indice 1) al navy SCURO #0A0E24, cosi' lo
+        # sfondo blu e' un navy vero e non il DarkBlue acceso di default. DWORD in
+        # formato 0x00BBGGRR = 0x00240E0A. Vale dalle finestre aperte dopo.
+        Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -Value 0x00240E0A -Type DWord -ErrorAction SilentlyContinue
+    } catch {}
+}
 
 # Rileva se il VT e' attivo per QUESTA finestra (chiave gia' presente al lancio).
-$vtOn = $false
-try { $vtOn = ((Get-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction Stop).VirtualTerminalLevel -eq 1) } catch {}
+$vtOn = (-not $SuWindows)  # Terminale macOS supporta direttamente i colori ANSI
+if ($SuWindows) {
+    try { $vtOn = ((Get-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction Stop).VirtualTerminalLevel -eq 1) } catch {}
+}
 
 if ($vtOn) {
     $ESC       = [char]27
@@ -83,7 +84,7 @@ if ($vtOn) {
 # NERO (scuro e pulito, il navy pieno non e' forzabile da script in WT); su
 # conhost uso 'DarkBlue' che col ColorTable rimappato diventa navy vero.
 try {
-    if ($env:WT_SESSION) {
+    if (-not $SuWindows -or $env:WT_SESSION) {
         $Host.UI.RawUI.BackgroundColor = 'Black'
     } else {
         $Host.UI.RawUI.BackgroundColor = 'DarkBlue'
@@ -98,14 +99,12 @@ try {
 
 function Write-Titolo {
     param([string]$Testo)
-    # Titolo ben visibile: barra piena arancione + testo MAIUSCOLO su riga sua.
-    # Piu' "grosso" e netto della vecchia doppia linea, si legge a colpo d'occhio.
-    $barra = ([string]$BOX_FULL) * 50
-    Write-Host ""
+    # Titolo minimale ad alto contrasto: una sola riga arancione e testo grande.
+    # Meno blocchi grafici = schermata piu' pulita per chi usa poco il PC.
+    $barra = "=" * 44
     Write-Host ""
     Write-Host "$AON  $barra$AOFF" -ForegroundColor $THEME_COL
-    Write-Host "$AON   $($Testo.ToUpper())$AOFF" -ForegroundColor $THEME_TXT
-    Write-Host "$AON  $barra$AOFF" -ForegroundColor $THEME_COL
+    Write-Host "   $($Testo.ToUpper())" -ForegroundColor $THEME_TXT
     Write-Host ""
 }
 
@@ -172,7 +171,7 @@ function Stop-BipRipetuto {
 }
 
 # BARRA ANIMATA GENERICA per le operazioni lunghe che NON sono installazioni
-# winget (lingua, punto di ripristino, driver, pulizia...). Quelle bloccano il
+# winget (lingua, driver, pulizia...). Quelle bloccano il
 # thread principale e non hanno un processo da "agganciare", percio' l'animazione
 # gira in un RUNSPACE separato (.NET gestito, niente P/Invoke) che disegna una
 # barra "a spola" col tempo trascorso, mentre l'operazione vera lavora nel thread
@@ -409,6 +408,65 @@ function Get-BitLockerRecovery {
     return [pscustomobject]$r
 }
 
+# Impedisce la cifratura automatica futura e spegne BitLocker sul volume di
+# sistema. manage-bde e' disponibile anche dove i cmdlet BitLocker non ci sono
+# (per esempio alcune edizioni Home). La disattivazione dei protettori evita una
+# richiesta della recovery key durante la decifratura; -off avvia poi la
+# decifratura completa, che puo' continuare in background.
+function Disable-BitLockerCliente {
+    param([string]$Volume = $env:SystemDrive)
+
+    $r = [ordered]@{ Esito = "AVVISO"; Messaggio = "" }
+    try {
+        $reg = 'HKLM:\SYSTEM\CurrentControlSet\Control\BitLocker'
+        if (-not (Test-Path $reg)) { New-Item -Path $reg -Force -ErrorAction Stop | Out-Null }
+        New-ItemProperty -Path $reg -Name 'PreventDeviceEncryption' -Value 1 `
+            -PropertyType DWord -Force -ErrorAction Stop | Out-Null
+    } catch {
+        $r.Messaggio = "non riesco a impedire la riattivazione automatica: $_"
+        return [pscustomobject]$r
+    }
+
+    try {
+        if (-not (Get-Command manage-bde.exe -ErrorAction SilentlyContinue)) {
+            $r.Messaggio = "manage-bde non disponibile: controllo manuale necessario"
+            return [pscustomobject]$r
+        }
+
+        $stato = & manage-bde.exe -status $Volume 2>$null | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            $r.Messaggio = "stato BitLocker non leggibile (codice $LASTEXITCODE)"
+            return [pscustomobject]$r
+        }
+
+        # La percentuale usa sempre il simbolo %, indipendentemente dalla lingua.
+        $mPerc = [regex]::Match($stato, '(?m)^\s*[^:]+:\s*(\d+(?:[\.,]\d+)?)%\s*$')
+        if ($mPerc.Success -and ([double]($mPerc.Groups[1].Value -replace ',', '.')) -eq 0) {
+            $r.Esito = "OK"
+            $r.Messaggio = "BitLocker gia' disattivato; attivazione automatica bloccata"
+            return [pscustomobject]$r
+        }
+
+        & manage-bde.exe -protectors -disable $Volume 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $r.Messaggio = "impossibile sospendere i protettori BitLocker (codice $LASTEXITCODE)"
+            return [pscustomobject]$r
+        }
+
+        & manage-bde.exe -off $Volume 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $r.Messaggio = "impossibile avviare la decifratura BitLocker (codice $LASTEXITCODE)"
+            return [pscustomobject]$r
+        }
+
+        $r.Esito = "OK"
+        $r.Messaggio = "protezione disattivata e decifratura avviata in background"
+    } catch {
+        $r.Messaggio = "disattivazione BitLocker non riuscita: $_"
+    }
+    return [pscustomobject]$r
+}
+
 # AVVIO DIRETTO: niente menu. Doppio click = configura subito. Le modalita'
 # tecniche (Diagnostica/Test) restano disponibili solo da riga di comando
 # (-Diagnostica / -Test): non servono al banco. Si mostra solo l'intestazione.
@@ -442,7 +500,7 @@ if ($Test -or $Diagnostica) {
 }
 
 # FLUSSO ESSENZIALE (unico modo del banco): la configurazione reale scorre da
-# sola. Le domande S/N "opzionali" (lingua, ripristino, pulizia, aggiornamenti,
+# sola. Le domande S/N "opzionali" (lingua, pulizia, aggiornamenti,
 # driver, ...) le risponde 'Chiedi' col valore consigliato SENZA fermarsi; si
 # ferma SOLO sulle 5 cose essenziali (nome, account, Office, app, antivirus).
 # Tecnicamente si attiva la vecchia "Veloce" per ogni run reale. -Veloce resta
@@ -509,11 +567,16 @@ $Global:AppFatteRipresa   = @()
 # antivirus), al lancio successivo riparte da dove era arrivato. Dopo ogni
 # passo completato lo stato (numero passo + nome cliente + credenziali
 # generate) finisce in un file JSON in ProgramData, ELIMINATO a fine lavoro.
-# Fasi: 1=Nome 2=Account 3=Lingua 4=Ripristino 5=Office 6=Pulizia,
+# Fasi: 1=Nome 2=Account 3=Lingua, 5=Office 6=Pulizia,
 # 7..11 = passi wizard 3..7 (Unieuro, App+browser, Aggiornamento, Driver,
-# Antivirus). Solo nel run reale.
+# Antivirus). La fase 4 resta inutilizzata per mantenere compatibili gli stati
+# gia' salvati. Solo nel run reale.
 # =============================================================================
-$Global:StatoFile   = Join-Path $env:ProgramData "PCFacile\stato.json"
+$Global:StatoFile   = if ($SuWindows) {
+    Join-Path $env:ProgramData "PCFacile\stato.json"
+} else {
+    Join-Path ([IO.Path]::GetTempPath()) "PCFacile-stato-test.json"
+}
 $Global:FaseRipresa = 0
 
 # Segna un passo come completato (sovrascrive il checkpoint precedente).
@@ -649,17 +712,23 @@ function Get-DesktopDir {
 # VERIFICA PRIVILEGI AMMINISTRATORE
 # =============================================================================
 
-$currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Errore "Questo script richiede privilegi di amministratore."
-    if ($Test) {
-        Write-Info "Modalita' TEST: proseguo comunque (nessuna operazione admin verra' eseguita)."
-    } else {
-        Write-Info "Riavvia PowerShell come amministratore e riprova."
-        Pausa
-        return  # return (non exit) per non chiudere la finestra se eseguito in memoria
+if ($SuWindows) {
+    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
+    if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-Errore "Questo script richiede privilegi di amministratore."
+        if ($Test) {
+            Write-Info "Modalita' TEST: proseguo comunque (nessuna operazione admin verra' eseguita)."
+        } else {
+            Write-Info "Riavvia PowerShell come amministratore e riprova."
+            Pausa
+            return  # return (non exit) per non chiudere la finestra se eseguito in memoria
+        }
     }
+} elseif ($Test) {
+    Write-Host ""
+    Write-Host "$AON  TEST WINDOWS SU MACOS$AOFF" -ForegroundColor $THEME_COL
+    Write-Host "   Flusso simulato: nessuna modifica al Mac." -ForegroundColor White
 }
 
 # =============================================================================
@@ -744,7 +813,7 @@ try {
 } catch {}
 
 Write-Info "PowerShell: $($PSVersionTable.PSVersion) ($($PSVersionTable.PSEdition))"
-if ($PSVersionTable.PSEdition -eq 'Core') {
+if ($SuWindows -and $PSVersionTable.PSEdition -eq 'Core') {
     Write-Info "Consiglio: usa Windows PowerShell 5.1 (PC Facile.bat lo fa gia'). Su PowerShell 7"
     Write-Info "  l'installazione di riserva di winget (Add-AppxPackage) puo' non funzionare."
 }
@@ -1634,6 +1703,32 @@ if ($prov) {
 
 if ($prov) { Pausa }
 
+# Solo il percorso 1) Microsoft configura l'account usato per accedere a
+# Windows. Dopo che l'operatore ha concluso quel percorso, chiedo SEMPRE se
+# disattivare BitLocker: non uso Chiedi, quindi il flusso automatico non decide
+# al posto dell'operatore. Outlook/Google/Proton e Salta non entrano qui.
+if ($RunReale -and $prov -and $prov.Nome -eq "Microsoft") {
+    Write-Titolo "Protezione disco BitLocker"
+    Write-Host "Windows puo' attivare automaticamente la cifratura dopo l'accesso" -ForegroundColor White
+    Write-Host "all'account Microsoft. Disattivandola si evita che il cliente resti" -ForegroundColor White
+    Write-Host "bloccato alla richiesta della chiave, ma il disco non sara' cifrato." -ForegroundColor White
+    Write-Host ""
+    $vuoiDisattivareBitLocker = Attendi-Risposta "Disattivare BitLocker e impedire che si riattivi automaticamente? (S/N)"
+    if ($vuoiDisattivareBitLocker -match '^[Ss]') {
+        $disattivazioneBitLocker = Disable-BitLockerCliente -Volume $env:SystemDrive
+        if ($disattivazioneBitLocker.Esito -eq 'OK') {
+            Write-OK $disattivazioneBitLocker.Messaggio
+        } else {
+            Write-Errore $disattivazioneBitLocker.Messaggio
+            Write-Info "Controlla manualmente Impostazioni > Privacy e sicurezza > Crittografia dispositivo."
+        }
+        Add-Report "Disattivazione BitLocker" $disattivazioneBitLocker.Esito
+    } else {
+        Write-Info "BitLocker lasciato invariato."
+        Add-Report "Disattivazione BitLocker" "SALTATO"
+    }
+}
+
 Save-Fase 2 "Account/email cliente"
 }
 
@@ -1777,82 +1872,6 @@ Save-Fase 3 "Lingua e regione"
 }
 
 # (nessuna pausa: si avanza da solo, come nel wizard)
-
-# =============================================================================
-# PUNTO DI RIPRISTINO (rete di sicurezza prima delle modifiche)
-# =============================================================================
-
-if (Test-FaseFatta 4) { Write-Info "Punto di ripristino: gia' fatto nella sessione precedente, salto." }
-elseif ($skipRestore) {
-    Write-Info "Punto di ripristino saltato (flag -skipRestore)."
-    Add-Report "Punto di ripristino" "SALTATO"
-    Save-Fase 4 "Punto di ripristino"
-} else {
-
-Write-Titolo "Punto di Ripristino"
-
-Write-Host "Crea un punto di ripristino: se qualcosa va storto puoi tornare indietro." -ForegroundColor White
-Write-Host ""
-Write-Host "  Rispondi S per crearlo (consigliato) oppure N per saltare, poi premi INVIO." -ForegroundColor Gray
-
-# Chiedi/Read-Host accettano SOLO input da tastiera (niente finestra GUI con
-# pulsanti): la conferma si da' scrivendo S o N e premendo INVIO. Enter senza
-# testo = S (predefinito, come indicato in "consigliato").
-$vuoiRestore = Chiedi "Creare un punto di ripristino ora? (consigliato) (S/N)" "S"
-if (($vuoiRestore -match "^[Ss]") -or ($vuoiRestore.Trim() -eq '')) {
-    try {
-        Enable-ComputerRestore -Drive "$env:SystemDrive\" -ErrorAction SilentlyContinue
-        # Rimuove il limite di 1 punto ogni 24h, solo per crearne uno adesso
-        New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" `
-            -Name "SystemRestorePointCreationFrequency" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
-        Write-Info "Creazione punto di ripristino (puo' richiedere un minuto)..."
-        Start-BarraAnimata "Creo il punto di ripristino"
-        # Checkpoint-Computer su PC piu' lenti (o se VSS resta in attesa) puo'
-        # restare bloccato a lungo: lo eseguo in un job con TIME-OUT, cosi' lo
-        # script non resta mai incastrato su questo passo.
-        $job = $null
-        try {
-            $job = Start-Job -ScriptBlock {
-                param($d, $desc)
-                try { Checkpoint-Computer -Description $desc -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop; return 0 }
-                catch { return 1 }
-            } -ArgumentList "$env:SystemDrive\", "Prima di setup-pc"
-            if (-not (Wait-Job $job -Timeout 90)) {
-                Stop-Job $job
-                Write-Errore "Creazione del punto di ripristino in timeout dopo 90 secondi: salto."
-                Add-Report "Punto di ripristino" "ERRORE"
-            } elseif ((Receive-Job $job) -eq 0) {
-                Write-OK "Punto di ripristino creato."
-                Add-Report "Punto di ripristino" "OK"
-            } else {
-                Write-Errore "NON e' stato possibile creare il punto di ripristino."
-                Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
-                Add-Report "Punto di ripristino" "ERRORE"
-            }
-        } catch {
-            Write-Errore "NON e' stato possibile creare il punto di ripristino."
-            Write-Info "  Causa: $_"
-            Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
-            Add-Report "Punto di ripristino" "ERRORE"
-        } finally {
-            if ($job) { Remove-Job $job -Force -ErrorAction SilentlyContinue }
-            Stop-BarraAnimata
-        }
-    } catch {
-        Write-Errore "NON e' stato possibile creare il punto di ripristino."
-        Write-Info "  Causa: $_"
-        Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
-        Add-Report "Punto di ripristino" "ERRORE"
-    }
-} else {
-    Write-Info "Punto di ripristino saltato."
-    Add-Report "Punto di ripristino" "SALTATO"
-}
-
-Save-Fase 4 "Punto di ripristino"
-}
-
-# (nessuna pausa: si avanza da solo)
 
 # =============================================================================
 # INSTALLAZIONE APP OFFICE: prima si INSTALLA la suite scelta (se manca), poi
@@ -2785,10 +2804,8 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 
 Write-Titolo "Driver (Windows Update)"
 
-Write-Host "Cerca e installa i driver mancanti/aggiornati dal catalogo Windows Update." -ForegroundColor White
-Write-Host "Se c'e' una scheda video DEDICATA, uso anche il tool del produttore (Windows" -ForegroundColor White
-Write-Host "Update spesso non ne prende il driver giusto). Puo' richiedere qualche minuto" -ForegroundColor White
-Write-Host "e talvolta un riavvio. Opzionale, ultimo passo." -ForegroundColor White
+Write-Host "Aggiorna i driver del PC tramite Windows Update." -ForegroundColor White
+Write-Host "Se trova una scheda video dedicata, usa anche il programma del produttore." -ForegroundColor Gray
 Write-Host ""
 
 # DRIVER SCHEDA VIDEO DEDICATA: solo se c'e' una GPU dedicata (non l'integrata),

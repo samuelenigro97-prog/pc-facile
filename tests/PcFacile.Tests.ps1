@@ -44,6 +44,39 @@ Describe 'setup-pc.ps1: la sorgente e'' sintatticamente valida' {
     }
 }
 
+Describe 'Disattivazione BitLocker dopo account Microsoft' {
+    It 'e'' condizionata al provider Microsoft e richiede una risposta esplicita' {
+        $sorgente = Get-Content $script:SetupPath -Raw
+        $sorgente | Should -Match '\$prov\.Nome -eq "Microsoft"'
+        $sorgente | Should -Match 'Attendi-Risposta "Disattivare BitLocker'
+        $sorgente | Should -Match "-Name 'PreventDeviceEncryption'"
+        $sorgente | Should -Match 'manage-bde\.exe -off \$Volume'
+    }
+
+    It 'salva la fase Account soltanto dopo la richiesta BitLocker' {
+        $sorgente = Get-Content $script:SetupPath -Raw
+        $richiesta = $sorgente.IndexOf('$vuoiDisattivareBitLocker = Attendi-Risposta')
+        $salvataggio = $sorgente.IndexOf('Save-Fase 2 "Account/email cliente"')
+        $richiesta | Should -BeGreaterThan -1
+        $salvataggio | Should -BeGreaterThan $richiesta
+    }
+}
+
+Describe 'Interfaccia minimale e test su macOS' {
+    It 'applica il registro console soltanto su Windows' {
+        $sorgente = Get-Content $script:SetupPath -Raw
+        $sorgente | Should -Match '\$SuWindows = \(\$env:OS -eq ''Windows_NT''\)'
+        $sorgente | Should -Match 'if \(\$SuWindows\) \{\s+try \{\s+if \(-not \(Test-Path ''HKCU:\\Console''\)\)'
+    }
+
+    It 'usa sfondo nero e un titolo compatto fuori da Windows' {
+        $sorgente = Get-Content $script:SetupPath -Raw
+        $sorgente | Should -Match 'if \(-not \$SuWindows -or \$env:WT_SESSION\)'
+        $sorgente | Should -Match '\$barra = "=" \* 44'
+        $sorgente | Should -Match 'TEST WINDOWS SU MACOS'
+    }
+}
+
 Describe 'New-PasswordCliente' {
     It 'costruisce Nome + 123! con iniziale maiuscola' {
         New-PasswordCliente -Base 'Rossi' | Should -BeExactly 'Rossi123!'
