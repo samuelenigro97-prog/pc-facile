@@ -24,7 +24,12 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "9.9 (2026-08-14)"
+$SCRIPT_VERSION = "10.0 (2026-08-14)"
+
+# Versione SEMPRE VISIBILE: la scrivo nella barra del titolo della finestra, che
+# resta a video in QUALSIASI schermata (a differenza dell'header, che scorre via).
+# Cosi' l'operatore controlla al volo se la chiavetta ha scaricato l'ultima.
+try { $Host.UI.RawUI.WindowTitle = "PC Facile  -  v$SCRIPT_VERSION" } catch {}
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
