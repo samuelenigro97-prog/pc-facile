@@ -24,7 +24,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "9.8 (2026-08-14)"
+$SCRIPT_VERSION = "9.9 (2026-08-14)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -1766,9 +1766,15 @@ $bloatwareAppx = @(
     # --- Dell ---
     "*DellSupportAssist*", "*DellCustomerConnect*", "*DellDigitalDelivery*",
     "*DellUpdate*", "*DellOptimizer*", "*PartnerPromo*", "*DellPowerManager*",
-    # --- Asus / Acer ---
+    # --- Asus (NB: NON tocco "ASUS System Control Interface": e' un DRIVER, serve
+    #     ai tasti funzione/ventole). Tolgo solo le app "vetrina"/promo/cloud. ---
     "*MyASUS*", "*ASUSPCAssistant*", "*ASUSGiftBox*", "*GlideX*", "*ASUSSplendid*",
-    "*AcerCollection*", "*AcerRegistration*", "*AcerJumpstart*", "*AcerCareCenter*"
+    "*ScreenXpert*", "*ScreenPad*", "*ArmouryCrate*", "*AsusCloud*", "*ASUSWebStorage*",
+    "*ASUSSettings*", "*ProArtCreatorHub*", "*ASUSLiveUpdate*", "*AsusProductRegistration*",
+    "*ASUSDialoutBox*", "*ASUSAppCenter*",
+    # --- Acer ---
+    "*AcerCollection*", "*AcerRegistration*", "*AcerJumpstart*", "*AcerCareCenter*",
+    "*AcerPortal*", "*AcerQuickAccess*"
 )
 
     $rimosse = 0
@@ -1790,7 +1796,8 @@ $bloatwareAppx = @(
     # Utility/trial Win32 via winget. NIENTE antivirus: li gestisce gia' il
     # blocco 1/3 qui sopra (nessuna duplicazione).
     $trialWin32 = @("HP Support Assistant", "HP Documentation", "HP Sure Recover",
-                    "WildTangent Games", "ExpressVPN", "Dropbox Promotion")
+                    "WildTangent Games", "ExpressVPN", "Dropbox Promotion",
+                    "MyASUS", "ASUS GiftBox", "GlideX", "ASUS Product Registration Program")
     if (Confirm-Winget) {
         foreach ($nome in $trialWin32) {
             winget uninstall --name $nome --silent --accept-source-agreements --disable-interactivity 2>$null | Out-Null
