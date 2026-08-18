@@ -24,7 +24,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "10.0 (2026-08-14)"
+$SCRIPT_VERSION = "10.1 (2026-08-14)"
 
 # Versione SEMPRE VISIBILE: la scrivo nella barra del titolo della finestra, che
 # resta a video in QUALSIASI schermata (a differenza dell'header, che scorre via).
@@ -2021,7 +2021,7 @@ if ($impostaLingua -match "^[Ss]") {
         for ($tLingua = 1; $tLingua -le $maxTentLingua; $tLingua++) {
             try {
                 Write-Info "Installazione/applicazione language pack it-IT (qualche minuto, serve Internet)...$(if ($tLingua -gt 1) { " (tentativo $tLingua)" })"
-                Start-BarraAnimata "Installo la lingua italiana (max 8 min)"
+                Start-BarraAnimata "Installo la lingua italiana (max 12 min)"
                 $timeoutLingua = $false
                 try {
                     # Eseguo l'installazione in un JOB con TIMEOUT: se si impianta
@@ -2031,7 +2031,7 @@ if ($impostaLingua -match "^[Ss]") {
                         try { Install-Language it-IT -CopyToSettings -ErrorAction Stop | Out-Null }
                         catch { Install-Language it-IT -ErrorAction Stop | Out-Null }
                     }
-                    if (Wait-Job $jobLingua -Timeout 480) {
+                    if (Wait-Job $jobLingua -Timeout 720) {
                         Receive-Job $jobLingua -ErrorAction SilentlyContinue | Out-Null
                     } else {
                         Stop-Job $jobLingua -ErrorAction SilentlyContinue
@@ -2041,7 +2041,7 @@ if ($impostaLingua -match "^[Ss]") {
                 } finally { Stop-BarraAnimata }
             } catch {}
             if ($timeoutLingua) {
-                Write-Errore "Installazione lingua troppo lunga (oltre 8 min): interrompo e proseguo."
+                Write-Errore "Installazione lingua troppo lunga (oltre 12 min): interrompo e proseguo."
                 Write-Info "Riprova piu' tardi con una rete pulita (hotspot) o l'antivirus in pausa."
                 break
             }
@@ -2061,7 +2061,18 @@ if ($impostaLingua -match "^[Ss]") {
             }
         }
         if (-not $packOk) {
-            Write-Errore "Language pack it-IT NON installato (Internet assente o bloccato)."
+            Write-Host ""
+            Write-Errore "############################################################"
+            Write-Errore "#  LINGUA ITALIANA NON SCARICATA                           #"
+            Write-Errore "############################################################"
+            Write-Errore "Il pacchetto di traduzione dei menu non e' arrivato: quasi"
+            Write-Errore "sempre e' la RETE del negozio che filtra/rallenta il download."
+            Write-Info    "SOLUZIONE: collega il PC a un HOTSPOT del telefono e rilancia"
+            Write-Info    "PC Facile (rispondi S alla ripresa): scarichera' solo la lingua."
+            Write-Info    "Apro le Impostazioni lingua di Windows: da li' puoi anche"
+            Write-Info    "  scaricare l'italiano a mano (Aggiungi lingua / pacchetto)."
+            try { Start-Process "ms-settings:regionlanguage" } catch {}
+            Write-Host ""
         }
     } else {
         Write-Info "Install-Language non c'e' (Windows 10): il pacchetto lingua di visualizzazione va aggiunto a mano."
@@ -3316,17 +3327,22 @@ if ($RunReale) {
     Write-OK "Pulizia finale: PC Facile rimosso dal PC (il report resta sul Desktop)."
 }
 
-# Offri il riavvio se la lingua e' stata cambiata (serve reboot per applicarsi)
-$linguaCambiata = @($Report | Where-Object { $_.Voce -like "Lingua italiana*" -and $_.Esito -eq "OK" }).Count -gt 0
-Write-Host ""
-if ($linguaCambiata) {
-    Write-Info "La lingua e' stata cambiata: serve un RIAVVIO per applicarla del tutto."
-    $riavvia = Chiedi "Riavviare il PC ora? (S/N)" "N"
+# RIAVVIO FINALE: sempre proposto (e sempre CHIESTO, anche nel flusso automatico).
+# Serve per applicare del tutto lingua italiana, barra, impostazioni nuovi utenti.
+if ($RunReale) {
+    $linguaOk = @($Report | Where-Object { $_.Voce -like "Lingua italiana (it-IT*" -and $_.Esito -eq "OK" }).Count -gt 0
+    Write-Host ""
+    if ($linguaOk) {
+        Write-Info "Serve un RIAVVIO per vedere l'interfaccia in ITALIANO (menu, barra, login)."
+    } else {
+        Write-Info "Un RIAVVIO applica del tutto le impostazioni fatte (barra, regione, nuovi utenti)."
+    }
+    $riavvia = Attendi-Risposta "Riavviare il PC ORA? (S = riavvia adesso / N = riavvio dopo)"
     if ($riavvia -match "^[Ss]") {
         Write-Info "Riavvio in corso..."
         Restart-Computer -Force
     } else {
-        Write-Info "Ricordati di riavviare il PC prima di consegnarlo."
+        Write-Info "Ricordati di RIAVVIARE il PC prima di consegnarlo (serve per l'italiano)."
     }
 }
 
