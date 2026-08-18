@@ -56,9 +56,13 @@ REM     scarico setup-pc.ps1.sha256, calcolo l'hash del file scaricato e li
 REM     confronto. Se non combaciano (download corrotto/troncato) scarto il
 REM     file e uso il fallback offline. Se l'hash non e' disponibile, proseguo.
 echo Scarico l'ultima versione da GitHub...
-set "PS1=%TEMP%\setup-pc.ps1"
-if exist "%PS1%" del "%PS1%" >nul 2>&1
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $t=(Get-Date -UFormat %%s); $base='https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main'; irm ($base+'/setup-pc.ps1?t='+$t) -Headers @{ 'Cache-Control'='no-cache' } -OutFile '%PS1%'; try { $atteso=(((irm ($base+'/setup-pc.ps1.sha256?t='+$t) -Headers @{ 'Cache-Control'='no-cache' }).Trim()) -split '\s+')[0].ToLower(); $reale=(Get-FileHash '%PS1%' -Algorithm SHA256).Hash.ToLower(); if ($atteso -and $reale -ne $atteso) { Write-Host 'ATTENZIONE: impronta SHA256 non corrisponde: scarto il download.' -ForegroundColor Red; Remove-Item '%PS1%' -Force } else { Write-Host 'Integrita'' verificata (SHA256).' -ForegroundColor Green } } catch { Write-Host 'Verifica SHA256 saltata (impronta non disponibile).' -ForegroundColor Yellow } } catch { Write-Host ('Download fallito: '+$_) -ForegroundColor Yellow }"
+REM Nome file UNICO ad ogni avvio: se una copia precedente e' ancora BLOCCATA
+REM (esecuzione precedente non chiusa, o antivirus), scrivere sullo stesso nome
+REM dava "Access is denied". Con un nome nuovo la scrittura non collide mai.
+REM Pulisco comunque le copie vecchie (best effort). Lo script si auto-rimuove.
+del "%TEMP%\setup-pc*.ps1" >nul 2>&1
+set "PS1=%TEMP%\setup-pc-%RANDOM%%RANDOM%.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$base='https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main'; $ok=$false; for($i=1;$i -le 3 -and -not $ok;$i++){ try { $t=(Get-Date -UFormat %%s); irm ($base+'/setup-pc.ps1?t='+$t) -Headers @{ 'Cache-Control'='no-cache' } -OutFile '%PS1%'; $ok=$true } catch { Write-Host ('Tentativo '+$i+' di 3 non riuscito: '+$_.Exception.Message) -ForegroundColor Yellow; Start-Sleep -Seconds 2 } }; if($ok){ try { $t=(Get-Date -UFormat %%s); $atteso=(((irm ($base+'/setup-pc.ps1.sha256?t='+$t) -Headers @{ 'Cache-Control'='no-cache' }).Trim()) -split '\s+')[0].ToLower(); $reale=(Get-FileHash '%PS1%' -Algorithm SHA256).Hash.ToLower(); if ($atteso -and $reale -ne $atteso) { Write-Host 'ATTENZIONE: impronta SHA256 non corrisponde: scarto il download.' -ForegroundColor Red; Remove-Item '%PS1%' -Force } else { Write-Host 'Integrita'' verificata (SHA256).' -ForegroundColor Green } } catch { Write-Host 'Verifica SHA256 saltata (impronta non disponibile).' -ForegroundColor Yellow } } else { Write-Host 'Download non riuscito dopo 3 tentativi: uso la copia locale se presente.' -ForegroundColor Yellow }"
 
 REM --- Se il download e' riuscito uso quello (SEMPRE aggiornato) ---
 if exist "%PS1%" (
