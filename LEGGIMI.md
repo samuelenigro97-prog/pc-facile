@@ -132,10 +132,10 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 |------|--------|
 | 1  | **Nome cliente** (cambia il "Nome visualizzato" dell'account **e** il nome del PC): serve subito, genera anche le credenziali suggerite |
 | 2  | **Account Microsoft** (subito, col cliente davanti): apre il login/registrazione; genera o annota email + password `Nome123!` nel riepilogo. Così Office e antivirus dopo non richiedono altri OTP |
-| 3  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
-| 4  | **Punto di ripristino** (opzionale, consigliato): rete di sicurezza prima delle modifiche |
-| 5  | **App Office**: installa la suite scelta se manca (Office 365, perpetuo, OpenOffice, LibreOffice), poi **attivazione** — card PIN → riscatto web (`microsoft365.com/setup` o `office.com/setup`) + accesso in Word. Crea i collegamenti Office sul Desktop |
-| 6  | **Pulizia e ottimizzazione**: rimuove antivirus di prova, bloatware OEM, promo dal menu Start, disinstalla OneDrive, piccole comodità Windows |
+| 3  | **Pulizia e ottimizzazione** (una sola domanda): rimuove antivirus di prova, bloatware OEM, promo dal menu Start, disinstalla OneDrive, piccole comodità Windows. **Spostata qui**, prima di lingua/app/driver, così l'antivirus di prova non blocca quei passaggi |
+| 4  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
+| 5  | **Punto di ripristino** (opzionale, consigliato): rete di sicurezza prima delle modifiche |
+| 6  | **App Office**: installa la suite scelta se manca (Office 365, perpetuo, OpenOffice, LibreOffice), poi **attivazione** — card PIN → riscatto web (`microsoft365.com/setup` o `office.com/setup`) + accesso in Word. Crea i collegamenti Office sul Desktop |
 | 7  | **Unieuro Cyber Protection** (opzionale, skippabile) — solo sito + credenziali app |
 | 8  | **App + browser**: scegli il profilo e il **browser si installa da solo** — **Chrome** per tutti, **Opera GX** se scegli GAMING (niente più passo Browser separato) |
 | 9  | **Aggiornamento** di tutte le app installate (`winget upgrade --all`) |
