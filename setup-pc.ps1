@@ -24,7 +24,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "9.7 (2026-08-14)"
+$SCRIPT_VERSION = "9.8 (2026-08-14)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -509,7 +509,7 @@ $Global:AppFatteRipresa   = @()
 # antivirus), al lancio successivo riparte da dove era arrivato. Dopo ogni
 # passo completato lo stato (numero passo + nome cliente + credenziali
 # generate) finisce in un file JSON in ProgramData, ELIMINATO a fine lavoro.
-# Fasi: 1=Nome 2=Account 3=Lingua 4=Ripristino 5=Office 6=Pulizia,
+# Fasi: 1=Nome 2=Account 3=Pulizia 4=Lingua 5=Ripristino 6=Office,
 # 7..11 = passi wizard 3..7 (Unieuro, App+browser, Aggiornamento, Driver,
 # Antivirus). Solo nel run reale.
 # =============================================================================
@@ -1639,378 +1639,13 @@ Save-Fase 2 "Account/email cliente"
 }
 
 # =============================================================================
-# LINGUA E REGIONE (ITALIANO)
-# =============================================================================
-
-if (Test-FaseFatta 3) { Write-Info "Lingua e regione: gia' fatto nella sessione precedente, salto." }
-else {
-
-Write-Titolo "Lingua e Regione (Italiano)"
-
-Write-Host "Imposta display, tastiera, formati e pacchetto lingua in italiano (it-IT)." -ForegroundColor White
-Write-Host ""
-
-$culturaAttuale = (Get-Culture).Name
-Write-Info "Lingua/regione attuale: $culturaAttuale"
-
-$impostaLingua = Chiedi "Impostare il sistema in Italiano (it-IT)? (S/N)" "S"
-if ($impostaLingua -match "^[Ss]") {
-
-    # Salto il DOWNLOAD del pacchetto SOLO se il DISPLAY e' gia' in italiano
-    # (Get-UICulture). ATTENZIONE: il fatto che it-IT sia "tra le lingue installate"
-    # NON basta - spesso c'e' solo tastiera/regione, ma la TRADUZIONE dei menu (il
-    # Local Experience Pack) manca e l'interfaccia resta inglese. Percio' se il
-    # display non e' ancora italiano, installo il pacchetto ANCHE se it-IT risulta
-    # "presente". Il forzamento qui sotto viene applicato SEMPRE.
-    $displayGiaItaliano = $false
-    try { $displayGiaItaliano = ((Get-UICulture).Name -like 'it*') } catch {}
-
-    # --- 1) LANGUAGE PACK it-IT (Windows 11 22H2+): e' QUESTO (il Local Experience
-    #     Pack) che traduce i MENU. Lo installo se il display non e' gia' italiano. ---
-    $packOk = $false
-    if ($displayGiaItaliano) {
-        Write-OK "Display gia' in italiano: salto il download, applico il forzamento."
-        $packOk = $true
-    } elseif (Get-Command Install-Language -ErrorAction SilentlyContinue) {
-        # Il download del pack fallisce spesso per cali di rete del negozio:
-        # ritento fino a 3 volte e, se la rete e' assente, aspetto che torni.
-        $maxTentLingua = 3
-        for ($tLingua = 1; $tLingua -le $maxTentLingua; $tLingua++) {
-            try {
-                Write-Info "Installazione/applicazione language pack it-IT (qualche minuto, serve Internet)...$(if ($tLingua -gt 1) { " (tentativo $tLingua)" })"
-                Start-BarraAnimata "Installo la lingua italiana (max 8 min)"
-                $timeoutLingua = $false
-                try {
-                    # Eseguo l'installazione in un JOB con TIMEOUT: se si impianta
-                    # (rete filtrata o antivirus che blocca il download), NON lascio
-                    # lo script fermo all'infinito - interrompo e proseguo.
-                    $jobLingua = Start-Job -ScriptBlock {
-                        try { Install-Language it-IT -CopyToSettings -ErrorAction Stop | Out-Null }
-                        catch { Install-Language it-IT -ErrorAction Stop | Out-Null }
-                    }
-                    if (Wait-Job $jobLingua -Timeout 480) {
-                        Receive-Job $jobLingua -ErrorAction SilentlyContinue | Out-Null
-                    } else {
-                        Stop-Job $jobLingua -ErrorAction SilentlyContinue
-                        $timeoutLingua = $true
-                    }
-                    Remove-Job $jobLingua -Force -ErrorAction SilentlyContinue
-                } finally { Stop-BarraAnimata }
-            } catch {}
-            if ($timeoutLingua) {
-                Write-Errore "Installazione lingua troppo lunga (oltre 8 min): interrompo e proseguo."
-                Write-Info "Riprova piu' tardi con una rete pulita (hotspot) o l'antivirus in pausa."
-                break
-            }
-            $packOk = ((Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId -contains "it-IT")
-            if ($packOk) { break }
-            # Non riuscito: se manca la rete, avviso e aspetto che torni, poi ritento.
-            if ($tLingua -lt $maxTentLingua) {
-                if (-not (Test-Rete)) {
-                    Write-Errore "!!  CONNESSIONE ASSENTE  !!  Ricollega il WiFi o il cavo di rete."
-                    Beep-Attesa
-                    $attLingua = 0
-                    while ((-not (Test-Rete)) -and $attLingua -lt 90) { Start-Sleep -Seconds 5; $attLingua += 5 }
-                    if (Test-Rete) { Write-OK "Connessione tornata: riprovo la lingua." }
-                }
-                Write-Info "Riprovo l'installazione della lingua (tentativo $($tLingua + 1) di $maxTentLingua)..."
-                Start-Sleep -Seconds 3
-            }
-        }
-        if (-not $packOk) {
-            Write-Errore "Language pack it-IT NON installato (Internet assente o bloccato)."
-        }
-    } else {
-        Write-Info "Install-Language non c'e' (Windows 10): il pacchetto lingua di visualizzazione va aggiunto a mano."
-        $packDaAggiungere = $true
-    }
-
-    # --- 2) UNA SOLA lingua: ITALIANO. Tolgo l'inglese (e ogni altra) dall'elenco
-    #     preferito, cosi' le parti non ancora tradotte NON cadono sull'inglese:
-    #     era QUESTA la causa del "meta' italiano meta' inglese". Metto anche la
-    #     tastiera italiana. -Force sostituisce l'intero elenco con solo it-IT. ---
-    try {
-        $lista = New-WinUserLanguageList it-IT
-        $lista[0].InputMethodTips.Clear()
-        $lista[0].InputMethodTips.Add("0410:00000410")   # tastiera italiana
-        Set-WinUserLanguageList $lista -Force
-    } catch { Write-Info "Elenco lingue non impostato: $_" }
-
-    # --- 3) Lingua UI (utente + sistema), formati, regione, locale, fuso ---
-    try { Set-WinUILanguageOverride -Language it-IT } catch {}
-    if (Get-Command Set-SystemPreferredUILanguage -ErrorAction SilentlyContinue) {
-        try { Set-SystemPreferredUILanguage it-IT } catch {}
-    }
-    try { Set-Culture it-IT } catch {}
-    try { Set-WinHomeLocation -GeoId 118 } catch {}      # Italia
-    try { Set-WinSystemLocale it-IT } catch {}
-    try { Set-TimeZone -Id "W. Europe Standard Time" -ErrorAction Stop; Write-OK "Fuso orario Italia (CET)." } catch {}
-    # Rinforzo via registro: lingua UI preferita dell'utente = solo it-IT.
-    try { Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'PreferredUILanguages' -Value @('it-IT') -Type MultiString -Force -ErrorAction SilentlyContinue } catch {}
-
-    # --- 4) SOLO ORA propago a schermata di LOGIN e NUOVI UTENTI: cosi' copio la
-    #     configurazione GIA' tutta italiana. (Prima veniva fatto troppo presto,
-    #     copiando ancora l'inglese: ecco perche' login/nuovi utenti restavano
-    #     misti.) ---
-    if (Get-Command Copy-UserInternationalSettingsToSystem -ErrorAction SilentlyContinue) {
-        try { Copy-UserInternationalSettingsToSystem -WelcomeScreen $true -NewUser $true } catch {}
-    }
-
-    # --- Esito CHIARO: se il pack non c'e', l'utente deve sapere PERCHE' resta inglese ---
-    if ($packOk) {
-        Write-OK "Italiano forzato ovunque (solo it-IT, niente inglese di riserva): display,"
-        Write-OK "tastiera, formati, login e nuovi utenti. Attivo del tutto dopo il RIAVVIO."
-        Add-Report "Lingua italiana (it-IT, forzata)" "OK"
-    } elseif ($packDaAggiungere) {
-        Write-Info "Tastiera e formati in italiano OK. L'INTERFACCIA resta inglese: su Windows 10 va aggiunto il pacchetto lingua a mano."
-        Add-Report "Lingua italiana (display da completare)" "AVVISO"
-    } else {
-        Write-Errore "Tastiera/formati OK, ma il LANGUAGE PACK non si e' installato: l'interfaccia resta in INGLESE."
-        Write-Errore "Causa tipica: Internet assente/bloccato durante l'installazione. Controlla la rete e rilancia lo step lingua."
-        Add-Report "Lingua italiana (pack mancante)" "AVVISO"
-    }
-    Write-Info "Display e schermata di login in italiano si vedono dopo il RIAVVIO del PC."
-
-    # --- 5) Windows 10: il pacchetto lingua (display) va aggiunto a mano ---
-    if ($packDaAggiungere) {
-        Write-Info "Su Windows 10 il pacchetto della lingua di visualizzazione va aggiunto a mano."
-        $apriImp = Chiedi "Aprire ora Impostazioni lingua per aggiungere/verificare l'Italiano? (S/N)" "N"
-        if ($apriImp -match "^[Ss]") {
-            Start-Process "ms-settings:regionlanguage"
-            Write-Info "In Impostazioni: aggiungi 'Italiano (Italia)', impostalo come lingua di"
-            Write-Info "  visualizzazione e scarica il pacchetto lingua. Poi torna qui."
-            Pausa
-        }
-    }
-} else {
-    Write-Info "Impostazione lingua saltata."
-    Add-Report "Lingua italiana (it-IT)" "SALTATO"
-}
-
-Save-Fase 3 "Lingua e regione"
-}
-
-# (nessuna pausa: si avanza da solo, come nel wizard)
-
-# =============================================================================
-# PUNTO DI RIPRISTINO (rete di sicurezza prima delle modifiche)
-# =============================================================================
-
-if (Test-FaseFatta 4) { Write-Info "Punto di ripristino: gia' fatto nella sessione precedente, salto." }
-elseif ($skipRestore) {
-    Write-Info "Punto di ripristino saltato (flag -skipRestore)."
-    Add-Report "Punto di ripristino" "SALTATO"
-    Save-Fase 4 "Punto di ripristino"
-} else {
-
-Write-Titolo "Punto di Ripristino"
-
-Write-Host "Crea un punto di ripristino: se qualcosa va storto puoi tornare indietro." -ForegroundColor White
-Write-Host ""
-Write-Host "  Rispondi S per crearlo (consigliato) oppure N per saltare, poi premi INVIO." -ForegroundColor Gray
-
-# Chiedi/Read-Host accettano SOLO input da tastiera (niente finestra GUI con
-# pulsanti): la conferma si da' scrivendo S o N e premendo INVIO. Enter senza
-# testo = S (predefinito, come indicato in "consigliato").
-$vuoiRestore = Chiedi "Creare un punto di ripristino ora? (consigliato) (S/N)" "S"
-if (($vuoiRestore -match "^[Ss]") -or ($vuoiRestore.Trim() -eq '')) {
-    try {
-        Enable-ComputerRestore -Drive "$env:SystemDrive\" -ErrorAction SilentlyContinue
-        # Rimuove il limite di 1 punto ogni 24h, solo per crearne uno adesso
-        New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" `
-            -Name "SystemRestorePointCreationFrequency" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
-        Write-Info "Creazione punto di ripristino (puo' richiedere un minuto)..."
-        Start-BarraAnimata "Creo il punto di ripristino"
-        # Checkpoint-Computer su PC piu' lenti (o se VSS resta in attesa) puo'
-        # restare bloccato a lungo: lo eseguo in un job con TIME-OUT, cosi' lo
-        # script non resta mai incastrato su questo passo.
-        $job = $null
-        try {
-            $job = Start-Job -ScriptBlock {
-                param($d, $desc)
-                try { Checkpoint-Computer -Description $desc -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop; return 0 }
-                catch { return 1 }
-            } -ArgumentList "$env:SystemDrive\", "Prima di setup-pc"
-            if (-not (Wait-Job $job -Timeout 90)) {
-                Stop-Job $job
-                Write-Errore "Creazione del punto di ripristino in timeout dopo 90 secondi: salto."
-                Add-Report "Punto di ripristino" "ERRORE"
-            } elseif ((Receive-Job $job) -eq 0) {
-                Write-OK "Punto di ripristino creato."
-                Add-Report "Punto di ripristino" "OK"
-            } else {
-                Write-Errore "NON e' stato possibile creare il punto di ripristino."
-                Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
-                Add-Report "Punto di ripristino" "ERRORE"
-            }
-        } catch {
-            Write-Errore "NON e' stato possibile creare il punto di ripristino."
-            Write-Info "  Causa: $_"
-            Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
-            Add-Report "Punto di ripristino" "ERRORE"
-        } finally {
-            if ($job) { Remove-Job $job -Force -ErrorAction SilentlyContinue }
-            Stop-BarraAnimata
-        }
-    } catch {
-        Write-Errore "NON e' stato possibile creare il punto di ripristino."
-        Write-Info "  Causa: $_"
-        Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
-        Add-Report "Punto di ripristino" "ERRORE"
-    }
-} else {
-    Write-Info "Punto di ripristino saltato."
-    Add-Report "Punto di ripristino" "SALTATO"
-}
-
-Save-Fase 4 "Punto di ripristino"
-}
-
-# (nessuna pausa: si avanza da solo)
-
-# =============================================================================
-# INSTALLAZIONE APP OFFICE: prima si INSTALLA la suite scelta (se manca), poi
-# la schermata dopo la attiva (codice/key). L'account Microsoft, gia' fatto come
-# secondo passo, resta attivo nel browser per il riscatto.
-# =============================================================================
-
-if (Test-FaseFatta 5) { Write-Info "App Office: gia' fatto nella sessione precedente, salto." }
-else {
-
-Write-Titolo "Installazione App Office"
-
-Write-Host "Scegli la suite Office da installare (se manca) e attivare:" -ForegroundColor White
-Write-Host "  1) Microsoft 365 (abbonamento, card PIN) - installa, poi riscatto su microsoft365.com/setup" -ForegroundColor White
-Write-Host "  2) Office perpetuo (Home 2024/2021, card PIN) - installa, poi riscatto su office.com/setup" -ForegroundColor White
-Write-Host "  3) OpenOffice (suite gratuita)" -ForegroundColor White
-Write-Host "  4) LibreOffice (suite gratuita)" -ForegroundColor White
-Write-Host "  5) Salta" -ForegroundColor White
-Write-Host ""
-
-function Get-OsppPath {
-    $percorsi = @(
-        "$env:ProgramFiles\Microsoft Office\Office16\ospp.vbs",
-        "${env:ProgramFiles(x86)}\Microsoft Office\Office16\ospp.vbs"
-    )
-    foreach ($p in $percorsi) { if (Test-Path $p) { return $p } }
-    return $null
-}
-
-# Collegamenti alle app Office sul Desktop: i clienti le cercano li'. Usa
-# WScript.Shell (COM standard, niente P/Invoke: l'antivirus non lo segnala).
-# Crea solo i collegamenti delle app davvero presenti e non gia' esistenti.
-function Add-CollegamentiOffice {
-    $officeDir = @(
-        "$env:ProgramFiles\Microsoft Office\root\Office16",
-        "${env:ProgramFiles(x86)}\Microsoft Office\root\Office16",
-        "$env:ProgramFiles\Microsoft Office\Office16",
-        "${env:ProgramFiles(x86)}\Microsoft Office\Office16"
-    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-    if (-not $officeDir) { Write-Info "Cartella Office non trovata: nessun collegamento sul Desktop."; return }
-    $appOffice = @(
-        @{ Nome = "Word";       Exe = "WINWORD.EXE"  },
-        @{ Nome = "Excel";      Exe = "EXCEL.EXE"    },
-        @{ Nome = "PowerPoint"; Exe = "POWERPNT.EXE" },
-        @{ Nome = "Outlook";    Exe = "OUTLOOK.EXE"  },
-        @{ Nome = "OneNote";    Exe = "ONENOTE.EXE"  }
-    )
-    $desktop = Get-DesktopDir
-    $creati = 0
-    try {
-        $wsh = New-Object -ComObject WScript.Shell
-        foreach ($a in $appOffice) {
-            $exe = Join-Path $officeDir $a.Exe
-            if (-not (Test-Path $exe)) { continue }
-            $lnk = Join-Path $desktop "$($a.Nome).lnk"
-            if (Test-Path $lnk) { continue }
-            $sc = $wsh.CreateShortcut($lnk)
-            $sc.TargetPath = $exe
-            $sc.WorkingDirectory = $officeDir
-            $sc.Save()
-            $creati++
-        }
-    } catch { Write-Info "Collegamenti Office non creati: $_" }
-    if ($creati -gt 0) {
-        Write-OK "Collegamenti sul Desktop: $creati app Office (Word, Excel, ...)."
-        Add-Report "Collegamenti Office sul Desktop ($creati)" "OK"
-    } else {
-        Write-Info "Collegamenti Office: gia' presenti sul Desktop o nessuna app trovata."
-    }
-}
-
-# Domanda ESSENZIALE: dipende dalla card che ha in mano l'operatore, la chiedo
-# SEMPRE. INVIO = Microsoft 365. Metti 5 se il cliente non ha Office da attivare.
-$sceltaAtt = Attendi-Risposta "Scelta (1-5, INVIO = Microsoft 365, 5 = salta)"
-if ($RunReale -and [string]::IsNullOrWhiteSpace($sceltaAtt)) { $sceltaAtt = "1" }
-switch ($sceltaAtt) {
-    "1" {
-        # 1/2: INSTALLAZIONE (se manca). Su molti PC nuovi M365 e' preinstallato:
-        # in quel caso non si tocca nulla e si passa subito all'attivazione.
-        if (Get-OsppPath) {
-            Write-OK "Office gia' installato su questo PC."
-            Add-Report "Microsoft Office (installazione)" "OK"
-        } elseif (Confirm-Winget) {
-            Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
-        } else {
-            Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
-        }
-        Add-CollegamentiOffice
-        # 2/2: ATTIVAZIONE - la schermata dopo: pagina web per il codice di licenza
-        # (l'indirizzo stampato sulla card Microsoft 365 Personal).
-        Start-Process "https://microsoft365.com/setup"
-        Write-OK "Browser aperto su microsoft365.com/setup"
-        Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice grattato sulla card."
-        Add-Report "Microsoft 365 (riscatto card PIN)" "OK"
-    }
-    "3" {
-        if (Confirm-Winget) { Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice" }
-        else { Write-Errore "Winget non disponibile." ; Add-Report "OpenOffice (installazione)" "ERRORE" }
-    }
-    "4" {
-        if (Confirm-Winget) { Installa-Pacchetto -Nome "LibreOffice" -WingetId "TheDocumentFoundation.LibreOffice" }
-        else { Write-Errore "Winget non disponibile." ; Add-Report "LibreOffice (installazione)" "ERRORE" }
-    }
-    "2" {
-        # 1/2: INSTALLAZIONE (se manca). La suite e' la stessa di Microsoft 365:
-        # cambia solo la licenza. Se e' gia' presente non si tocca nulla.
-        if (Get-OsppPath) {
-            Write-OK "Office gia' installato su questo PC."
-            Add-Report "Microsoft Office (installazione)" "OK"
-        } elseif (Confirm-Winget) {
-            Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
-        } else {
-            Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
-        }
-        Add-CollegamentiOffice
-        # 2/2: ATTIVAZIONE. Le card vendute in negozio hanno SEMPRE il PIN da
-        # grattare: si riscatta sul web con l'account Microsoft del cliente.
-        # Quel codice NON va inserito in ospp.vbs (le chiavi retail moderne
-        # sono solo da riscatto), quindi niente domande: si apre la pagina.
-        Start-Process "https://office.com/setup"
-        Write-OK "Browser aperto su office.com/setup (l'indirizzo stampato sulla card)."
-        Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice grattato sulla card."
-        Write-Info "Dopo il riscatto: apri Word e accedi con lo stesso account -> Office si attiva da solo."
-        Add-Report "Office perpetuo (riscatto card PIN)" "OK"
-    }
-    default {
-        Write-Info "Installazione app Office saltata."
-        Add-Report "Installazione app Office" "SALTATO"
-    }
-}
-
-if ($sceltaAtt -match "^[12]$") { Pausa }
-
-Save-Fase 5 "App Office"
-}
-
-# =============================================================================
 # PULIZIA E OTTIMIZZAZIONE INIZIALE - un solo passaggio, una sola domanda:
 #   1/3 rimuove gli antivirus di PROVA (evita conflitti e blocchi)
 #   2/3 rimuove il bloatware + pulisce l'avvio automatico (boot piu' veloce)
 #   3/3 comodita' Windows (estensioni, Questo PC) + disinstalla OneDrive
 # =============================================================================
 
-if (Test-FaseFatta 6) { Write-Info "Pulizia e ottimizzazione: gia' fatto nella sessione precedente, salto." }
+if (Test-FaseFatta 3) { Write-Info "Pulizia e ottimizzazione: gia' fatto nella sessione precedente, salto." }
 else {
 
 Write-Titolo "Pulizia e Ottimizzazione Iniziale"
@@ -2331,7 +1966,372 @@ $bloatwareAppx = @(
     Add-Report "Configurazione Windows base" "SALTATO"
 }
 
-Save-Fase 6 "Pulizia e ottimizzazione"
+Save-Fase 3 "Pulizia e ottimizzazione"
+}
+
+# =============================================================================
+# LINGUA E REGIONE (ITALIANO)
+# =============================================================================
+
+if (Test-FaseFatta 4) { Write-Info "Lingua e regione: gia' fatto nella sessione precedente, salto." }
+else {
+
+Write-Titolo "Lingua e Regione (Italiano)"
+
+Write-Host "Imposta display, tastiera, formati e pacchetto lingua in italiano (it-IT)." -ForegroundColor White
+Write-Host ""
+
+$culturaAttuale = (Get-Culture).Name
+Write-Info "Lingua/regione attuale: $culturaAttuale"
+
+$impostaLingua = Chiedi "Impostare il sistema in Italiano (it-IT)? (S/N)" "S"
+if ($impostaLingua -match "^[Ss]") {
+
+    # Salto il DOWNLOAD del pacchetto SOLO se il DISPLAY e' gia' in italiano
+    # (Get-UICulture). ATTENZIONE: il fatto che it-IT sia "tra le lingue installate"
+    # NON basta - spesso c'e' solo tastiera/regione, ma la TRADUZIONE dei menu (il
+    # Local Experience Pack) manca e l'interfaccia resta inglese. Percio' se il
+    # display non e' ancora italiano, installo il pacchetto ANCHE se it-IT risulta
+    # "presente". Il forzamento qui sotto viene applicato SEMPRE.
+    $displayGiaItaliano = $false
+    try { $displayGiaItaliano = ((Get-UICulture).Name -like 'it*') } catch {}
+
+    # --- 1) LANGUAGE PACK it-IT (Windows 11 22H2+): e' QUESTO (il Local Experience
+    #     Pack) che traduce i MENU. Lo installo se il display non e' gia' italiano. ---
+    $packOk = $false
+    if ($displayGiaItaliano) {
+        Write-OK "Display gia' in italiano: salto il download, applico il forzamento."
+        $packOk = $true
+    } elseif (Get-Command Install-Language -ErrorAction SilentlyContinue) {
+        # Il download del pack fallisce spesso per cali di rete del negozio:
+        # ritento fino a 3 volte e, se la rete e' assente, aspetto che torni.
+        $maxTentLingua = 3
+        for ($tLingua = 1; $tLingua -le $maxTentLingua; $tLingua++) {
+            try {
+                Write-Info "Installazione/applicazione language pack it-IT (qualche minuto, serve Internet)...$(if ($tLingua -gt 1) { " (tentativo $tLingua)" })"
+                Start-BarraAnimata "Installo la lingua italiana (max 8 min)"
+                $timeoutLingua = $false
+                try {
+                    # Eseguo l'installazione in un JOB con TIMEOUT: se si impianta
+                    # (rete filtrata o antivirus che blocca il download), NON lascio
+                    # lo script fermo all'infinito - interrompo e proseguo.
+                    $jobLingua = Start-Job -ScriptBlock {
+                        try { Install-Language it-IT -CopyToSettings -ErrorAction Stop | Out-Null }
+                        catch { Install-Language it-IT -ErrorAction Stop | Out-Null }
+                    }
+                    if (Wait-Job $jobLingua -Timeout 480) {
+                        Receive-Job $jobLingua -ErrorAction SilentlyContinue | Out-Null
+                    } else {
+                        Stop-Job $jobLingua -ErrorAction SilentlyContinue
+                        $timeoutLingua = $true
+                    }
+                    Remove-Job $jobLingua -Force -ErrorAction SilentlyContinue
+                } finally { Stop-BarraAnimata }
+            } catch {}
+            if ($timeoutLingua) {
+                Write-Errore "Installazione lingua troppo lunga (oltre 8 min): interrompo e proseguo."
+                Write-Info "Riprova piu' tardi con una rete pulita (hotspot) o l'antivirus in pausa."
+                break
+            }
+            $packOk = ((Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId -contains "it-IT")
+            if ($packOk) { break }
+            # Non riuscito: se manca la rete, avviso e aspetto che torni, poi ritento.
+            if ($tLingua -lt $maxTentLingua) {
+                if (-not (Test-Rete)) {
+                    Write-Errore "!!  CONNESSIONE ASSENTE  !!  Ricollega il WiFi o il cavo di rete."
+                    Beep-Attesa
+                    $attLingua = 0
+                    while ((-not (Test-Rete)) -and $attLingua -lt 90) { Start-Sleep -Seconds 5; $attLingua += 5 }
+                    if (Test-Rete) { Write-OK "Connessione tornata: riprovo la lingua." }
+                }
+                Write-Info "Riprovo l'installazione della lingua (tentativo $($tLingua + 1) di $maxTentLingua)..."
+                Start-Sleep -Seconds 3
+            }
+        }
+        if (-not $packOk) {
+            Write-Errore "Language pack it-IT NON installato (Internet assente o bloccato)."
+        }
+    } else {
+        Write-Info "Install-Language non c'e' (Windows 10): il pacchetto lingua di visualizzazione va aggiunto a mano."
+        $packDaAggiungere = $true
+    }
+
+    # --- 2) UNA SOLA lingua: ITALIANO. Tolgo l'inglese (e ogni altra) dall'elenco
+    #     preferito, cosi' le parti non ancora tradotte NON cadono sull'inglese:
+    #     era QUESTA la causa del "meta' italiano meta' inglese". Metto anche la
+    #     tastiera italiana. -Force sostituisce l'intero elenco con solo it-IT. ---
+    try {
+        $lista = New-WinUserLanguageList it-IT
+        $lista[0].InputMethodTips.Clear()
+        $lista[0].InputMethodTips.Add("0410:00000410")   # tastiera italiana
+        Set-WinUserLanguageList $lista -Force
+    } catch { Write-Info "Elenco lingue non impostato: $_" }
+
+    # --- 3) Lingua UI (utente + sistema), formati, regione, locale, fuso ---
+    try { Set-WinUILanguageOverride -Language it-IT } catch {}
+    if (Get-Command Set-SystemPreferredUILanguage -ErrorAction SilentlyContinue) {
+        try { Set-SystemPreferredUILanguage it-IT } catch {}
+    }
+    try { Set-Culture it-IT } catch {}
+    try { Set-WinHomeLocation -GeoId 118 } catch {}      # Italia
+    try { Set-WinSystemLocale it-IT } catch {}
+    try { Set-TimeZone -Id "W. Europe Standard Time" -ErrorAction Stop; Write-OK "Fuso orario Italia (CET)." } catch {}
+    # Rinforzo via registro: lingua UI preferita dell'utente = solo it-IT.
+    try { Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'PreferredUILanguages' -Value @('it-IT') -Type MultiString -Force -ErrorAction SilentlyContinue } catch {}
+
+    # --- 4) SOLO ORA propago a schermata di LOGIN e NUOVI UTENTI: cosi' copio la
+    #     configurazione GIA' tutta italiana. (Prima veniva fatto troppo presto,
+    #     copiando ancora l'inglese: ecco perche' login/nuovi utenti restavano
+    #     misti.) ---
+    if (Get-Command Copy-UserInternationalSettingsToSystem -ErrorAction SilentlyContinue) {
+        try { Copy-UserInternationalSettingsToSystem -WelcomeScreen $true -NewUser $true } catch {}
+    }
+
+    # --- Esito CHIARO: se il pack non c'e', l'utente deve sapere PERCHE' resta inglese ---
+    if ($packOk) {
+        Write-OK "Italiano forzato ovunque (solo it-IT, niente inglese di riserva): display,"
+        Write-OK "tastiera, formati, login e nuovi utenti. Attivo del tutto dopo il RIAVVIO."
+        Add-Report "Lingua italiana (it-IT, forzata)" "OK"
+    } elseif ($packDaAggiungere) {
+        Write-Info "Tastiera e formati in italiano OK. L'INTERFACCIA resta inglese: su Windows 10 va aggiunto il pacchetto lingua a mano."
+        Add-Report "Lingua italiana (display da completare)" "AVVISO"
+    } else {
+        Write-Errore "Tastiera/formati OK, ma il LANGUAGE PACK non si e' installato: l'interfaccia resta in INGLESE."
+        Write-Errore "Causa tipica: Internet assente/bloccato durante l'installazione. Controlla la rete e rilancia lo step lingua."
+        Add-Report "Lingua italiana (pack mancante)" "AVVISO"
+    }
+    Write-Info "Display e schermata di login in italiano si vedono dopo il RIAVVIO del PC."
+
+    # --- 5) Windows 10: il pacchetto lingua (display) va aggiunto a mano ---
+    if ($packDaAggiungere) {
+        Write-Info "Su Windows 10 il pacchetto della lingua di visualizzazione va aggiunto a mano."
+        $apriImp = Chiedi "Aprire ora Impostazioni lingua per aggiungere/verificare l'Italiano? (S/N)" "N"
+        if ($apriImp -match "^[Ss]") {
+            Start-Process "ms-settings:regionlanguage"
+            Write-Info "In Impostazioni: aggiungi 'Italiano (Italia)', impostalo come lingua di"
+            Write-Info "  visualizzazione e scarica il pacchetto lingua. Poi torna qui."
+            Pausa
+        }
+    }
+} else {
+    Write-Info "Impostazione lingua saltata."
+    Add-Report "Lingua italiana (it-IT)" "SALTATO"
+}
+
+Save-Fase 4 "Lingua e regione"
+}
+
+# (nessuna pausa: si avanza da solo, come nel wizard)
+
+# =============================================================================
+# PUNTO DI RIPRISTINO (rete di sicurezza prima delle modifiche)
+# =============================================================================
+
+if (Test-FaseFatta 5) { Write-Info "Punto di ripristino: gia' fatto nella sessione precedente, salto." }
+elseif ($skipRestore) {
+    Write-Info "Punto di ripristino saltato (flag -skipRestore)."
+    Add-Report "Punto di ripristino" "SALTATO"
+    Save-Fase 5 "Punto di ripristino"
+} else {
+
+Write-Titolo "Punto di Ripristino"
+
+Write-Host "Crea un punto di ripristino: se qualcosa va storto puoi tornare indietro." -ForegroundColor White
+Write-Host ""
+Write-Host "  Rispondi S per crearlo (consigliato) oppure N per saltare, poi premi INVIO." -ForegroundColor Gray
+
+# Chiedi/Read-Host accettano SOLO input da tastiera (niente finestra GUI con
+# pulsanti): la conferma si da' scrivendo S o N e premendo INVIO. Enter senza
+# testo = S (predefinito, come indicato in "consigliato").
+$vuoiRestore = Chiedi "Creare un punto di ripristino ora? (consigliato) (S/N)" "S"
+if (($vuoiRestore -match "^[Ss]") -or ($vuoiRestore.Trim() -eq '')) {
+    try {
+        Enable-ComputerRestore -Drive "$env:SystemDrive\" -ErrorAction SilentlyContinue
+        # Rimuove il limite di 1 punto ogni 24h, solo per crearne uno adesso
+        New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" `
+            -Name "SystemRestorePointCreationFrequency" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
+        Write-Info "Creazione punto di ripristino (puo' richiedere un minuto)..."
+        Start-BarraAnimata "Creo il punto di ripristino"
+        # Checkpoint-Computer su PC piu' lenti (o se VSS resta in attesa) puo'
+        # restare bloccato a lungo: lo eseguo in un job con TIME-OUT, cosi' lo
+        # script non resta mai incastrato su questo passo.
+        $job = $null
+        try {
+            $job = Start-Job -ScriptBlock {
+                param($d, $desc)
+                try { Checkpoint-Computer -Description $desc -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop; return 0 }
+                catch { return 1 }
+            } -ArgumentList "$env:SystemDrive\", "Prima di setup-pc"
+            if (-not (Wait-Job $job -Timeout 90)) {
+                Stop-Job $job
+                Write-Errore "Creazione del punto di ripristino in timeout dopo 90 secondi: salto."
+                Add-Report "Punto di ripristino" "ERRORE"
+            } elseif ((Receive-Job $job) -eq 0) {
+                Write-OK "Punto di ripristino creato."
+                Add-Report "Punto di ripristino" "OK"
+            } else {
+                Write-Errore "NON e' stato possibile creare il punto di ripristino."
+                Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
+                Add-Report "Punto di ripristino" "ERRORE"
+            }
+        } catch {
+            Write-Errore "NON e' stato possibile creare il punto di ripristino."
+            Write-Info "  Causa: $_"
+            Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
+            Add-Report "Punto di ripristino" "ERRORE"
+        } finally {
+            if ($job) { Remove-Job $job -Force -ErrorAction SilentlyContinue }
+            Stop-BarraAnimata
+        }
+    } catch {
+        Write-Errore "NON e' stato possibile creare il punto di ripristino."
+        Write-Info "  Causa: $_"
+        Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
+        Add-Report "Punto di ripristino" "ERRORE"
+    }
+} else {
+    Write-Info "Punto di ripristino saltato."
+    Add-Report "Punto di ripristino" "SALTATO"
+}
+
+Save-Fase 5 "Punto di ripristino"
+}
+
+# (nessuna pausa: si avanza da solo)
+
+# =============================================================================
+# INSTALLAZIONE APP OFFICE: prima si INSTALLA la suite scelta (se manca), poi
+# la schermata dopo la attiva (codice/key). L'account Microsoft, gia' fatto come
+# secondo passo, resta attivo nel browser per il riscatto.
+# =============================================================================
+
+if (Test-FaseFatta 6) { Write-Info "App Office: gia' fatto nella sessione precedente, salto." }
+else {
+
+Write-Titolo "Installazione App Office"
+
+Write-Host "Scegli la suite Office da installare (se manca) e attivare:" -ForegroundColor White
+Write-Host "  1) Microsoft 365 (abbonamento, card PIN) - installa, poi riscatto su microsoft365.com/setup" -ForegroundColor White
+Write-Host "  2) Office perpetuo (Home 2024/2021, card PIN) - installa, poi riscatto su office.com/setup" -ForegroundColor White
+Write-Host "  3) OpenOffice (suite gratuita)" -ForegroundColor White
+Write-Host "  4) LibreOffice (suite gratuita)" -ForegroundColor White
+Write-Host "  5) Salta" -ForegroundColor White
+Write-Host ""
+
+function Get-OsppPath {
+    $percorsi = @(
+        "$env:ProgramFiles\Microsoft Office\Office16\ospp.vbs",
+        "${env:ProgramFiles(x86)}\Microsoft Office\Office16\ospp.vbs"
+    )
+    foreach ($p in $percorsi) { if (Test-Path $p) { return $p } }
+    return $null
+}
+
+# Collegamenti alle app Office sul Desktop: i clienti le cercano li'. Usa
+# WScript.Shell (COM standard, niente P/Invoke: l'antivirus non lo segnala).
+# Crea solo i collegamenti delle app davvero presenti e non gia' esistenti.
+function Add-CollegamentiOffice {
+    $officeDir = @(
+        "$env:ProgramFiles\Microsoft Office\root\Office16",
+        "${env:ProgramFiles(x86)}\Microsoft Office\root\Office16",
+        "$env:ProgramFiles\Microsoft Office\Office16",
+        "${env:ProgramFiles(x86)}\Microsoft Office\Office16"
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $officeDir) { Write-Info "Cartella Office non trovata: nessun collegamento sul Desktop."; return }
+    $appOffice = @(
+        @{ Nome = "Word";       Exe = "WINWORD.EXE"  },
+        @{ Nome = "Excel";      Exe = "EXCEL.EXE"    },
+        @{ Nome = "PowerPoint"; Exe = "POWERPNT.EXE" },
+        @{ Nome = "Outlook";    Exe = "OUTLOOK.EXE"  },
+        @{ Nome = "OneNote";    Exe = "ONENOTE.EXE"  }
+    )
+    $desktop = Get-DesktopDir
+    $creati = 0
+    try {
+        $wsh = New-Object -ComObject WScript.Shell
+        foreach ($a in $appOffice) {
+            $exe = Join-Path $officeDir $a.Exe
+            if (-not (Test-Path $exe)) { continue }
+            $lnk = Join-Path $desktop "$($a.Nome).lnk"
+            if (Test-Path $lnk) { continue }
+            $sc = $wsh.CreateShortcut($lnk)
+            $sc.TargetPath = $exe
+            $sc.WorkingDirectory = $officeDir
+            $sc.Save()
+            $creati++
+        }
+    } catch { Write-Info "Collegamenti Office non creati: $_" }
+    if ($creati -gt 0) {
+        Write-OK "Collegamenti sul Desktop: $creati app Office (Word, Excel, ...)."
+        Add-Report "Collegamenti Office sul Desktop ($creati)" "OK"
+    } else {
+        Write-Info "Collegamenti Office: gia' presenti sul Desktop o nessuna app trovata."
+    }
+}
+
+# Domanda ESSENZIALE: dipende dalla card che ha in mano l'operatore, la chiedo
+# SEMPRE. INVIO = Microsoft 365. Metti 5 se il cliente non ha Office da attivare.
+$sceltaAtt = Attendi-Risposta "Scelta (1-5, INVIO = Microsoft 365, 5 = salta)"
+if ($RunReale -and [string]::IsNullOrWhiteSpace($sceltaAtt)) { $sceltaAtt = "1" }
+switch ($sceltaAtt) {
+    "1" {
+        # 1/2: INSTALLAZIONE (se manca). Su molti PC nuovi M365 e' preinstallato:
+        # in quel caso non si tocca nulla e si passa subito all'attivazione.
+        if (Get-OsppPath) {
+            Write-OK "Office gia' installato su questo PC."
+            Add-Report "Microsoft Office (installazione)" "OK"
+        } elseif (Confirm-Winget) {
+            Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
+        } else {
+            Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
+        }
+        Add-CollegamentiOffice
+        # 2/2: ATTIVAZIONE - la schermata dopo: pagina web per il codice di licenza
+        # (l'indirizzo stampato sulla card Microsoft 365 Personal).
+        Start-Process "https://microsoft365.com/setup"
+        Write-OK "Browser aperto su microsoft365.com/setup"
+        Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice grattato sulla card."
+        Add-Report "Microsoft 365 (riscatto card PIN)" "OK"
+    }
+    "3" {
+        if (Confirm-Winget) { Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice" }
+        else { Write-Errore "Winget non disponibile." ; Add-Report "OpenOffice (installazione)" "ERRORE" }
+    }
+    "4" {
+        if (Confirm-Winget) { Installa-Pacchetto -Nome "LibreOffice" -WingetId "TheDocumentFoundation.LibreOffice" }
+        else { Write-Errore "Winget non disponibile." ; Add-Report "LibreOffice (installazione)" "ERRORE" }
+    }
+    "2" {
+        # 1/2: INSTALLAZIONE (se manca). La suite e' la stessa di Microsoft 365:
+        # cambia solo la licenza. Se e' gia' presente non si tocca nulla.
+        if (Get-OsppPath) {
+            Write-OK "Office gia' installato su questo PC."
+            Add-Report "Microsoft Office (installazione)" "OK"
+        } elseif (Confirm-Winget) {
+            Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
+        } else {
+            Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
+        }
+        Add-CollegamentiOffice
+        # 2/2: ATTIVAZIONE. Le card vendute in negozio hanno SEMPRE il PIN da
+        # grattare: si riscatta sul web con l'account Microsoft del cliente.
+        # Quel codice NON va inserito in ospp.vbs (le chiavi retail moderne
+        # sono solo da riscatto), quindi niente domande: si apre la pagina.
+        Start-Process "https://office.com/setup"
+        Write-OK "Browser aperto su office.com/setup (l'indirizzo stampato sulla card)."
+        Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice grattato sulla card."
+        Write-Info "Dopo il riscatto: apri Word e accedi con lo stesso account -> Office si attiva da solo."
+        Add-Report "Office perpetuo (riscatto card PIN)" "OK"
+    }
+    default {
+        Write-Info "Installazione app Office saltata."
+        Add-Report "Installazione app Office" "SALTATO"
+    }
+}
+
+if ($sceltaAtt -match "^[12]$") { Pausa }
+
+Save-Fase 6 "App Office"
 }
 
 # =============================================================================
