@@ -24,7 +24,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "10.2 (2026-08-14)"
+$SCRIPT_VERSION = "10.3 (2026-08-14)"
 
 # Versione SEMPRE VISIBILE: la scrivo nella barra del titolo della finestra, che
 # resta a video in QUALSIASI schermata (a differenza dell'header, che scorre via).
@@ -500,6 +500,10 @@ $credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
 # ricordo nel checkpoint, cosi' su una ripresa il riepilogo mostra il provider
 # GIUSTO (es. Proton) e non ripiega su Microsoft/outlook.it.
 $Global:credProvider = ""; $Global:credDominio = ""
+# Job in background per il DOWNLOAD degli aggiornamenti di Windows: parte durante
+# il passo Aggiornamenti e scarica mentre lo script prosegue; l'installazione
+# vera avviene alla fine, giusto prima del riavvio (che la finalizza).
+$Global:JobWinUpdate = $null
 
 # Contatore app che NON si sono installate (per l'avviso rete a fine passo App).
 $Global:AppFallite = 0
@@ -2795,51 +2799,36 @@ if ($vuoiUpgrade -match "^[Ss]") {
         Add-Report "Aggiornamento app installate" "ERRORE"
     }
 
-    # 2) AGGIORNAMENTI DI SICUREZZA DI WINDOWS (COM Microsoft.Update, come i driver).
-    # Solo aggiornamenti SOFTWARE non installati (i driver hanno il loro passo). Salto
-    # quelli che chiederebbero conferme all'utente e accetto le licenze in automatico.
+    # 2) AGGIORNAMENTI DI SICUREZZA DI WINDOWS - in BACKGROUND.
+    # Invece di scaricarli e installarli QUI (bloccando per minuti), avvio un job
+    # che li SCARICA in background: lo script prosegue subito con driver/antivirus.
+    # L'installazione vera la faccio ALLA FINE, appena prima del riavvio (cosi' non
+    # gira insieme all'installazione dei driver, che usa lo stesso motore Windows
+    # Update), e il riavvio la finalizza. Scarico solo aggiornamenti SOFTWARE che
+    # non chiedono conferme; i driver hanno il loro passo.
     Write-Host ""
+    Write-Info "Aggiornamenti di Windows: li SCARICO in background mentre proseguo."
     try {
-        Write-Info "Ricerca aggiornamenti di Windows (puo' richiedere diversi minuti)..."
-        Start-BarraAnimata "Cerco gli aggiornamenti di Windows"
-        try {
-            $sessWU     = New-Object -ComObject Microsoft.Update.Session
-            $searcherWU = $sessWU.CreateUpdateSearcher()
-            $resWU      = $searcherWU.Search("IsInstalled=0 and Type='Software' and IsHidden=0")
-        } finally { Stop-BarraAnimata }
-        $updWU = New-Object -ComObject Microsoft.Update.UpdateColl
-        foreach ($u in $resWU.Updates) {
-            # Salto quelli che richiederebbero input dell'utente (setup interattivi)
-            if ($u.InstallationBehavior -and $u.InstallationBehavior.CanRequestUserInput) { continue }
-            if (-not $u.EulaAccepted) { try { $u.AcceptEula() } catch {} }
-            Write-Info "Aggiornamento: $($u.Title)"
-            $updWU.Add($u) | Out-Null
-        }
-        if ($updWU.Count -eq 0) {
-            Write-OK "Windows e' gia' aggiornato: nessun aggiornamento da installare."
-            Add-Report "Aggiornamenti di sicurezza Windows" "OK"
-        } else {
-            Write-Info "Download di $($updWU.Count) aggiornamenti..."
-            Start-BarraAnimata "Scarico gli aggiornamenti di Windows"
+        $Global:JobWinUpdate = Start-Job -ScriptBlock {
             try {
-                $dlWU = $sessWU.CreateUpdateDownloader(); $dlWU.Updates = $updWU; $dlWU.Download() | Out-Null
-            } finally { Stop-BarraAnimata }
-            Write-Info "Installazione aggiornamenti (non spegnere il PC)..."
-            Start-BarraAnimata "Installo gli aggiornamenti di Windows"
-            try {
-                $inWU = $sessWU.CreateUpdateInstaller(); $inWU.Updates = $updWU; $esitoWU = $inWU.Install()
-            } finally { Stop-BarraAnimata }
-            if ($esitoWU.ResultCode -eq 2) {
-                Write-OK "Aggiornamenti di Windows installati ($($updWU.Count))."
-                Add-Report "Aggiornamenti di sicurezza Windows ($($updWU.Count))" "OK"
-            } else {
-                Write-Info "Installazione conclusa (codice $($esitoWU.ResultCode)): alcuni si completano al riavvio."
-                Add-Report "Aggiornamenti di sicurezza Windows" "AVVISO"
-            }
-            if ($esitoWU.RebootRequired) { Write-Info "Alcuni aggiornamenti richiedono un RIAVVIO per completare." }
+                $s    = New-Object -ComObject Microsoft.Update.Session
+                $res  = $s.CreateUpdateSearcher().Search("IsInstalled=0 and Type='Software' and IsHidden=0")
+                $coll = New-Object -ComObject Microsoft.Update.UpdateColl
+                foreach ($u in $res.Updates) {
+                    if ($u.InstallationBehavior -and $u.InstallationBehavior.CanRequestUserInput) { continue }
+                    if (-not $u.EulaAccepted) { try { $u.AcceptEula() } catch {} }
+                    $coll.Add($u) | Out-Null
+                }
+                if ($coll.Count -gt 0) {
+                    $dl = $s.CreateUpdateDownloader(); $dl.Updates = $coll; $dl.Download() | Out-Null
+                }
+                return $coll.Count
+            } catch { return -1 }
         }
+        Write-OK "Download aggiornamenti Windows avviato in background."
+        Add-Report "Aggiornamenti Windows (scaricati in background)" "OK"
     } catch {
-        Write-Errore "Aggiornamenti di Windows non riusciti: $_"
+        Write-Errore "Impossibile avviare gli aggiornamenti di Windows: $_"
         Add-Report "Aggiornamenti di sicurezza Windows" "ERRORE"
     }
 } else {
@@ -3349,6 +3338,37 @@ if ($RunReale) {
         try { Remove-Item -LiteralPath $ioStesso -Force -ErrorAction SilentlyContinue } catch {}
     }
     Write-OK "Pulizia finale: PC Facile rimosso dal PC (il report resta sul Desktop)."
+}
+
+# AGGIORNAMENTI WINDOWS: erano in DOWNLOAD in background. Ora (dopo driver e
+# antivirus, cosi' non c'e' un'altra installazione Windows Update in corso) li
+# INSTALLO, poi il riavvio finale li finalizza ("Configurazione aggiornamenti").
+if ($RunReale -and $Global:JobWinUpdate) {
+    Write-Host ""
+    Write-Info "Completo il download degli aggiornamenti di Windows (avviato prima in background)..."
+    Start-BarraAnimata "Aggiornamenti Windows: completo il download"
+    try { Wait-Job $Global:JobWinUpdate -Timeout 600 | Out-Null } catch {} finally { Stop-BarraAnimata }
+    $nWU = 0; try { $nWU = [int](Receive-Job $Global:JobWinUpdate -ErrorAction SilentlyContinue | Select-Object -Last 1) } catch {}
+    Stop-Job $Global:JobWinUpdate -ErrorAction SilentlyContinue
+    Remove-Job $Global:JobWinUpdate -Force -ErrorAction SilentlyContinue
+    if ($nWU -gt 0) {
+        Write-Info "Installo gli aggiornamenti scaricati (si completano al riavvio)..."
+        Start-BarraAnimata "Installo gli aggiornamenti di Windows"
+        try {
+            $sFin = New-Object -ComObject Microsoft.Update.Session
+            $rFin = $sFin.CreateUpdateSearcher().Search("IsInstalled=0 and Type='Software' and IsHidden=0")
+            $cFin = New-Object -ComObject Microsoft.Update.UpdateColl
+            foreach ($u in $rFin.Updates) {
+                if ($u.InstallationBehavior -and $u.InstallationBehavior.CanRequestUserInput) { continue }
+                if (-not $u.EulaAccepted) { try { $u.AcceptEula() } catch {} }
+                if ($u.IsDownloaded) { $cFin.Add($u) | Out-Null }
+            }
+            if ($cFin.Count -gt 0) { $iFin = $sFin.CreateUpdateInstaller(); $iFin.Updates = $cFin; $iFin.Install() | Out-Null }
+        } catch {} finally { Stop-BarraAnimata }
+        Write-OK "Aggiornamenti di Windows applicati: il riavvio li completa."
+    } else {
+        Write-OK "Windows e' gia' aggiornato (nessun aggiornamento da installare)."
+    }
 }
 
 # RIAVVIO FINALE: sempre proposto (e sempre CHIESTO, anche nel flusso automatico).
