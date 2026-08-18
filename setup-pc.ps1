@@ -24,7 +24,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "10.1 (2026-08-14)"
+$SCRIPT_VERSION = "10.2 (2026-08-14)"
 
 # Versione SEMPRE VISIBILE: la scrivo nella barra del titolo della finestra, che
 # resta a video in QUALSIASI schermata (a differenza dell'header, che scorre via).
@@ -496,6 +496,10 @@ trap {
 # Microsoft e scritte nel riepilogo. Init qui cosi' esistono anche se quel
 # passo viene saltato (restano vuote nel file).
 $credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
+# Provider account scelto (Microsoft/Google/Proton/Outlook) + dominio email: li
+# ricordo nel checkpoint, cosi' su una ripresa il riepilogo mostra il provider
+# GIUSTO (es. Proton) e non ripiega su Microsoft/outlook.it.
+$Global:credProvider = ""; $Global:credDominio = ""
 
 # Contatore app che NON si sono installate (per l'avviso rete a fine passo App).
 $Global:AppFallite = 0
@@ -528,11 +532,23 @@ function Save-Fase {
     try {
         $dir = Split-Path $Global:StatoFile
         if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
+        # PRESERVO i valori gia' salvati se quelli correnti sono vuoti (es. dopo
+        # una ripresa in cui il passo Account e' stato saltato): altrimenti un
+        # Save-Fase di un passo successivo azzererebbe credenziali/provider gia'
+        # registrati (era la causa di email/provider sbagliati nel riepilogo).
+        $prev = $null
+        if (Test-Path $Global:StatoFile) { try { $prev = Get-Content $Global:StatoFile -Raw | ConvertFrom-Json } catch {} }
+        $nc  = if ($nomeCliente)         { $nomeCliente }         elseif ($prev) { $prev.NomeCliente } else { "" }
+        $ca  = if ($credMsAccount)       { $credMsAccount }       elseif ($prev) { $prev.CredAccount } else { "" }
+        $cp  = if ($credMsPassword)      { $credMsPassword }      elseif ($prev) { $prev.CredPassword } else { "" }
+        $cpr = if ($Global:credProvider) { $Global:credProvider } elseif ($prev -and $prev.PSObject.Properties.Name -contains 'CredProvider') { $prev.CredProvider } else { "" }
+        $cdo = if ($Global:credDominio)  { $Global:credDominio }  elseif ($prev -and $prev.PSObject.Properties.Name -contains 'CredDominio')  { $prev.CredDominio } else { "" }
         [pscustomobject]@{
             Fase = $Fase; FaseNome = $Nome
             Data = (Get-Date -Format 'dd/MM/yyyy HH:mm')
-            NomeCliente = $nomeCliente
-            CredAccount = $credMsAccount; CredPassword = $credMsPassword
+            NomeCliente = $nc
+            CredAccount = $ca; CredPassword = $cp
+            CredProvider = $cpr; CredDominio = $cdo
         } | ConvertTo-Json | Set-Content -Path $Global:StatoFile -Encoding UTF8
     } catch {}
 }
@@ -554,6 +570,7 @@ function Save-AppProgresso {
             Data = (Get-Date -Format 'dd/MM/yyyy HH:mm')
             NomeCliente = $nomeCliente
             CredAccount = $credMsAccount; CredPassword = $credMsPassword
+            CredProvider = $Global:credProvider; CredDominio = $Global:credDominio
             AppProfilo = $Profilo
             AppLista   = @($Lista)
             AppFatte   = @($Fatte)
@@ -1154,6 +1171,19 @@ function Add-IconaDesktop {
             } else {
                 $sc.TargetPath = "$env:WINDIR\explorer.exe"
                 $sc.Arguments  = "shell:AppsFolder\$($app.AppID)"
+                # Senza icona esplicita, un collegamento ad explorer mostra l'icona
+                # di una CARTELLA (era il caso di WhatsApp). Punto l'icona all'exe
+                # dentro il pacchetto Store, cosi' si vede il logo vero dell'app.
+                try {
+                    $pfn = ($app.AppID -split '!')[0]
+                    $pkg = Get-AppxPackage -ErrorAction SilentlyContinue | Where-Object { $_.PackageFamilyName -eq $pfn } | Select-Object -First 1
+                    if ($pkg -and $pkg.InstallLocation -and (Test-Path $pkg.InstallLocation)) {
+                        $ico = Get-ChildItem -Path $pkg.InstallLocation -Filter *.exe -Recurse -ErrorAction SilentlyContinue |
+                               Where-Object { $_.Name -notmatch 'vcredist|helper|update|crash|notification|background' } |
+                               Sort-Object Length -Descending | Select-Object -First 1
+                        if ($ico) { $sc.IconLocation = "$($ico.FullName),0" }
+                    }
+                } catch {}
             }
             $sc.Save()
         }
@@ -1408,6 +1438,8 @@ if ($RunReale) {
                 if ($st.NomeCliente)  { $nomeCliente    = [string]$st.NomeCliente }
                 if ($st.CredAccount)  { $credMsAccount  = [string]$st.CredAccount }
                 if ($st.CredPassword) { $credMsPassword = [string]$st.CredPassword }
+                if ($st.PSObject.Properties.Name -contains 'CredProvider' -and $st.CredProvider) { $Global:credProvider = [string]$st.CredProvider }
+                if ($st.PSObject.Properties.Name -contains 'CredDominio'  -and $st.CredDominio)  { $Global:credDominio  = [string]$st.CredDominio }
                 # Ripresa FINE del passo App: se la sessione si e' chiusa a meta'
                 # dell'installazione app, recupero profilo + piano + app gia' fatte,
                 # cosi' non richiedo il profilo e riparto dall'app esatta rimasta.
@@ -1598,6 +1630,9 @@ $prov = switch -Regex ($sceltaAcc) {
 }
 
 if ($prov) {
+    # Ricordo il provider scelto (nome + dominio) per il riepilogo e la ripresa.
+    $Global:credProvider = $prov.Nome
+    $Global:credDominio  = $prov.Dominio
     Start-Process $prov.Url
     Write-OK "Aperto $($prov.Url) nel browser ($($prov.Nome))."
     if ($prov.Nome -ne "Microsoft") {
@@ -3029,7 +3064,12 @@ if ($RunReale) {
     # standard "Nome123!" (prima lettera maiuscola) - la stessa che si usa in
     # negozio. Idem per l'email suggerita se manca del tutto.
     if (-not $credMsPassword -and $nomeCliente) { $credMsPassword = New-PasswordCliente -Base $nomeCliente }
-    if (-not $credMsAccount  -and $nomeCliente) { $credMsAccount  = New-EmailCliente   -Base $nomeCliente }
+    if (-not $credMsAccount  -and $nomeCliente) {
+        # Uso il DOMINIO del provider scelto (es. proton.me), non il default, cosi'
+        # l'email suggerita e' coerente con l'account creato dal cliente.
+        $domRete = if ($Global:credDominio) { $Global:credDominio } else { "outlook.it" }
+        $credMsAccount = New-EmailCliente -Base $nomeCliente -Dominio $domRete
+    }
     try {
         $winOk   = @($Report | Where-Object { $_.Voce -eq 'Windows attivato' -and $_.Esito -eq 'OK' }).Count -gt 0
         $diskBad = @($Report | Where-Object { $_.Voce -eq 'Salute disco' -and $_.Esito -eq 'ERRORE' }).Count -gt 0
@@ -3084,7 +3124,7 @@ if ($RunReale) {
         #     dedicato. Ordine: account principale, poi Cyber Protection /
         #     antivirus attivati in questa sessione. ===
         $blank = "______________________________"
-        $provNome = if ($prov) { $prov.Nome } else { "Microsoft" }
+        $provNome = if ($Global:credProvider) { $Global:credProvider } elseif ($prov) { $prov.Nome } else { "Microsoft" }
         $credList = @()
         $credList += [pscustomobject]@{
             Servizio = "ACCOUNT PRINCIPALE ($provNome)"
@@ -3235,24 +3275,8 @@ if ($RunReale) {
         $riepFile = Join-Path (Get-DesktopDir) ("$nomeFile.txt")
         $f | Set-Content -Path $riepFile -Encoding UTF8
         Write-OK "Riepilogo salvato sul Desktop: $riepFile"
-
-        # FILE CREDENZIALI DEDICATO (oltre al riepilogo): solo gli account, cosi'
-        # e' comodo da consultare e consegnare. Anche questo sul Desktop.
-        try {
-            $cf = @()
-            $cf += "CREDENZIALI - $(if ($nomeCliente) { $nomeCliente } else { 'cliente' })"
-            $cf += "Data: $(Get-Date -Format 'dd/MM/yyyy HH:mm')    PC: $env:COMPUTERNAME"
-            $cf += ""
-            $cf += $credBlocco
-            $cf += ""
-            $cf += "------------------------------------------------------------"
-            $cf += "ATTENZIONE: contiene password in chiaro. Consegna al cliente."
-            $credNomeFile = if ($nomeCliente) { "Credenziali - $nomeCliente" } else { "Credenziali" }
-            $credNomeFile = ($credNomeFile -replace '[\\/:*?"<>|]', '').Trim()
-            $credFile = Join-Path (Get-DesktopDir) ("$credNomeFile.txt")
-            $cf | Set-Content -Path $credFile -Encoding UTF8
-            Write-OK "Credenziali salvate sul Desktop: $credFile"
-        } catch { Write-Info "File credenziali non salvato: $_" }
+        # UN SOLO file sul Desktop: il riepilogo qui sopra ha gia' le credenziali
+        # IN CIMA, quindi non creo piu' il file "Credenziali - ..." separato.
 
         # ---------------------------------------------------------------------
         # LOG STRUTTURATO (JSON + CSV) per l'assistenza/statistiche. NON sul
@@ -3331,18 +3355,21 @@ if ($RunReale) {
 # Serve per applicare del tutto lingua italiana, barra, impostazioni nuovi utenti.
 if ($RunReale) {
     $linguaOk = @($Report | Where-Object { $_.Voce -like "Lingua italiana (it-IT*" -and $_.Esito -eq "OK" }).Count -gt 0
-    Write-Host ""
+    Write-Titolo "ULTIMO PASSO: RIAVVIO"
+    Write-Host "Ho finito TUTTO (pulizia, lingua, app, aggiornamenti, driver, antivirus)." -ForegroundColor White
+    Write-Host "Manca solo UN riavvio, l'ultimo, per rendere effettivo il lavoro:" -ForegroundColor White
     if ($linguaOk) {
-        Write-Info "Serve un RIAVVIO per vedere l'interfaccia in ITALIANO (menu, barra, login)."
-    } else {
-        Write-Info "Un RIAVVIO applica del tutto le impostazioni fatte (barra, regione, nuovi utenti)."
+        Write-Host "  - fa comparire l'interfaccia in ITALIANO (menu, barra, schermata di accesso)" -ForegroundColor White
     }
-    $riavvia = Attendi-Risposta "Riavviare il PC ORA? (S = riavvia adesso / N = riavvio dopo)"
+    Write-Host "  - applica barra, regione e impostazioni per i nuovi utenti" -ForegroundColor White
+    Write-Host "Dopo questo riavvio il PC e' PRONTO da consegnare: non serve riaprire PC Facile." -ForegroundColor White
+    Write-Host ""
+    $riavvia = Attendi-Risposta "Riavvio ADESSO il PC? (S = riavvia ora / N = riavvio io dopo)"
     if ($riavvia -match "^[Ss]") {
         Write-Info "Riavvio in corso..."
         Restart-Computer -Force
     } else {
-        Write-Info "Ricordati di RIAVVIARE il PC prima di consegnarlo (serve per l'italiano)."
+        Write-Errore "RICORDATI di RIAVVIARE il PC prima di consegnarlo: senza riavvio la lingua e alcune impostazioni non si vedono."
     }
 }
 
