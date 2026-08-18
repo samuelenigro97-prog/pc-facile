@@ -24,7 +24,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "9.4 (2026-08-14)"
+$SCRIPT_VERSION = "9.5 (2026-08-14)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -1655,21 +1655,21 @@ Write-Info "Lingua/regione attuale: $culturaAttuale"
 $impostaLingua = Chiedi "Impostare il sistema in Italiano (it-IT)? (S/N)" "S"
 if ($impostaLingua -match "^[Ss]") {
 
-    # Skip intelligente: se il PC e' GIA' in italiano (interfaccia + pacchetto),
-    # non rifaccio nulla e vado avanti.
+    # Se il pacchetto italiano c'e' GIA', salto solo il DOWNLOAD lento del pack,
+    # ma APPLICO COMUNQUE il forzamento qui sotto (solo it-IT, regione, login,
+    # nuovi utenti): e' proprio QUESTO che ripulisce i residui inglese/UK anche
+    # sui PC che risultano gia' "italiani". (Prima si saltava tutto il passo e i
+    # menu restavano meta' inglesi.)
     $giaItaliano = $false
-    try { $giaItaliano = ((Get-UICulture).Name -like 'it*') -and ((Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId -contains 'it-IT') } catch {}
-    if ($giaItaliano) {
-        Write-OK "Il PC risulta gia' in italiano: salto questo passo (niente da rifare)."
-        Add-Report "Lingua italiana (gia' impostata)" "OK"
-    } else {
+    try { $giaItaliano = ((Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId -contains 'it-IT') } catch {}
 
-    # --- 1) LANGUAGE PACK it-IT PRIMA di tutto (Windows 11 22H2+). E' QUESTO che
-    #     rende l'INTERFACCIA in italiano; senza, cambiano solo tastiera/formati e
-    #     l'UI resta inglese. -CopyToSettings applica il pack a utente + login +
-    #     nuovi utenti in un colpo (il modo affidabile). Serve Internet. ---
+    # --- 1) LANGUAGE PACK it-IT (Windows 11 22H2+): e' QUESTO che rende
+    #     l'INTERFACCIA italiana. Se c'e' gia', non lo riscarico. ---
     $packOk = $false
-    if (Get-Command Install-Language -ErrorAction SilentlyContinue) {
+    if ($giaItaliano) {
+        Write-OK "Pacchetto italiano gia' presente: salto il download, applico il forzamento."
+        $packOk = $true
+    } elseif (Get-Command Install-Language -ErrorAction SilentlyContinue) {
         # Il download del pack fallisce spesso per cali di rete del negozio:
         # ritento fino a 3 volte e, se la rete e' assente, aspetto che torni.
         $maxTentLingua = 3
@@ -1766,7 +1766,6 @@ if ($impostaLingua -match "^[Ss]") {
             Write-Info "  visualizzazione e scarica il pacchetto lingua. Poi torna qui."
             Pausa
         }
-    }
     }
 } else {
     Write-Info "Impostazione lingua saltata."
