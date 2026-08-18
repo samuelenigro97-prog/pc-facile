@@ -24,7 +24,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "9.6 (2026-08-14)"
+$SCRIPT_VERSION = "9.7 (2026-08-14)"
 
 # Simboli di stato e grafica costruiti a runtime con [char]: NON dipendono
 # dall'encoding con cui PowerShell legge questo file (5.1 senza BOM li
@@ -1392,6 +1392,7 @@ if ($RunReale) {
         if (Test-Path $Global:StatoFile) {
             $st = Get-Content $Global:StatoFile -Raw -ErrorAction Stop | ConvertFrom-Json
             Write-Titolo "Sessione precedente trovata"
+            Write-Host "  VERSIONE PROGRAMMA      : $SCRIPT_VERSION" -ForegroundColor $THEME_COL
             Write-Host "  Interrotta il           : $($st.Data)" -ForegroundColor White
             Write-Host "  Ultimo passo completato : $($st.FaseNome)" -ForegroundColor White
             if ($st.NomeCliente) { Write-Host "  Cliente                 : $($st.NomeCliente)" -ForegroundColor White }
@@ -1677,17 +1678,30 @@ if ($impostaLingua -match "^[Ss]") {
         for ($tLingua = 1; $tLingua -le $maxTentLingua; $tLingua++) {
             try {
                 Write-Info "Installazione/applicazione language pack it-IT (qualche minuto, serve Internet)...$(if ($tLingua -gt 1) { " (tentativo $tLingua)" })"
-                Start-BarraAnimata "Installo la lingua italiana"
+                Start-BarraAnimata "Installo la lingua italiana (max 8 min)"
+                $timeoutLingua = $false
                 try {
-                    try {
-                        # Modo moderno e affidabile
-                        Install-Language it-IT -CopyToSettings -ErrorAction Stop | Out-Null
-                    } catch {
-                        # -CopyToSettings non c'e' su tutte le build: fallback senza flag
-                        Install-Language it-IT -ErrorAction Stop | Out-Null
+                    # Eseguo l'installazione in un JOB con TIMEOUT: se si impianta
+                    # (rete filtrata o antivirus che blocca il download), NON lascio
+                    # lo script fermo all'infinito - interrompo e proseguo.
+                    $jobLingua = Start-Job -ScriptBlock {
+                        try { Install-Language it-IT -CopyToSettings -ErrorAction Stop | Out-Null }
+                        catch { Install-Language it-IT -ErrorAction Stop | Out-Null }
                     }
+                    if (Wait-Job $jobLingua -Timeout 480) {
+                        Receive-Job $jobLingua -ErrorAction SilentlyContinue | Out-Null
+                    } else {
+                        Stop-Job $jobLingua -ErrorAction SilentlyContinue
+                        $timeoutLingua = $true
+                    }
+                    Remove-Job $jobLingua -Force -ErrorAction SilentlyContinue
                 } finally { Stop-BarraAnimata }
             } catch {}
+            if ($timeoutLingua) {
+                Write-Errore "Installazione lingua troppo lunga (oltre 8 min): interrompo e proseguo."
+                Write-Info "Riprova piu' tardi con una rete pulita (hotspot) o l'antivirus in pausa."
+                break
+            }
             $packOk = ((Get-InstalledLanguage -ErrorAction SilentlyContinue).LanguageId -contains "it-IT")
             if ($packOk) { break }
             # Non riuscito: se manca la rete, avviso e aspetto che torni, poi ritento.
