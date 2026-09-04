@@ -49,42 +49,49 @@ https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps
 
 **Doppio click su `PC Facile.bat`.** Fa tutto da solo:
 - chiede i privilegi di amministratore (UAC → *Sì*)
-- scarica ed esegue l'ultima versione da GitHub (copia accanto = fallback offline)
-- avvia con ExecutionPolicy Bypass
+- scarica ed esegue l'ultima versione da GitHub (con fallback offline su chiavetta)
+- avvia con ExecutionPolicy Bypass e mostra il **Menu Iniziale**:
 
-Niente comandi da digitare.
+```text
+  [E] ESPRESSO (Automatico 1-Click)  <-- PREDEFINITO (INVIO)
+      Fa TUTTO da solo alla massima velocita' senza interruzioni:
+      pulizia bloatware/AV trial, lingua italiana, ottimizzazioni,
+      app Base (Chrome, 7-Zip, VLC, Adobe, AnyDesk), update Windows e driver,
+      e genera la Scheda Consegna Cliente su Desktop.
 
-> **Durante la configurazione:** parte tutto in automatico. Ti fermi **solo**
-> su 5 cose: nome cliente, account, Office, profilo app, antivirus. Il resto
-> (lingua, pulizia, aggiornamenti, driver, ...) va da solo col valore
-> consigliato. Dentro un passo, digita **B** al prompt per tornare indietro;
-> altrimenti dopo ogni scelta si avanza da solo.
->
-> Le modalità tecniche **Diagnostica** e **Test** ora si avviano solo da riga
-> di comando (`-Diagnostica` / `-Test`, vedi sotto): non servono al banco.
+  [M] MANUALE (Guidato passo-passo)
+      Personalizzazione completa: nome cliente, account Microsoft/Locale,
+      profili app dedicati (Base/Ufficio/Gaming/ecc), Office e Antivirus.
 
-> Se Windows/SmartScreen avvisa sul `.bat`: *Ulteriori info → Esegui comunque*.
-> Se **Smart App Control** blocca tutto → vedi punto 3.
+  [P] PREPARA USB OFFLINE (Scarica programmi sulla chiavetta)
+      Scarica tutti gli installer (.exe/.msi) nella cartella 'installers'.
+      I prossimi PC si installeranno al 100% OFFLINE e super veloci!
+
+  [D] Diagnostica  |  [T] Test simulazione  |  [Q] Esci
+```
+
+> **Consiglio per il banco:** La prima volta che crei la chiavetta USB, avvia con **[P] Prepara USB Offline**: scaricherà tutti i programmi (Chrome, Firefox, VLC, Adobe Reader, 7-Zip, AnyDesk, TeamViewer, Zoom, LibreOffice, tool rimozione AV) direttamente nella cartella `installers` della USB. Così i successivi PC dei clienti si installeranno al **100% OFFLINE** e in pochi minuti!
 
 ---
 
-## 2-bis. Avvio manuale da PowerShell (a prova di blocco)
+## 2-bis. Avvio manuale da PowerShell o con parametri
 
-Apri **Windows PowerShell** (NON la versione "(x86)") **come Amministratore**
-(Start → scrivi `PowerShell` → tasto destro → *Esegui come amministratore*).
-
-Usa questi comandi: eseguono lo script **in memoria** (come scriptblock), quindi
-**non** danno l'errore "L'esecuzione di script è disabilitata" e accettano i
-parametri. Non serve salvare file né toccare l'ExecutionPolicy.
+Apri **Windows PowerShell** come Amministratore e usa questi comandi:
 
 ```powershell
-# CONFIGURA il PC (installa e imposta)
+# MENU INTERATTIVO (Standard)
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1)))
+
+# MODALITA' ESPRESSO 1-CLICK (tutto automatico da solo)
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1))) -Espresso
+
+# PREPARA USB OFFLINE (scarica i pacchetti sulla chiavetta)
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1))) -PreparaUSB
 
 # DIAGNOSTICA (controlla ID pacchetti e ambiente, NON installa)
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1))) -Diagnostica
 
-# TEST a vuoto (percorre tutto senza installare/modificare)
+# TEST a vuoto (simulazione completa senza modifiche)
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1))) -Test
 ```
 

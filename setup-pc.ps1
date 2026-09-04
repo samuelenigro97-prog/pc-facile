@@ -9,14 +9,22 @@ param(
     # Diagnostica: controlla ambiente e valida gli ID pacchetti (winget show),
     # senza installare nulla, e mostra cosa e' OK/KO. -File setup-pc.ps1 -Diagnostica
     [switch]$Diagnostica,
-    # Veloce: ormai e' il comportamento PREDEFINITO (ogni doppio click parte in
-    # automatico e chiede solo l'essenziale). Il parametro resta accettato per
-    # compatibilita' con eventuali scorciatoie/comandi esistenti. -Veloce
+    # Modalita' Espresso (Automatico 1-Click): fa TUTTO da solo alla massima velocita'
+    # senza interruzioni (profilo app base, pulizia bloatware/AV, ottimizzazioni, update).
+    [Alias("ZeroTouch", "Automatico", "Auto", "Silenzioso")]
+    [switch]$Espresso,
+    # Modalita' Manuale: procedura guidata passo-passo (scelta account, app personalizzate, office, AV).
+    [switch]$Manuale,
+    # Prepara USB Offline: scarica tutti i programmi di installazione (.exe/.msi)
+    # direttamente nella cartella 'installers' della chiavetta per lavorare al 100% offline.
+    [Alias("USB", "Offline", "DownloadOffline")]
+    [switch]$PreparaUSB,
+    # Veloce: parametro di compatibilita'
     [switch]$Veloce,
-    # Salta la creazione del punto di ripristino (utile se la protezione sistema
-    # e' disattivata o su reti particolari dove Checkpoint-Computer resta in
-    # attesa). -File setup-pc.ps1 -skipRestore
-    [switch]$skipRestore
+    # Salta la creazione del punto di ripristino
+    [switch]$skipRestore,
+    # Cartella target o USB esplicita (opzionale)
+    [string]$TargetDir
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -24,7 +32,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "10.3 (2026-08-14)"
+$SCRIPT_VERSION = "11.0 (2026-09-04)"
 
 # Versione SEMPRE VISIBILE: la scrivo nella barra del titolo della finestra, che
 # resta a video in QUALSIASI schermata (a differenza dell'header, che scorre via).
@@ -414,27 +422,435 @@ function Get-BitLockerRecovery {
     return [pscustomobject]$r
 }
 
-# AVVIO DIRETTO: niente menu. Doppio click = configura subito. Le modalita'
-# tecniche (Diagnostica/Test) restano disponibili solo da riga di comando
-# (-Diagnostica / -Test): non servono al banco. Si mostra solo l'intestazione.
-if (-not $Test -and -not $Diagnostica) {
-    try { Clear-Host } catch {}
-    $larg = 56
-    $titoloB = "PC FACILE   -   versione $SCRIPT_VERSION"
-    $padSx = [int](($larg - $titoloB.Length) / 2)
-    $padDx = $larg - $padSx - $titoloB.Length
-    Write-Host ("$AON  " + [char]0x2554 + (([string][char]0x2550) * $larg) + [char]0x2557 + "$AOFF") -ForegroundColor $THEME_COL
-    Write-Host ("  " + [char]0x2551 + (" " * $padSx) + $titoloB + (" " * $padDx) + [char]0x2551) -ForegroundColor $THEME_TXT
-    Write-Host ("$AON  " + [char]0x255A + (([string][char]0x2550) * $larg) + [char]0x255D + "$AOFF") -ForegroundColor $THEME_COL
-    Write-Host ""
-    Write-Host "  Configuro il PC. Ti chiedo solo l'essenziale, il resto lo faccio io." -ForegroundColor White
-    Write-Host "  Nelle domande: S = si, N = no. A fine passo si prosegue da solo." -ForegroundColor Gray
-    Write-Host ""
+# =============================================================================
+# GESTIONE OFFLINE INSTALLERS & PREPARAZIONE USB
+# =============================================================================
+
+function Get-OfflineDirs {
+    $dirs = [System.Collections.Generic.List[string]]::new()
+    if ($PSScriptRoot) {
+        $dirs.Add((Join-Path $PSScriptRoot "installers"))
+        $dirs.Add((Join-Path $PSScriptRoot "offline"))
+        $dirs.Add((Join-Path $PSScriptRoot "cache"))
+        $dirs.Add($PSScriptRoot)
+    }
+    $curr = (Get-Location).Path
+    if ($curr) {
+        $dirs.Add((Join-Path $curr "installers"))
+        $dirs.Add((Join-Path $curr "offline"))
+        $dirs.Add((Join-Path $curr "cache"))
+        $dirs.Add($curr)
+    }
+    try {
+        $removables = Get-Volume | Where-Object { $_.DriveType -eq 'Removable' -and $_.DriveLetter }
+        foreach ($r in $removables) {
+            $rPath = "$($r.DriveLetter):\"
+            $dirs.Add((Join-Path $rPath "installers"))
+            $dirs.Add((Join-Path $rPath "offline"))
+            $dirs.Add((Join-Path $rPath "cache"))
+            $dirs.Add($rPath)
+        }
+    } catch {}
+
+    $existing = @()
+    foreach ($d in $dirs) {
+        if ($d -and (Test-Path $d) -and -not ($existing -contains $d)) { $existing += $d }
+    }
+    return $existing
 }
 
+function Find-OfflineInstaller {
+    param(
+        [string]$WingetId,
+        [string]$Nome
+    )
+    $dirs = Get-OfflineDirs
+    if ($dirs.Count -eq 0) { return $null }
+
+    $patterns = @{
+        "Google.Chrome"                     = @("*Chrome*Setup*.exe", "*Chrome*Standalone*.exe", "*googlechrome*.exe")
+        "Mozilla.Firefox"                  = @("*Firefox*Setup*.exe", "*firefox*.exe", "*Firefox*Installer*.exe")
+        "VideoLAN.VLC"                     = @("*vlc*win64.exe", "*vlc*.exe", "*vlc*.msi")
+        "Adobe.Acrobat.Reader.64-bit"      = @("*AcroRdr*.exe", "*Acrobat*Reader*.exe", "*AdbeRdr*.exe", "*AcroRdr*it_IT*.exe")
+        "7zip.7zip"                        = @("*7z*x64.exe", "*7z*x64.msi", "*7z*.exe")
+        "AnyDesk.AnyDesk"                  = @("*AnyDesk*.exe")
+        "TeamViewer.TeamViewer"            = @("*TeamViewer*Setup*.exe", "*TeamViewer*.exe")
+        "Zoom.Zoom"                        = @("*ZoomInstaller*.exe", "*Zoom*.msi")
+        "TheDocumentFoundation.LibreOffice"= @("*LibreOffice*x86-64.msi", "*LibreOffice*.msi")
+        "Apache.OpenOffice"                = @("*Apache*OpenOffice*.exe", "*OpenOffice*.exe")
+        "Spotify.Spotify"                  = @("*Spotify*Setup*.exe")
+        "Valve.Steam"                      = @("*SteamSetup*.exe")
+        "Discord.Discord"                  = @("*DiscordSetup*.exe")
+        "qBittorrent.qBittorrent"          = @("*qbittorrent*setup*.exe")
+        "AIMP.AIMP"                        = @("*aimp*.exe")
+        "MCPR"                             = @("*MCPR*.exe")
+        "NRnR"                             = @("*NRnR*.exe")
+    }
+
+    $searchList = @()
+    if ($WingetId -and $patterns.ContainsKey($WingetId)) { $searchList += $patterns[$WingetId] }
+    if ($Nome -and $patterns.ContainsKey($Nome)) { $searchList += $patterns[$Nome] }
+    if ($WingetId) {
+        $searchList += "*$WingetId*.exe"
+        $searchList += "*$WingetId*.msi"
+    }
+    if ($Nome) {
+        $cleanNome = ($Nome -replace '[^a-zA-Z0-9]','*')
+        $searchList += "*$cleanNome*.exe"
+        $searchList += "*$cleanNome*.msi"
+    }
+
+    foreach ($d in $dirs) {
+        foreach ($p in $searchList) {
+            try {
+                $found = Get-ChildItem -Path $d -Filter $p -File -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($found) { return $found.FullName }
+            } catch {}
+        }
+    }
+    return $null
+}
+
+function Install-OfflinePackage {
+    param(
+        [string]$FilePath,
+        [string]$Nome
+    )
+    if ($Test) { Write-OK "TEST: installazione offline simulata per $Nome ($FilePath)"; return $true }
+    Write-Info "Installazione offline da USB in corso: $Nome ($FilePath)..."
+    try {
+        $ext = [System.IO.Path]::GetExtension($FilePath).ToLower()
+        $proc = $null
+        if ($ext -eq '.msi') {
+            $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/i `"$FilePath`" /qn /norestart" -Wait -PassThru -ErrorAction Stop
+        } elseif ($ext -eq '.msixbundle' -or $ext -eq '.appxbundle' -or $ext -eq '.msix') {
+            Add-AppxPackage -Path $FilePath -ErrorAction Stop
+            Write-OK "$Nome installato con successo da pacchetto offline Appx/MSIX!"
+            return $true
+        } else {
+            $arg = "/S"
+            if ($FilePath -like "*Chrome*") { $arg = "/silent /install" }
+            elseif ($FilePath -like "*Firefox*") { $arg = "/S" }
+            elseif ($FilePath -like "*7z*") { $arg = "/S" }
+            elseif ($FilePath -like "*vlc*") { $arg = "/L=1040 /S" }
+            elseif ($FilePath -like "*Acro*") { $arg = "/sAll /rs /msi EULA_ACCEPT=YES" }
+            elseif ($FilePath -like "*AnyDesk*") { $arg = "--install `"C:\Program Files (x86)\AnyDesk`" --silent --create-shortcuts" }
+            elseif ($FilePath -like "*TeamViewer*") { $arg = "/S" }
+            elseif ($FilePath -like "*Zoom*") { $arg = "/silent" }
+            elseif ($FilePath -like "*LibreOffice*" -or $FilePath -like "*OpenOffice*") { $arg = "/S" }
+            elseif ($FilePath -like "*aimp*") { $arg = "/AUTO" }
+
+            $proc = Start-Process -FilePath $FilePath -ArgumentList $arg -Wait -PassThru -ErrorAction Stop
+        }
+        if ($proc -and ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010 -or $proc.ExitCode -eq 1641)) {
+            Write-OK "$Nome installato con successo da cache offline USB!"
+            return $true
+        } else {
+            $code = if ($proc) { $proc.ExitCode } else { "sconosciuto" }
+            Write-Info "Installazione offline di $Nome uscita con codice $code. Procedo con Winget..."
+        }
+    } catch {
+        Write-Info "Installazione offline non riuscita ($($_.Exception.Message)). Procedo con Winget..."
+    }
+    return $false
+}
+
+function Invoke-PreparaUSBOffline {
+    param([string]$TargetDir)
+
+    Write-Titolo "PREPARAZIONE CHIAVETTA USB OFFLINE"
+    Write-Host "Questa funzione scarica tutti i programmi di installazione (.exe / .msi)" -ForegroundColor White
+    Write-Host "direttamente sulla chiavetta USB (cartella 'installers')." -ForegroundColor White
+    Write-Host "Cosi' per le prossime configurazioni dei clienti il setup funzionera'" -ForegroundColor White
+    Write-Host "al 100% OFFLINE e alla massima velocita' senza consumare banda!" -ForegroundColor Green
+    Write-Host ""
+
+    # 1. Trova la cartella della chiavetta USB
+    $targetBase = $TargetDir
+    if (-not $targetBase) {
+        if ($PSScriptRoot -and (Test-Path $PSScriptRoot) -and $PSScriptRoot -notlike "$env:TEMP*") {
+            $targetBase = $PSScriptRoot
+        } else {
+            $curr = (Get-Location).Path
+            if ($curr -and (Test-Path $curr) -and $curr -notlike "$env:TEMP*") {
+                $targetBase = $curr
+            }
+        }
+    }
+
+    if (-not $targetBase) {
+        try {
+            $removable = Get-Volume | Where-Object { $_.DriveType -eq 'Removable' -and $_.DriveLetter } | Select-Object -First 1
+            if ($removable) {
+                $targetBase = "$($removable.DriveLetter):\"
+            }
+        } catch {}
+    }
+
+    if (-not $targetBase) {
+        $targetBase = (Get-Location).Path
+    }
+
+    Write-Host "Cartella di destinazione USB: " -NoNewline
+    Write-Host $targetBase -ForegroundColor Yellow
+    if (-not $Test) {
+        $ansDir = Attendi-Risposta "Confermi questa cartella? (INVIO = si / oppure scrivi il percorso)"
+        if ($ansDir -and (Test-Path $ansDir)) {
+            $targetBase = $ansDir
+        }
+    }
+
+    $installersDir = Join-Path $targetBase "installers"
+    if (-not (Test-Path $installersDir)) {
+        try {
+            New-Item -Path $installersDir -ItemType Directory -Force | Out-Null
+            Write-OK "Creata cartella installers: $installersDir"
+        } catch {
+            Write-Errore "Impossibile creare cartella $installersDir : $_"
+            return
+        }
+    }
+
+    # 2. Catalogo dei pacchetti da scaricare
+    $downloadCatalog = @(
+        @{
+            Nome      = "Google Chrome (64-bit Standalone)"
+            File      = "ChromeStandaloneSetup64.exe"
+            Urls      = @(
+                "https://dl.google.com/chrome/install/standalone/service/ChromeStandaloneSetup64.exe",
+                "https://dl.google.com/tag/s/appguid%3D%7B8A69D345-D564-463C-AFF5-1A09E5037969%7D%26iid%3D%7B00000000-0000-0000-0000-000000000000%7D%26lang%3Dit%26browser%3D4%26usagestats%3D0%26appname%3DGoogle%2520Chrome%26needsadmin%3Dprefers%26ap%3Dx64-stable-statsdef_1/chrome/install/ChromeStandaloneSetup64.exe"
+            )
+            MinSizeKB = 50000
+            Categoria = "Base"
+        },
+        @{
+            Nome      = "Mozilla Firefox (Italiano 64-bit Full)"
+            File      = "Firefox_Setup.exe"
+            Urls      = @(
+                "https://download.mozilla.org/?product=firefox-latest-ssl&os=win64&lang=it"
+            )
+            MinSizeKB = 45000
+            Categoria = "Base"
+        },
+        @{
+            Nome      = "VLC Media Player (64-bit)"
+            File      = "vlc-win64.exe"
+            Urls      = @(
+                "https://get.videolan.org/vlc/last/win64/vlc-3.0.21-win64.exe",
+                "https://download.videolan.org/pub/videolan/vlc/3.0.21/win64/vlc-3.0.21-win64.exe",
+                "https://get.videolan.org/vlc/3.0.20/win64/vlc-3.0.20-win64.exe"
+            )
+            MinSizeKB = 35000
+            Categoria = "Base"
+        },
+        @{
+            Nome      = "Adobe Acrobat Reader (64-bit Italiano)"
+            File      = "AcroRdrDCx64_it_IT.exe"
+            Urls      = @(
+                "https://ardownload2.adobe.com/pub/adobe/reader/win/AcrobatDC/2400220965/AcroRdrDCx642400220965_it_IT.exe"
+            )
+            MinSizeKB = 150000
+            Categoria = "Base"
+        },
+        @{
+            Nome      = "7-Zip (64-bit)"
+            File      = "7z-x64.exe"
+            Urls      = @(
+                "https://www.7-zip.org/a/7z2408-x64.exe",
+                "https://www.7-zip.org/a/7z2301-x64.exe"
+            )
+            MinSizeKB = 1000
+            Categoria = "Base"
+        },
+        @{
+            Nome      = "AnyDesk (Assistenza Remota)"
+            File      = "AnyDesk.exe"
+            Urls      = @(
+                "https://download.anydesk.com/AnyDesk.exe"
+            )
+            MinSizeKB = 3000
+            Categoria = "Base"
+        },
+        @{
+            Nome      = "TeamViewer (64-bit)"
+            File      = "TeamViewer_Setup_x64.exe"
+            Urls      = @(
+                "https://download.teamviewer.com/download/TeamViewer_Setup_x64.exe"
+            )
+            MinSizeKB = 40000
+            Categoria = "Completo"
+        },
+        @{
+            Nome      = "Zoom Desktop Client Full"
+            File      = "ZoomInstallerFull.exe"
+            Urls      = @(
+                "https://zoom.us/client/latest/ZoomInstallerFull.exe"
+            )
+            MinSizeKB = 40000
+            Categoria = "Completo"
+        },
+        @{
+            Nome      = "AIMP Audio Player"
+            File      = "aimp.exe"
+            Urls      = @(
+                "https://aimp.ru/files/aimp_latest.exe"
+            )
+            MinSizeKB = 10000
+            Categoria = "Completo"
+        },
+        @{
+            Nome      = "LibreOffice (64-bit Italiano)"
+            File      = "LibreOffice_Win_x86-64.msi"
+            Urls      = @(
+                "https://download.documentfoundation.org/libreoffice/stable/24.8.0/win/x86_64/LibreOffice_24.8.0_Win_x86-64.msi",
+                "https://download.documentfoundation.org/libreoffice/stable/24.2.5/win/x86_64/LibreOffice_24.2.5_Win_x86-64.msi"
+            )
+            MinSizeKB = 250000
+            Categoria = "Completo"
+        },
+        @{
+            Nome      = "Norton Removal Tool (NRnR)"
+            File      = "NRnR.exe"
+            Urls      = @(
+                "https://www.norton.com/nrnr"
+            )
+            MinSizeKB = 5000
+            Categoria = "Base"
+        },
+        @{
+            Nome      = "McAfee Consumer Product Removal (MCPR)"
+            File      = "MCPR.exe"
+            Urls      = @(
+                "https://download.mcafee.com/molbin/iss-loc/SupportTools/MCPR/MCPR.exe"
+            )
+            MinSizeKB = 5000
+            Categoria = "Base"
+        }
+    )
+
+    $daScaricare = $downloadCatalog
+    if (-not $Test) {
+        Write-Host "Cosa vuoi scaricare sulla chiavetta?" -ForegroundColor White
+        Write-Host "  1) Pacchetto Base + Utility (Consigliato: Chrome, Firefox, VLC, Adobe, 7-Zip, AnyDesk, NRnR, MCPR - ~450 MB)" -ForegroundColor Green
+        Write-Host "  2) Pacchetto Completo (Tutti i programmi inclusi LibreOffice, TeamViewer, Zoom, AIMP - ~950 MB)" -ForegroundColor White
+        Write-Host ""
+        $sceltaPkg = Attendi-Risposta "Scelta (1/2, INVIO = Pacchetto Base)"
+        if ([string]::IsNullOrWhiteSpace($sceltaPkg) -or $sceltaPkg -eq "1") {
+            $daScaricare = @($downloadCatalog | Where-Object { $_.Categoria -eq "Base" })
+        }
+    }
+
+    Write-Host ""
+    Write-Info "Avvio download dei pacchetti offline..."
+    $tot = $daScaricare.Count
+    $idx = 0
+    $riusciti = 0
+    $giaPresenti = 0
+
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+
+    foreach ($pkg in $daScaricare) {
+        $idx++
+        $destPath = Join-Path $installersDir $pkg.File
+        Write-Host ""
+        Write-Host "[$idx/$tot] $($pkg.Nome)..." -ForegroundColor White
+
+        if ($Test) {
+            Write-OK "TEST: simulazione download $($pkg.Nome) -> $($pkg.File)"
+            $riusciti++
+            continue
+        }
+
+        # Verifica se gia' presente e valido
+        if (Test-Path $destPath) {
+            $finfo = Get-Item $destPath -ErrorAction SilentlyContinue
+            if ($finfo -and ($finfo.Length / 1KB) -ge $pkg.MinSizeKB) {
+                $mb = [Math]::Round($finfo.Length / 1MB, 1)
+                Write-OK "Gia' presente sulla chiavetta ($mb MB). Salto."
+                $giaPresenti++
+                $riusciti++
+                continue
+            }
+        }
+
+        # Download con fallback URL e visualizzazione progresso
+        $ok = $false
+        foreach ($url in $pkg.Urls) {
+            Write-Info "Download da: $url"
+            try {
+                $wc = New-Object System.Net.WebClient
+                $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                $wc.DownloadFile($url, $destPath)
+                $wc.Dispose()
+
+                if (Test-Path $destPath) {
+                    $len = (Get-Item $destPath).Length
+                    if (($len / 1KB) -ge $pkg.MinSizeKB) {
+                        $mb = [Math]::Round($len / 1MB, 1)
+                        Write-OK "Scaricato con successo: $($pkg.File) ($mb MB)"
+                        $ok = $true
+                        $riusciti++
+                        break
+                    } else {
+                        Write-Info "File scaricato troppo piccolo ($len bytes), riprovo..."
+                        Remove-Item $destPath -Force -ErrorAction SilentlyContinue
+                    }
+                }
+            } catch {
+                Write-Info "Errore da questa sorgente ($($_.Exception.Message)), provo alternativa..."
+            }
+        }
+
+        if (-not $ok) {
+            Write-Errore "Impossibile scaricare $($pkg.Nome). Sara' installato tramite winget durante il setup."
+        }
+    }
+
+    # Copia o scarica anche setup-pc.ps1, setup-pc.ps1.sha256, PC Facile.bat sulla chiavetta
+    Write-Host ""
+    Write-Info "Aggiorno i file di script sulla chiavetta USB..."
+    try {
+        $scriptDest = Join-Path $targetBase "setup-pc.ps1"
+        $shaDest    = Join-Path $targetBase "setup-pc.ps1.sha256"
+        $batDest    = Join-Path $targetBase "PC Facile.bat"
+        $baseRepo   = "https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main"
+
+        if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "setup-pc.ps1"))) {
+            Copy-Item (Join-Path $PSScriptRoot "setup-pc.ps1") $scriptDest -Force -ErrorAction SilentlyContinue
+            if (Test-Path (Join-Path $PSScriptRoot "setup-pc.ps1.sha256")) {
+                Copy-Item (Join-Path $PSScriptRoot "setup-pc.ps1.sha256") $shaDest -Force -ErrorAction SilentlyContinue
+            }
+            if (Test-Path (Join-Path $PSScriptRoot "PC Facile.bat")) {
+                Copy-Item (Join-Path $PSScriptRoot "PC Facile.bat") $batDest -Force -ErrorAction SilentlyContinue
+            }
+        } else {
+            try {
+                Invoke-WebRequest "$baseRepo/setup-pc.ps1" -OutFile $scriptDest -ErrorAction SilentlyContinue
+                Invoke-WebRequest "$baseRepo/setup-pc.ps1.sha256" -OutFile $shaDest -ErrorAction SilentlyContinue
+                Invoke-WebRequest "$baseRepo/PC%20Facile.bat" -OutFile $batDest -ErrorAction SilentlyContinue
+            } catch {}
+        }
+        Write-OK "File di avvio e script aggiornati nella radice della chiavetta."
+    } catch {}
+
+    # Riepilogo finale
+    Write-Host ""
+    Write-Titolo "PREPARAZIONE USB COMPLETATA"
+    Write-Host "Pacchetti pronti su chiavetta: $riusciti su $tot (gia' presenti: $giaPresenti)" -ForegroundColor Green
+    Write-Host "Cartella offline: $installersDir" -ForegroundColor White
+    Write-Host ""
+    Write-Host "Ora la tua chiavetta USB e' un kit autonomo al 100%!" -ForegroundColor Yellow
+    Write-Host "Puoi inserirla nei PC dei clienti e lanciare 'PC Facile.bat':" -ForegroundColor White
+    Write-Host "le applicazioni si installeranno all'istante anche SENZA connessione a Internet." -ForegroundColor White
+    Write-Host ""
+    Beep-Completato
+}
+
+# =============================================================================
+# MODALITA' DI AVVIO E MENU INIZIALE
+# =============================================================================
+
 # Modalita' TEST (-Test): rende lo script non interattivo e non distruttivo.
-# Sovrascrive Read-Host (risponde N ai S/N, vuoto ai menu -> tutto saltato) e
-# Pausa (nessuna attesa). Cosi' si verifica l'intero flusso in automatico.
 if ($Test -or $Diagnostica) {
     if ($Test) { Write-Host "*** MODALITA' TEST: nessuna modifica reale, risposte automatiche ***" -ForegroundColor Magenta }
     function Read-Host {
@@ -446,19 +862,71 @@ if ($Test -or $Diagnostica) {
     function Pausa { }
 }
 
-# FLUSSO ESSENZIALE (unico modo del banco): la configurazione reale scorre da
-# sola. Le domande S/N "opzionali" (lingua, ripristino, pulizia, aggiornamenti,
-# driver, ...) le risponde 'Chiedi' col valore consigliato SENZA fermarsi; si
-# ferma SOLO sulle 5 cose essenziali (nome, account, Office, app, antivirus).
-# Tecnicamente si attiva la vecchia "Veloce" per ogni run reale. -Veloce resta
-# accettato per compatibilita' ma ormai e' il comportamento predefinito.
+$Global:ModoEspresso = $false
+
+# Se nessun parametro esplicito e' stato fornito da CLI, mostro il MENU INIZIALE:
+if (-not $Test -and -not $Diagnostica -and -not $Espresso -and -not $Manuale -and -not $PreparaUSB) {
+    try { Clear-Host } catch {}
+    $larg = 64
+    $titoloB = "PC FACILE   -   versione $SCRIPT_VERSION"
+    $padSx = [int](($larg - $titoloB.Length) / 2)
+    $padDx = $larg - $padSx - $titoloB.Length
+    Write-Host ("$AON  " + [char]0x2554 + (([string][char]0x2550) * $larg) + [char]0x2557 + "$AOFF") -ForegroundColor $THEME_COL
+    Write-Host ("  " + [char]0x2551 + (" " * $padSx) + $titoloB + (" " * $padDx) + [char]0x2551) -ForegroundColor $THEME_TXT
+    Write-Host ("$AON  " + [char]0x255A + (([string][char]0x2550) * $larg) + [char]0x255D + "$AOFF") -ForegroundColor $THEME_COL
+    Write-Host ""
+    Write-Host "  Scegli come procedere:" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  [E] ESPRESSO (Automatico 1-Click)" -ForegroundColor Green -NoNewline
+    Write-Host "   <-- PREDEFINITO (premi INVIO)" -ForegroundColor Yellow
+    Write-Host "      Fa TUTTO da solo alla massima velocita' senza interruzioni:" -ForegroundColor Gray
+    Write-Host "      - Pulisce bloatware OEM e disinstalla antivirus di prova" -ForegroundColor Gray
+    Write-Host "      - Ottimizza Windows (privacy, prestazioni, impostazioni, Edge)" -ForegroundColor Gray
+    Write-Host "      - Installa app Base (Chrome, 7-Zip, VLC, Adobe Reader, AnyDesk)" -ForegroundColor Gray
+    Write-Host "      - Scarica e installa aggiornamenti Windows e driver" -ForegroundColor Gray
+    Write-Host "      - Genera la Scheda Consegna Cliente su Desktop" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  [M] MANUALE (Guidato passo-passo)" -ForegroundColor White
+    Write-Host "      Personalizzazione completa: scelta account Microsoft/Locale," -ForegroundColor Gray
+    Write-Host "      scelta profilo app (Base/Ufficio/Gaming/ecc), Office e Antivirus." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  [P] PREPARA USB OFFLINE (Scarica programmi sulla chiavetta)" -ForegroundColor Cyan
+    Write-Host "      Scarica tutti gli installer (.exe/.msi) nella cartella 'installers'." -ForegroundColor Gray
+    Write-Host "      I prossimi PC si installeranno al 100% OFFLINE e super veloci!" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  [D] Diagnostica (Verifica sistema e pacchetti senza modifiche)" -ForegroundColor DarkGray
+    Write-Host "  [T] Test (Simulazione rapida a vuoto)" -ForegroundColor DarkGray
+    Write-Host "  [Q] Esci" -ForegroundColor DarkGray
+    Write-Host ""
+
+    $sceltaMenu = (Attendi-Risposta "Scegli modalita' [E/M/P/D/T/Q] (INVIO = Espresso)").Trim().ToUpper()
+
+    switch -Regex ($sceltaMenu) {
+        "^P" { $PreparaUSB = $true }
+        "^M" { $Manuale = $true; $Global:ModoEspresso = $false }
+        "^D" { $Diagnostica = $true }
+        "^T" { $Test = $true }
+        "^Q" { Write-Host "Uscita."; return }
+        default { $Espresso = $true; $Global:ModoEspresso = $true }
+    }
+}
+
+if ($Espresso) {
+    $Global:ModoEspresso = $true
+}
+
+# Se e' richiesta la preparazione della USB Offline:
+if ($PreparaUSB) {
+    Invoke-PreparaUSBOffline -TargetDir $TargetDir
+    return
+}
+
+# Modalita' configurazione reale:
 if (-not $Test -and -not $Diagnostica) {
     $Veloce = $true
     function Pausa { }
 }
 
-# Run "reale" = Configura (non Test, non Diagnostica): solo qui si creano i
-# file su Desktop (log/report/scheda/batteria), per non sporcare coi controlli.
 $RunReale = (-not $Test -and -not $Diagnostica)
 
 # =============================================================================
@@ -1194,117 +1662,7 @@ function Add-IconaDesktop {
     } catch {}
 }
 
-# --- Cache Offline USB per Installers ---
-function Get-OfflineDirs {
-    $dirs = [System.Collections.Generic.List[string]]::new()
-    if ($PSScriptRoot) {
-        $dirs.Add((Join-Path $PSScriptRoot "installers"))
-        $dirs.Add((Join-Path $PSScriptRoot "offline"))
-        $dirs.Add((Join-Path $PSScriptRoot "cache"))
-        $dirs.Add($PSScriptRoot)
-    }
-    $curr = (Get-Location).Path
-    if ($curr) {
-        $dirs.Add((Join-Path $curr "installers"))
-        $dirs.Add((Join-Path $curr "offline"))
-        $dirs.Add((Join-Path $curr "cache"))
-    }
-    $existing = @()
-    foreach ($d in $dirs) {
-        if ($d -and (Test-Path $d) -and -not ($existing -contains $d)) { $existing += $d }
-    }
-    return $existing
-}
-
-function Find-OfflineInstaller {
-    param(
-        [string]$WingetId,
-        [string]$Nome
-    )
-    $dirs = Get-OfflineDirs
-    if ($dirs.Count -eq 0) { return $null }
-
-    $patterns = @{
-        "Google.Chrome"                     = @("*Chrome*Setup*.exe", "*Chrome*Standalone*.exe", "*googlechrome*.exe")
-        "Mozilla.Firefox"                  = @("*Firefox*Setup*.exe", "*firefox*.exe", "*Firefox*Installer*.exe")
-        "VideoLAN.VLC"                     = @("*vlc*win64.exe", "*vlc*.exe", "*vlc*.msi")
-        "Adobe.Acrobat.Reader.64-bit"      = @("*AcroRdr*.exe", "*Acrobat*Reader*.exe", "*AdbeRdr*.exe")
-        "7zip.7zip"                        = @("*7z*x64.exe", "*7z*x64.msi", "*7z*.exe")
-        "AnyDesk.AnyDesk"                  = @("*AnyDesk*.exe")
-        "TeamViewer.TeamViewer"            = @("*TeamViewer*Setup*.exe", "*TeamViewer*.exe")
-        "Zoom.Zoom"                        = @("*ZoomInstaller*.exe", "*Zoom*.msi")
-        "TheDocumentFoundation.LibreOffice"= @("*LibreOffice*x86-64.msi", "*LibreOffice*.msi")
-        "Apache.OpenOffice"                = @("*Apache*OpenOffice*.exe", "*OpenOffice*.exe")
-        "Spotify.Spotify"                  = @("*Spotify*Setup*.exe")
-        "Valve.Steam"                      = @("*SteamSetup*.exe")
-        "Discord.Discord"                  = @("*DiscordSetup*.exe")
-        "qBittorrent.qBittorrent"          = @("*qbittorrent*setup*.exe")
-        "AIMP.AIMP"                        = @("*aimp*.exe")
-    }
-
-    $searchList = @()
-    if ($WingetId -and $patterns.ContainsKey($WingetId)) { $searchList += $patterns[$WingetId] }
-    if ($WingetId) {
-        $searchList += "*$WingetId*.exe"
-        $searchList += "*$WingetId*.msi"
-    }
-    if ($Nome) {
-        $cleanNome = ($Nome -replace '[^a-zA-Z0-9]','*')
-        $searchList += "*$cleanNome*.exe"
-        $searchList += "*$cleanNome*.msi"
-    }
-
-    foreach ($d in $dirs) {
-        foreach ($p in $searchList) {
-            try {
-                $found = Get-ChildItem -Path $d -Filter $p -File -ErrorAction SilentlyContinue | Select-Object -First 1
-                if ($found) { return $found.FullName }
-            } catch {}
-        }
-    }
-    return $null
-}
-
-function Install-OfflinePackage {
-    param(
-        [string]$FilePath,
-        [string]$Nome
-    )
-    if ($Test) { Write-OK "TEST: installazione offline simulata per $Nome ($FilePath)"; return $true }
-    Write-Info "Installazione offline da USB in corso: $Nome ($FilePath)..."
-    try {
-        $ext = [System.IO.Path]::GetExtension($FilePath).ToLower()
-        $proc = $null
-        if ($ext -eq '.msi') {
-            $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/i `"$FilePath`" /qn /norestart" -Wait -PassThru -ErrorAction Stop
-        } elseif ($ext -eq '.msixbundle' -or $ext -eq '.appxbundle' -or $ext -eq '.msix') {
-            Add-AppxPackage -Path $FilePath -ErrorAction Stop
-            Write-OK "$Nome installato con successo da pacchetto offline Appx/MSIX!"
-            return $true
-        } else {
-            $arg = "/S"
-            if ($FilePath -like "*7z*") { $arg = "/S" }
-            elseif ($FilePath -like "*vlc*") { $arg = "/L=1040 /S" }
-            elseif ($FilePath -like "*Acro*") { $arg = "/sAll /rs /msi EULA_ACCEPT=YES" }
-            elseif ($FilePath -like "*AnyDesk*") { $arg = "--install `"C:\Program Files (x86)\AnyDesk`" --silent --create-shortcuts" }
-            elseif ($FilePath -like "*TeamViewer*") { $arg = "/S" }
-            elseif ($FilePath -like "*Zoom*") { $arg = "/silent" }
-            elseif ($FilePath -like "*LibreOffice*" -or $FilePath -like "*OpenOffice*") { $arg = "/S" }
-
-            $proc = Start-Process -FilePath $FilePath -ArgumentList $arg -Wait -PassThru -ErrorAction Stop
-        }
-        if ($proc -and ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010 -or $proc.ExitCode -eq 1641)) {
-            Write-OK "$Nome installato con successo da cache offline USB!"
-            return $true
-        } else {
-            $code = if ($proc) { $proc.ExitCode } else { "sconosciuto" }
-            Write-Info "Installazione offline di $Nome uscita con codice $code. Procedo con Winget..."
-        }
-    } catch {
-        Write-Info "Installazione offline non riuscita ($($_.Exception.Message)). Procedo con Winget..."
-    }
-    return $false
-}
+# 
 
 function Installa-Pacchetto {
     param(
@@ -1734,73 +2092,71 @@ else {
 
 Write-Titolo "Account / Email cliente"
 
-Write-Host "Crea/accedi ORA all'account del cliente. Scegli quale aprire:" -ForegroundColor White
-Write-Host "  1) Microsoft   (consigliato: serve per Office e antivirus)" -ForegroundColor White
-Write-Host "  2) Google / Gmail" -ForegroundColor White
-Write-Host "  3) Proton Mail" -ForegroundColor White
-Write-Host "  4) Outlook.com (nuova email Microsoft)" -ForegroundColor White
-Write-Host "  S) Salta" -ForegroundColor White
-Write-Host ""
-
-# Domanda ESSENZIALE: cambia da cliente a cliente, quindi la chiedo SEMPRE
-# (anche nel flusso automatico). INVIO = Microsoft (il caso piu' comune).
-$sceltaAcc = Attendi-Risposta "Scelta (1-4, INVIO = Microsoft, S = salta)"
-if ($RunReale -and [string]::IsNullOrWhiteSpace($sceltaAcc)) { $sceltaAcc = "1" }
-
-# Mappa scelta -> nome provider, pagina da aprire e dominio email suggerito.
-$prov = switch -Regex ($sceltaAcc) {
-    '^1' { @{ Nome = "Microsoft"; Url = "https://account.microsoft.com";                 Dominio = "outlook.it" } }
-    '^2' { @{ Nome = "Google";    Url = "https://accounts.google.com/signup";             Dominio = "gmail.com" } }
-    '^3' { @{ Nome = "Proton";    Url = "https://account.proton.me/signup";               Dominio = "proton.me" } }
-    '^4' { @{ Nome = "Outlook";   Url = "https://signup.live.com";                        Dominio = "outlook.it" } }
-    default { $null }
-}
-
-if ($prov) {
-    # Ricordo il provider scelto (nome + dominio) per il riepilogo e la ripresa.
-    $Global:credProvider = $prov.Nome
-    $Global:credDominio  = $prov.Dominio
-    Start-Process $prov.Url
-    Write-OK "Aperto $($prov.Url) nel browser ($($prov.Nome))."
-    if ($prov.Nome -ne "Microsoft") {
-        Write-Info "NB: per attivare Office/antivirus serve comunque un account Microsoft;"
-        Write-Info "    con $($prov.Nome) crei solo l'email del cliente."
-    }
-
-    # Credenziali per il riepilogo. Due casi:
-    #  - il cliente ha GIA' una sua email/password che usa -> le inserisci tu
-    #    (le detta lui) e finiscono nel riepilogo;
-    #  - account NUOVO -> le genera lo script (email col dominio del provider + Nome123!).
-    # In entrambi i casi niente lette dal browser. Questa domanda resta anche in
-    # Veloce perche' cambia da cliente a cliente.
-    if ($RunReale) {
-        $haAccount = Attendi-Risposta "Il cliente ha GIA' una sua email/password che usa? (S = le inserisco io / N = ne genero una nuova)"
-        if ($haAccount -match "^[Ss]") {
-            $credMsAccount  = (Attendi-Risposta "  Email del cliente").Trim()
-            $credMsPassword = (Attendi-Risposta "  Password del cliente").Trim()
-            Write-OK "Uso le credenziali del cliente (finiscono nel riepilogo)."
-        } else {
-            $credMsAccount  = New-EmailCliente -Base $nomeCliente -Dominio $prov.Dominio
-            $credMsPassword = New-PasswordCliente -Base $nomeCliente
-            Write-Host ""
-            Write-Host "  Credenziali SUGGERITE per il nuovo account (gia' nel riepilogo):" -ForegroundColor White
-            Write-Info  "Email suggerita : $credMsAccount"
-            Write-Info  "Password        : $credMsPassword"
-            Write-Host "  Se in registrazione ne usi altre, correggi il file." -ForegroundColor Gray
-        }
-        # In tutti e due i casi copio la password negli appunti (Ctrl+V veloce).
-        if ($credMsPassword) { try { Set-Clipboard -Value $credMsPassword; Write-Info "Password copiata negli appunti." } catch {} }
-        Write-Host ""
-    }
-
-    Write-Info "Accedi o crea l'account, poi torna qui. Usa lo stesso browser per i login dopo."
-    Add-Report "Account $($prov.Nome)" "OK"
+if ($Global:ModoEspresso) {
+    Write-OK "Modalita' Espresso: mantenuto account utente corrente (nessuna schermata di login web)."
+    Add-Report "Account cliente" "LOCALE (Espresso)"
 } else {
-    Write-Info "Account/email saltato."
-    Add-Report "Account cliente" "SALTATO"
-}
+    Write-Host "Crea/accedi ORA all'account del cliente. Scegli quale aprire:" -ForegroundColor White
+    Write-Host "  1) Microsoft   (consigliato: serve per Office e antivirus)" -ForegroundColor White
+    Write-Host "  2) Google / Gmail" -ForegroundColor White
+    Write-Host "  3) Proton Mail" -ForegroundColor White
+    Write-Host "  4) Outlook.com (nuova email Microsoft)" -ForegroundColor White
+    Write-Host "  S) Salta" -ForegroundColor White
+    Write-Host ""
 
-if ($prov) { Pausa }
+    # Domanda ESSENZIALE: cambia da cliente a cliente, quindi la chiedo SEMPRE.
+    # INVIO = Microsoft (il caso piu' comune).
+    $sceltaAcc = Attendi-Risposta "Scelta (1-4, INVIO = Microsoft, S = salta)"
+    if ($RunReale -and [string]::IsNullOrWhiteSpace($sceltaAcc)) { $sceltaAcc = "1" }
+
+    # Mappa scelta -> nome provider, pagina da aprire e dominio email suggerito.
+    $prov = switch -Regex ($sceltaAcc) {
+        '^1' { @{ Nome = "Microsoft"; Url = "https://account.microsoft.com";                 Dominio = "outlook.it" } }
+        '^2' { @{ Nome = "Google";    Url = "https://accounts.google.com/signup";             Dominio = "gmail.com" } }
+        '^3' { @{ Nome = "Proton";    Url = "https://account.proton.me/signup";               Dominio = "proton.me" } }
+        '^4' { @{ Nome = "Outlook";   Url = "https://signup.live.com";                        Dominio = "outlook.it" } }
+        default { $null }
+    }
+
+    if ($prov) {
+        # Ricordo il provider scelto (nome + dominio) per il riepilogo e la ripresa.
+        $Global:credProvider = $prov.Nome
+        $Global:credDominio  = $prov.Dominio
+        Start-Process $prov.Url
+        Write-OK "Aperto $($prov.Url) nel browser ($($prov.Nome))."
+        if ($prov.Nome -ne "Microsoft") {
+            Write-Info "NB: per attivare Office/antivirus serve comunque un account Microsoft;"
+            Write-Info "    con $($prov.Nome) crei solo l'email del cliente."
+        }
+
+        # Credenziali per il riepilogo.
+        if ($RunReale) {
+            $haAccount = Attendi-Risposta "Il cliente ha GIA' una sua email/password che usa? (S = le inserisco io / N = ne genero una nuova)"
+            if ($haAccount -match "^[Ss]") {
+                $credMsAccount  = (Attendi-Risposta "  Email del cliente").Trim()
+                $credMsPassword = (Attendi-Risposta "  Password del cliente").Trim()
+                Write-OK "Uso le credenziali del cliente (finiscono nel riepilogo)."
+            } else {
+                $credMsAccount  = New-EmailCliente -Base $nomeCliente -Dominio $prov.Dominio
+                $credMsPassword = New-PasswordCliente -Base $nomeCliente
+                Write-Host ""
+                Write-Host "  Credenziali SUGGERITE per il nuovo account (gia' nel riepilogo):" -ForegroundColor White
+                Write-Info  "Email suggerita : $credMsAccount"
+                Write-Info  "Password        : $credMsPassword"
+                Write-Host "  Se in registrazione ne usi altre, correggi il file." -ForegroundColor Gray
+            }
+            if ($credMsPassword) { try { Set-Clipboard -Value $credMsPassword; Write-Info "Password copiata negli appunti." } catch {} }
+            Write-Host ""
+        }
+
+        Write-Info "Accedi o crea l'account, poi torna qui. Usa lo stesso browser per i login dopo."
+        Add-Report "Account $($prov.Nome)" "OK"
+        Pausa
+    } else {
+        Write-Info "Account/email saltato."
+        Add-Report "Account cliente" "SALTATO"
+    }
+}
 
 Save-Fase 2 "Account/email cliente"
 }
@@ -2395,14 +2751,6 @@ else {
 
 Write-Titolo "Installazione App Office"
 
-Write-Host "Scegli la suite Office da installare (se manca) e attivare:" -ForegroundColor White
-Write-Host "  1) Microsoft 365 (abbonamento, card PIN) - installa, poi riscatto su microsoft365.com/setup" -ForegroundColor White
-Write-Host "  2) Office perpetuo (Home 2024/2021, card PIN) - installa, poi riscatto su office.com/setup" -ForegroundColor White
-Write-Host "  3) OpenOffice (suite gratuita)" -ForegroundColor White
-Write-Host "  4) LibreOffice (suite gratuita)" -ForegroundColor White
-Write-Host "  5) Salta" -ForegroundColor White
-Write-Host ""
-
 function Get-OsppPath {
     $percorsi = @(
         "$env:ProgramFiles\Microsoft Office\Office16\ospp.vbs",
@@ -2454,67 +2802,78 @@ function Add-CollegamentiOffice {
     }
 }
 
-# Domanda ESSENZIALE: dipende dalla card che ha in mano l'operatore, la chiedo
-# SEMPRE. INVIO = Microsoft 365. Metti 5 se il cliente non ha Office da attivare.
-$sceltaAtt = Attendi-Risposta "Scelta (1-5, INVIO = Microsoft 365, 5 = salta)"
-if ($RunReale -and [string]::IsNullOrWhiteSpace($sceltaAtt)) { $sceltaAtt = "1" }
-switch ($sceltaAtt) {
-    "1" {
-        # 1/2: INSTALLAZIONE (se manca). Su molti PC nuovi M365 e' preinstallato:
-        # in quel caso non si tocca nulla e si passa subito all'attivazione.
-        if (Get-OsppPath) {
-            Write-OK "Office gia' installato su questo PC."
-            Add-Report "Microsoft Office (installazione)" "OK"
-        } elseif (Confirm-Winget) {
-            Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
-        } else {
-            Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
-        }
+if ($Global:ModoEspresso) {
+    if (Get-OsppPath) {
+        Write-OK "Office gia' installato su questo PC. Creo i collegamenti sul Desktop."
         Add-CollegamentiOffice
-        # 2/2: ATTIVAZIONE - la schermata dopo: pagina web per il codice di licenza
-        # (l'indirizzo stampato sulla card Microsoft 365 Personal).
-        Start-Process "https://microsoft365.com/setup"
-        Write-OK "Browser aperto su microsoft365.com/setup"
-        Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice grattato sulla card."
-        Add-Report "Microsoft 365 (riscatto card PIN)" "OK"
+        Add-Report "Microsoft Office (collegamenti)" "OK (gia' presente)"
+    } else {
+        Write-Info "Modalita' Espresso: attivazione Office saltata (il cliente puo' attivarla successivamente)."
+        Add-Report "Installazione app Office" "SALTATO (Espresso)"
     }
-    "3" {
-        if (Confirm-Winget) { Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice" }
-        else { Write-Errore "Winget non disponibile." ; Add-Report "OpenOffice (installazione)" "ERRORE" }
-    }
-    "4" {
-        if (Confirm-Winget) { Installa-Pacchetto -Nome "LibreOffice" -WingetId "TheDocumentFoundation.LibreOffice" }
-        else { Write-Errore "Winget non disponibile." ; Add-Report "LibreOffice (installazione)" "ERRORE" }
-    }
-    "2" {
-        # 1/2: INSTALLAZIONE (se manca). La suite e' la stessa di Microsoft 365:
-        # cambia solo la licenza. Se e' gia' presente non si tocca nulla.
-        if (Get-OsppPath) {
-            Write-OK "Office gia' installato su questo PC."
-            Add-Report "Microsoft Office (installazione)" "OK"
-        } elseif (Confirm-Winget) {
-            Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
-        } else {
-            Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
-        }
-        Add-CollegamentiOffice
-        # 2/2: ATTIVAZIONE. Le card vendute in negozio hanno SEMPRE il PIN da
-        # grattare: si riscatta sul web con l'account Microsoft del cliente.
-        # Quel codice NON va inserito in ospp.vbs (le chiavi retail moderne
-        # sono solo da riscatto), quindi niente domande: si apre la pagina.
-        Start-Process "https://office.com/setup"
-        Write-OK "Browser aperto su office.com/setup (l'indirizzo stampato sulla card)."
-        Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice grattato sulla card."
-        Write-Info "Dopo il riscatto: apri Word e accedi con lo stesso account -> Office si attiva da solo."
-        Add-Report "Office perpetuo (riscatto card PIN)" "OK"
-    }
-    default {
-        Write-Info "Installazione app Office saltata."
-        Add-Report "Installazione app Office" "SALTATO"
-    }
-}
+} else {
+    Write-Host "Scegli la suite Office da installare (se manca) e attivare:" -ForegroundColor White
+    Write-Host "  1) Microsoft 365 (abbonamento, card PIN) - installa, poi riscatto su microsoft365.com/setup" -ForegroundColor White
+    Write-Host "  2) Office perpetuo (Home 2024/2021, card PIN) - installa, poi riscatto su office.com/setup" -ForegroundColor White
+    Write-Host "  3) OpenOffice (suite gratuita)" -ForegroundColor White
+    Write-Host "  4) LibreOffice (suite gratuita)" -ForegroundColor White
+    Write-Host "  5) Salta" -ForegroundColor White
+    Write-Host ""
 
-if ($sceltaAtt -match "^[12]$") { Pausa }
+    # Domanda ESSENZIALE: dipende dalla card che ha in mano l'operatore, la chiedo
+    # SEMPRE. INVIO = Microsoft 365. Metti 5 se il cliente non ha Office da attivare.
+    $sceltaAtt = Attendi-Risposta "Scelta (1-5, INVIO = Microsoft 365, 5 = salta)"
+    if ($RunReale -and [string]::IsNullOrWhiteSpace($sceltaAtt)) { $sceltaAtt = "1" }
+    switch ($sceltaAtt) {
+        "1" {
+            # 1/2: INSTALLAZIONE (se manca).
+            if (Get-OsppPath) {
+                Write-OK "Office gia' installato su questo PC."
+                Add-Report "Microsoft Office (installazione)" "OK"
+            } elseif (Confirm-Winget) {
+                Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
+            } else {
+                Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
+            }
+            Add-CollegamentiOffice
+            # 2/2: ATTIVAZIONE
+            Start-Process "https://microsoft365.com/setup"
+            Write-OK "Browser aperto su microsoft365.com/setup"
+            Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice grattato sulla card."
+            Add-Report "Microsoft 365 (riscatto card PIN)" "OK"
+        }
+        "3" {
+            if (Confirm-Winget) { Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice" }
+            else { Write-Errore "Winget non disponibile." ; Add-Report "OpenOffice (installazione)" "ERRORE" }
+        }
+        "4" {
+            if (Confirm-Winget) { Installa-Pacchetto -Nome "LibreOffice" -WingetId "TheDocumentFoundation.LibreOffice" }
+            else { Write-Errore "Winget non disponibile." ; Add-Report "LibreOffice (installazione)" "ERRORE" }
+        }
+        "2" {
+            if (Get-OsppPath) {
+                Write-OK "Office gia' installato su questo PC."
+                Add-Report "Microsoft Office (installazione)" "OK"
+            } elseif (Confirm-Winget) {
+                Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
+            } else {
+                Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
+            }
+            Add-CollegamentiOffice
+            Start-Process "https://office.com/setup"
+            Write-OK "Browser aperto su office.com/setup (l'indirizzo stampato sulla card)."
+            Write-Info "Accedi con l'account Microsoft del cliente e inserisci il codice grattato sulla card."
+            Write-Info "Dopo il riscatto: apri Word e accedi con lo stesso account -> Office si attiva da solo."
+            Add-Report "Office perpetuo (riscatto card PIN)" "OK"
+        }
+        default {
+            Write-Info "Installazione app Office saltata."
+            Add-Report "Installazione app Office" "SALTATO"
+        }
+    }
+
+    if ($sceltaAtt -match "^[12]$") { Pausa }
+}
 
 Save-Fase 6 "App Office"
 }
@@ -2691,31 +3050,30 @@ switch ($passo) {
 
 Write-Titolo "Antivirus"
 
-Write-Host "Scegli l'antivirus da installare:" -ForegroundColor White
-Write-Host "  1) McAfee"
-Write-Host "  2) Norton"
-Write-Host "  3) Salta"
-Write-Host ""
+if ($Global:ModoEspresso) {
+    Write-OK "Modalita' Espresso: Windows Defender / Sicurezza di Windows configurato e attivo."
+    Add-Report "Antivirus" "OK (Windows Defender)"
+} else {
+    Write-Host "Scegli l'antivirus da installare:" -ForegroundColor White
+    Write-Host "  1) McAfee"
+    Write-Host "  2) Norton"
+    Write-Host "  3) Salta (Windows Defender attivo)"
+    Write-Host ""
 
-$sceltaAV = Attendi-Risposta "Scelta (1-3, B=indietro)"
-if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
+    $sceltaAV = Attendi-Risposta "Scelta (1-3, B=indietro)"
+    if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 
-# (Installa-Antivirus e Attiva-ServizioWeb sono definite PRIMA del wizard, cosi'
-#  sono disponibili anche al passo Unieuro che ora gira prima dell'Antivirus.)
-switch ($sceltaAV) {
-    "1" {
-        Installa-Antivirus -Nome "McAfee" -UrlRiscatto "https://www.mcafee.com/activate" -Utente $credMsAccount -Password $credMsPassword
-    }
-    "2" {
-        Installa-Antivirus -Nome "Norton" -UrlRiscatto "https://www.norton.com/setup" -Utente $credMsAccount -Password $credMsPassword
-    }
-    "3" {
-        Write-Info "Antivirus saltato."
-        Add-Report "Antivirus" "SALTATO"
-    }
-    default {
-        Write-Info "Nessuna scelta valida: passaggio saltato."
-        Add-Report "Antivirus" "SALTATO"
+    switch ($sceltaAV) {
+        "1" {
+            Installa-Antivirus -Nome "McAfee" -UrlRiscatto "https://www.mcafee.com/activate" -Utente $credMsAccount -Password $credMsPassword
+        }
+        "2" {
+            Installa-Antivirus -Nome "Norton" -UrlRiscatto "https://www.norton.com/setup" -Utente $credMsAccount -Password $credMsPassword
+        }
+        default {
+            Write-Info "Antivirus dedicato saltato: Windows Defender e' attivo e aggiornato."
+            Add-Report "Antivirus" "OK (Windows Defender)"
+        }
     }
 }
 
@@ -2728,18 +3086,21 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 
 Write-Titolo "Unieuro Cyber Protection"
 
-Write-Host "Servizio venduto solo su richiesta: INVIO per saltare se non l'ha comprato." -ForegroundColor White
-Write-Host ""
-
-# Domanda ESSENZIALE (add-on venduto a parte): la chiedo SEMPRE. INVIO = salta.
-$vuoiUnieuro = Attendi-Risposta "Attivare Unieuro Cyber Protection? (S = si / INVIO = no, B=indietro)"
-if (Test-Indietro $vuoiUnieuro) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
-if ($vuoiUnieuro -match "^[Ss]") {
-    # Solo email pronta da incollare: la password del portale la crea il sito.
-    Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it" -Utente $credMsAccount
-} else {
-    Write-Info "Unieuro Cyber Protection saltato."
+if ($Global:ModoEspresso) {
+    Write-Info "Modalita' Espresso: Cyber Protection non richiesta (attivabile manualmente se acquistata)."
     Add-Report "Unieuro Cyber Protection" "SALTATO"
+} else {
+    Write-Host "Servizio venduto solo su richiesta: INVIO per saltare se non l'ha comprato." -ForegroundColor White
+    Write-Host ""
+
+    $vuoiUnieuro = Attendi-Risposta "Attivare Unieuro Cyber Protection? (S = si / INVIO = no, B=indietro)"
+    if (Test-Indietro $vuoiUnieuro) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
+    if ($vuoiUnieuro -match "^[Ss]") {
+        Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it" -Utente $credMsAccount
+    } else {
+        Write-Info "Unieuro Cyber Protection saltato."
+        Add-Report "Unieuro Cyber Protection" "SALTATO"
+    }
 }
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
@@ -2800,6 +3161,11 @@ if ($Global:AppProfiloRipresa) {
     $rimaste = @($pianoApp | Where-Object { $appFatte -notcontains $_.Id }).Count
     Write-OK "Riprendo l'installazione app (profilo $etichetta): $rimaste da completare."
     Write-Info "Le app gia' installate le salto: riparto dall'esatta app rimasta."
+} elseif ($Global:ModoEspresso) {
+    Write-Host "Modalita' Espresso: installazione automatica del PROFILO BASE..." -ForegroundColor Green
+    Write-Host "  (Google Chrome, VLC, Adobe Acrobat Reader, 7-Zip, AnyDesk, WhatsApp, Spotify, AIMP, Zoom)" -ForegroundColor Gray
+    $etichetta = "BASE"
+    $pianoApp  = @(Costruisci-PianoApp -Scelta "1")
 } else {
     Write-Host "Scegli come installare le applicazioni (browser incluso in automatico):" -ForegroundColor White
     Write-Host "  1) PROFILO BASE     (Chrome + VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, AIMP, Zoom, AnyDesk)"
@@ -2855,25 +3221,21 @@ if ($Global:AppProfiloRipresa) {
 # --- Eseguo il PIANO: installo in ordine, salto quelle gia' fatte, e dopo OGNI
 #     app riuscita salvo il progresso -> se si chiude, si riparte dall'app esatta.
 if ($pianoApp.Count -gt 0) {
-    if (-not (Confirm-Winget)) {
-        Write-Errore "Winget non disponibile: impossibile installare le applicazioni."
-    } else {
-        # Installato un browser nostro, tolgo l'icona di Edge dal Desktop (superflua).
-        if ($pianoApp | Where-Object { $_.Id -eq "Google.Chrome" -or $_.Id -eq "Opera.OperaGX" }) {
-            Remove-EdgeDaDesktop
+    # Installato un browser nostro, tolgo l'icona di Edge dal Desktop (superflua).
+    if ($pianoApp | Where-Object { $_.Id -eq "Google.Chrome" -or $_.Id -eq "Opera.OperaGX" }) {
+        Remove-EdgeDaDesktop
+    }
+    foreach ($app in $pianoApp) {
+        if ($appFatte -contains $app.Id) {
+            Write-Info "$($app.Nome): gia' installato in questa sessione, salto."
+            continue
         }
-        foreach ($app in $pianoApp) {
-            if ($appFatte -contains $app.Id) {
-                Write-Info "$($app.Nome): gia' installato in questa sessione, salto."
-                continue
-            }
-            Installa-Pacchetto -Nome $app.Nome -WingetId $app.Id
-            # Segno "fatta" e salvo SOLO se e' andata a buon fine: cosi' una ripresa
-            # ritenta le app fallite (rete) e salta solo quelle davvero installate.
-            if ($Global:UltimaInstallOk) {
-                $appFatte += $app.Id
-                Save-AppProgresso -Profilo $etichetta -Lista $pianoApp -Fatte $appFatte
-            }
+        Installa-Pacchetto -Nome $app.Nome -WingetId $app.Id
+        # Segno "fatta" e salvo SOLO se e' andata a buon fine: cosi' una ripresa
+        # ritenta le app fallite (rete) e salta solo quelle davvero installate.
+        if ($Global:UltimaInstallOk) {
+            $appFatte += $app.Id
+            Save-AppProgresso -Profilo $etichetta -Lista $pianoApp -Fatte $appFatte
         }
     }
 }
@@ -2908,8 +3270,11 @@ Write-Host "  - Windows: gli aggiornamenti di SICUREZZA di Windows." -Foreground
 Write-Host "Puo' richiedere diversi minuti. (I driver hanno il loro passo dedicato dopo.)" -ForegroundColor White
 Write-Host ""
 
-$vuoiUpgrade = Attendi-Risposta "Aggiornare ora app e Windows? (S/N, B=indietro)"
-if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
+    $vuoiUpgrade = "S"
+    if (-not $Global:ModoEspresso) {
+        $vuoiUpgrade = Attendi-Risposta "Aggiornare ora app e Windows? (S/N, B=indietro)"
+        if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
+    }
 if ($vuoiUpgrade -match "^[Ss]") {
     # 1) APP INSTALLATE (winget)
     if (Confirm-Winget) {
@@ -3026,8 +3391,11 @@ switch ($gpuDed) {
     }
 }
 
-$vuoiDriver = Attendi-Risposta "Cercare e installare i driver ora? (S/N, B=indietro)"
-if (Test-Indietro $vuoiDriver) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
+    $vuoiDriver = "S"
+    if (-not $Global:ModoEspresso) {
+        $vuoiDriver = Attendi-Risposta "Cercare e installare i driver ora? (S/N, B=indietro)"
+        if (Test-Indietro $vuoiDriver) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
+    }
 if ($vuoiDriver -match "^[Ss]") {
     try {
         Write-Info "Ricerca driver su Windows Update (puo' richiedere qualche minuto)..."

@@ -7,45 +7,41 @@ REM  - Si auto-eleva ad amministratore (UAC)
 REM  - Parte SEMPRE con ExecutionPolicy Bypass (niente errori di blocco)
 REM  - Scarica SEMPRE l'ultima versione da GitHub; la copia accanto al .bat
 REM    e' solo il fallback offline (cosi' si aggiorna da solo, niente USB stale)
-REM  Il MENU (Configura/Diagnostica/Test) e' nello script, prima schermata.
+REM  Il MENU (Espresso/Manuale/Prepara USB/Diagnostica/Test) e' nello script.
 REM ============================================================
 
 REM --- PRIMA PASSATA: imposto i colori nel registro, poi RIAPRO in una finestra
 REM     NUOVA. conhost legge il registro SOLO all'apertura della finestra: se
-REM     l'account e' gia' admin (es. "oem") non c'e' rilancio UAC, quindi la
-REM     finestra corrente e' nata prima del reg e resterebbe col blu chiaro.
+REM     l'account e' gia' admin non c'e' rilancio UAC, quindi la finestra corrente
+REM     e' nata prima del reg e resterebbe col blu chiaro.
 REM     La sentinella "run" evita di ripetere all'infinito. ---
 if /i "%~1"=="run" goto :run
-
-REM Uso opzionale: "PC Facile.bat skipRestore" salta la creazione del punto di
-REM ripristino (viene passato allo script come -skipRestore). La variabile
-REM EXTRAPS1 sopravvive ai ri-launch (start + UAC) perche' le finestre figlie
-REM ereditano l'ambiente; qui sotto NON viene re-inizializzata nei ri-launch.
-set "EXTRAPS1="
-if /i "%~1"=="skipRestore" set "EXTRAPS1=-skipRestore"
 
 REM Virtual Terminal ON (colori ANSI truecolor: arancione Unieuro esatto)
 reg add "HKCU\Console" /v VirtualTerminalLevel /t REG_DWORD /d 1 /f >nul 2>&1
 REM Slot "DarkBlue" (indice 1) rimappato al navy SCURO #0A0E24.
 REM DWORD = 0x00BBGGRR = 0x00240E0A.
 reg add "HKCU\Console" /v ColorTable01 /t REG_DWORD /d 0x00240E0A /f >nul 2>&1
-REM Font piu' GRANDE e leggibile (Consolas 20px, grassetto). Vale sulla console
-REM classica (conhost, quella del doppio-click sul .bat); Windows Terminal lo
-REM ignora. FontSize: altezza nel WORD alto -> 0x0014=20px. Ripristinato a fine.
+REM Font piu' GRANDE e leggibile (Consolas 20px, grassetto).
 reg add "HKCU\Console" /v FaceName /t REG_SZ /d "Consolas" /f >nul 2>&1
 reg add "HKCU\Console" /v FontFamily /t REG_DWORD /d 54 /f >nul 2>&1
 reg add "HKCU\Console" /v FontWeight /t REG_DWORD /d 700 /f >nul 2>&1
 reg add "HKCU\Console" /v FontSize /t REG_DWORD /d 0x00140000 /f >nul 2>&1
-start "PC Facile" "%~f0" run
+start "PC Facile" "%~f0" run %*
 exit /b
 
 :run
-REM --- Auto-elevazione: se non sono admin, mi rilancio come admin (nuova
-REM     finestra, gia' post-reg -> colori ok). Passo la sentinella "run". ---
+REM Consumo l'argomento "run" per recuperare gli eventuali parametri utente
+shift
+set "USER_ARGS=%1 %2 %3 %4 %5 %6 %7 %8 %9"
+set "USER_ARGS=%USER_ARGS:   = %"
+set "USER_ARGS=%USER_ARGS:  = %"
+
+REM --- Auto-elevazione: se non sono admin, mi rilancio come admin (nuova finestra) ---
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     echo Richiesta privilegi di amministratore...
-    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -ArgumentList 'run' -Verb RunAs"
+    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -ArgumentList 'run %USER_ARGS%' -Verb RunAs"
     exit /b
 )
 
@@ -64,14 +60,14 @@ REM --- Se il download e' riuscito uso quello (SEMPRE aggiornato) ---
 REM     e ne SALVO una copia sulla chiavetta come riserva OFFLINE (best effort)
 if exist "%PS1%" (
     copy /y "%PS1%" "%~dp0setup-pc.ps1" >nul 2>&1
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" %EXTRAPS1%
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -TargetDir "%~dp0" %USER_ARGS%
     goto :fine
 )
 
 REM --- Offline: fallback sulla copia accanto al .bat (chiavetta) ---
 if exist "%~dp0setup-pc.ps1" (
     echo Offline: uso la copia sulla chiavetta ^(funziona al 100%% senza Internet^).
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" %EXTRAPS1%
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" -TargetDir "%~dp0" %USER_ARGS%
 ) else (
     echo.
     echo ============================================================
