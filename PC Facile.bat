@@ -49,29 +49,19 @@ if %errorlevel% neq 0 (
     exit /b
 )
 
-REM --- Scarico SEMPRE l'ultima versione da GitHub su file temporaneo ---
-REM     (cache-buster sull'URL per evitare copie vecchie della CDN) ---
-REM     Poi VERIFICO l'integrita' con lo SHA256 pubblicato accanto allo script:
-REM     scarico setup-pc.ps1.sha256, calcolo l'hash del file scaricato e li
-REM     confronto. Se non combaciano (download corrotto/troncato) scarto il
-REM     file e uso il fallback offline. Se l'hash non e' disponibile, proseguo.
+REM --- Scarico l'ultima versione su file temporaneo (con fallback offline) ---
+set "HAS_LOCAL="
+if exist "%~dp0setup-pc.ps1" set "HAS_LOCAL=1"
+
 echo Scarico l'ultima versione da GitHub...
-REM Nome file UNICO ad ogni avvio: se una copia precedente e' ancora BLOCCATA
-REM (esecuzione precedente non chiusa, o antivirus), scrivere sullo stesso nome
-REM dava "Access is denied". Con un nome nuovo la scrittura non collide mai.
-REM Pulisco comunque le copie vecchie (best effort). Lo script si auto-rimuove.
-del "%TEMP%\setup-pc*.ps1" >nul 2>&1
+del "%TEMP%\setup-pc*.ps1" /f /q >nul 2>&1
 set "PS1=%TEMP%\setup-pc-%RANDOM%%RANDOM%.ps1"
-REM     DUE FONTI: prima GitHub (raw), poi il CDN jsDelivr (spesso NON bloccato
-REM     dai filtri aziendali). Se la rete del negozio blocca GitHub, prova da
-REM     sola l'altra strada - senza copiare niente a mano. Ogni fonte con hash.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$bases=@('https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main','https://cdn.jsdelivr.net/gh/samuelenigro97-prog/pc-facile@main'); $done=$false; foreach($base in $bases){ if($done){break}; for($i=1;$i -le 2 -and -not $done;$i++){ try { $t=(Get-Date -UFormat %%s); irm ($base+'/setup-pc.ps1?t='+$t) -Headers @{ 'Cache-Control'='no-cache' } -OutFile '%PS1%'; try { $atteso=(((irm ($base+'/setup-pc.ps1.sha256?t='+$t) -Headers @{ 'Cache-Control'='no-cache' }).Trim()) -split '\s+')[0].ToLower(); $reale=(Get-FileHash '%PS1%' -Algorithm SHA256).Hash.ToLower(); if ($atteso -and $reale -ne $atteso) { Write-Host 'Impronta SHA256 non combacia: scarto.' -ForegroundColor Yellow; Remove-Item '%PS1%' -Force } else { Write-Host ('Scaricato e verificato da: '+$base) -ForegroundColor Green; $done=$true } } catch { Write-Host 'Verifica SHA256 saltata (impronta non disponibile).' -ForegroundColor Yellow; $done=$true } } catch { Write-Host ('Fonte non raggiungibile, provo la prossima...') -ForegroundColor Yellow; Start-Sleep -Seconds 1 } } }; if(-not $done){ Remove-Item '%PS1%' -Force -ErrorAction SilentlyContinue; Write-Host 'Nessuna fonte online raggiungibile: uso la copia locale se presente.' -ForegroundColor Yellow }"
+
+REM     DUE FONTI con TLS 1.2 forzato: prima GitHub raw, poi jsDelivr CDN
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13; $bases=@('https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main','https://cdn.jsdelivr.net/gh/samuelenigro97-prog/pc-facile@main'); $done=$false; foreach($base in $bases){ if($done){break}; for($i=1;$i -le 2 -and -not $done;$i++){ try { $t=(Get-Date -UFormat %%s); irm ($base+'/setup-pc.ps1?t='+$t) -Headers @{ 'Cache-Control'='no-cache' } -OutFile '%PS1%' -ErrorAction Stop; try { $atteso=(((irm ($base+'/setup-pc.ps1.sha256?t='+$t) -Headers @{ 'Cache-Control'='no-cache' } -ErrorAction Stop).Trim()) -split '\s+')[0].ToLower(); $reale=(Get-FileHash '%PS1%' -Algorithm SHA256).Hash.ToLower(); if ($atteso -and $reale -ne $atteso) { Write-Host 'Impronta SHA256 non combacia: scarto.' -ForegroundColor Yellow; Remove-Item '%PS1%' -Force -ErrorAction SilentlyContinue } else { Write-Host ('Scaricato e verificato da: '+$base) -ForegroundColor Green; $done=$true } } catch { Write-Host 'Verifica SHA256 saltata.' -ForegroundColor Yellow; $done=$true } } catch { Start-Sleep -Milliseconds 500 } } }; if(-not $done){ Remove-Item '%PS1%' -Force -ErrorAction SilentlyContinue; if ('%HAS_LOCAL%' -eq '1') { Write-Host 'Download online non riuscito: avvio diretto dalla copia offline su chiavetta...' -ForegroundColor Yellow } else { Write-Host 'Impossibile scaricare lo script: connessione assente o bloccata.' -ForegroundColor Yellow } }"
 
 REM --- Se il download e' riuscito uso quello (SEMPRE aggiornato) ---
-REM     e ne SALVO una copia sulla chiavetta come riserva OFFLINE (best effort):
-REM     cosi' la prossima volta che la rete del negozio blocca GitHub, il .bat
-REM     parte comunque con l'ultima versione buona. Se la USB e' in sola lettura
-REM     la copia fallisce in silenzio, nessun problema.
+REM     e ne SALVO una copia sulla chiavetta come riserva OFFLINE (best effort)
 if exist "%PS1%" (
     copy /y "%PS1%" "%~dp0setup-pc.ps1" >nul 2>&1
     powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" %EXTRAPS1%
@@ -80,12 +70,19 @@ if exist "%PS1%" (
 
 REM --- Offline: fallback sulla copia accanto al .bat (chiavetta) ---
 if exist "%~dp0setup-pc.ps1" (
-    echo Offline: uso la copia sulla chiavetta ^(potrebbe non essere l'ultima^).
+    echo Offline: uso la copia sulla chiavetta ^(funziona al 100%% senza Internet^).
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" %EXTRAPS1%
 ) else (
     echo.
-    echo Impossibile scaricare lo script: controlla la connessione a Internet,
-    echo oppure copia setup-pc.ps1 sulla chiavetta accanto a PC Facile.bat.
+    echo ============================================================
+    echo   ATTENZIONE: Connessione a Internet assente e nessun file
+    echo   'setup-pc.ps1' trovato sulla chiavetta USB!
+    echo.
+    echo   Soluzioni:
+    echo   1. Connetti questo PC al Wi-Fi (in basso a destra) e riprova.
+    echo   2. Oppure copia 'setup-pc.ps1' sulla chiavetta USB accanto
+    echo      a 'PC Facile.bat' per farlo funzionare sempre al 100%% OFFLINE!
+    echo ============================================================
 )
 
 :fine

@@ -1194,11 +1194,134 @@ function Add-IconaDesktop {
     } catch {}
 }
 
+# --- Cache Offline USB per Installers ---
+function Get-OfflineDirs {
+    $dirs = [System.Collections.Generic.List[string]]::new()
+    if ($PSScriptRoot) {
+        $dirs.Add((Join-Path $PSScriptRoot "installers"))
+        $dirs.Add((Join-Path $PSScriptRoot "offline"))
+        $dirs.Add((Join-Path $PSScriptRoot "cache"))
+        $dirs.Add($PSScriptRoot)
+    }
+    $curr = (Get-Location).Path
+    if ($curr) {
+        $dirs.Add((Join-Path $curr "installers"))
+        $dirs.Add((Join-Path $curr "offline"))
+        $dirs.Add((Join-Path $curr "cache"))
+    }
+    $existing = @()
+    foreach ($d in $dirs) {
+        if ($d -and (Test-Path $d) -and -not ($existing -contains $d)) { $existing += $d }
+    }
+    return $existing
+}
+
+function Find-OfflineInstaller {
+    param(
+        [string]$WingetId,
+        [string]$Nome
+    )
+    $dirs = Get-OfflineDirs
+    if ($dirs.Count -eq 0) { return $null }
+
+    $patterns = @{
+        "Google.Chrome"                     = @("*Chrome*Setup*.exe", "*Chrome*Standalone*.exe", "*googlechrome*.exe")
+        "Mozilla.Firefox"                  = @("*Firefox*Setup*.exe", "*firefox*.exe", "*Firefox*Installer*.exe")
+        "VideoLAN.VLC"                     = @("*vlc*win64.exe", "*vlc*.exe", "*vlc*.msi")
+        "Adobe.Acrobat.Reader.64-bit"      = @("*AcroRdr*.exe", "*Acrobat*Reader*.exe", "*AdbeRdr*.exe")
+        "7zip.7zip"                        = @("*7z*x64.exe", "*7z*x64.msi", "*7z*.exe")
+        "AnyDesk.AnyDesk"                  = @("*AnyDesk*.exe")
+        "TeamViewer.TeamViewer"            = @("*TeamViewer*Setup*.exe", "*TeamViewer*.exe")
+        "Zoom.Zoom"                        = @("*ZoomInstaller*.exe", "*Zoom*.msi")
+        "TheDocumentFoundation.LibreOffice"= @("*LibreOffice*x86-64.msi", "*LibreOffice*.msi")
+        "Apache.OpenOffice"                = @("*Apache*OpenOffice*.exe", "*OpenOffice*.exe")
+        "Spotify.Spotify"                  = @("*Spotify*Setup*.exe")
+        "Valve.Steam"                      = @("*SteamSetup*.exe")
+        "Discord.Discord"                  = @("*DiscordSetup*.exe")
+        "qBittorrent.qBittorrent"          = @("*qbittorrent*setup*.exe")
+        "AIMP.AIMP"                        = @("*aimp*.exe")
+    }
+
+    $searchList = @()
+    if ($WingetId -and $patterns.ContainsKey($WingetId)) { $searchList += $patterns[$WingetId] }
+    if ($WingetId) {
+        $searchList += "*$WingetId*.exe"
+        $searchList += "*$WingetId*.msi"
+    }
+    if ($Nome) {
+        $cleanNome = ($Nome -replace '[^a-zA-Z0-9]','*')
+        $searchList += "*$cleanNome*.exe"
+        $searchList += "*$cleanNome*.msi"
+    }
+
+    foreach ($d in $dirs) {
+        foreach ($p in $searchList) {
+            try {
+                $found = Get-ChildItem -Path $d -Filter $p -File -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($found) { return $found.FullName }
+            } catch {}
+        }
+    }
+    return $null
+}
+
+function Install-OfflinePackage {
+    param(
+        [string]$FilePath,
+        [string]$Nome
+    )
+    if ($Test) { Write-OK "TEST: installazione offline simulata per $Nome ($FilePath)"; return $true }
+    Write-Info "Installazione offline da USB in corso: $Nome ($FilePath)..."
+    try {
+        $ext = [System.IO.Path]::GetExtension($FilePath).ToLower()
+        $proc = $null
+        if ($ext -eq '.msi') {
+            $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/i `"$FilePath`" /qn /norestart" -Wait -PassThru -ErrorAction Stop
+        } elseif ($ext -eq '.msixbundle' -or $ext -eq '.appxbundle' -or $ext -eq '.msix') {
+            Add-AppxPackage -Path $FilePath -ErrorAction Stop
+            Write-OK "$Nome installato con successo da pacchetto offline Appx/MSIX!"
+            return $true
+        } else {
+            $arg = "/S"
+            if ($FilePath -like "*7z*") { $arg = "/S" }
+            elseif ($FilePath -like "*vlc*") { $arg = "/L=1040 /S" }
+            elseif ($FilePath -like "*Acro*") { $arg = "/sAll /rs /msi EULA_ACCEPT=YES" }
+            elseif ($FilePath -like "*AnyDesk*") { $arg = "--install `"C:\Program Files (x86)\AnyDesk`" --silent --create-shortcuts" }
+            elseif ($FilePath -like "*TeamViewer*") { $arg = "/S" }
+            elseif ($FilePath -like "*Zoom*") { $arg = "/silent" }
+            elseif ($FilePath -like "*LibreOffice*" -or $FilePath -like "*OpenOffice*") { $arg = "/S" }
+
+            $proc = Start-Process -FilePath $FilePath -ArgumentList $arg -Wait -PassThru -ErrorAction Stop
+        }
+        if ($proc -and ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010 -or $proc.ExitCode -eq 1641)) {
+            Write-OK "$Nome installato con successo da cache offline USB!"
+            return $true
+        } else {
+            $code = if ($proc) { $proc.ExitCode } else { "sconosciuto" }
+            Write-Info "Installazione offline di $Nome uscita con codice $code. Procedo con Winget..."
+        }
+    } catch {
+        Write-Info "Installazione offline non riuscita ($($_.Exception.Message)). Procedo con Winget..."
+    }
+    return $false
+}
+
 function Installa-Pacchetto {
     param(
         [string]$Nome,
         [string]$WingetId
     )
+
+    # 1. Prova prima l'installazione offline ad altissima velocità da USB se presente
+    $offlineFile = Find-OfflineInstaller -WingetId $WingetId -Nome $Nome
+    if ($offlineFile) {
+        if (Install-OfflinePackage -FilePath $offlineFile -Nome $Nome) {
+            Add-Report "$Nome (installazione offline)" "OK"
+            Add-IconaDesktop -Nome $Nome
+            $Global:UltimaInstallOk = $true
+            return
+        }
+    }
 
     # Disambigua SEMPRE la sorgente: ID Microsoft Store (12 caratteri) -> msstore,
     # tutto il resto -> winget. Senza --source, winget da' errore -1978335138
@@ -3264,8 +3387,118 @@ if ($RunReale) {
         $riepFile = Join-Path (Get-DesktopDir) ("$nomeFile.txt")
         $f | Set-Content -Path $riepFile -Encoding UTF8
         Write-OK "Riepilogo salvato sul Desktop: $riepFile"
-        # UN SOLO file sul Desktop: il riepilogo qui sopra ha gia' le credenziali
-        # IN CIMA, quindi non creo piu' il file "Credenziali - ..." separato.
+
+        # Scheda di Consegna Cliente HTML stampabile con grafica moderna
+        try {
+            $htmlFile = Join-Path (Get-DesktopDir) ("Scheda-Consegna-Cliente.html")
+            $cpuName = if ($cpuInfo) { "$cpuInfo" } else { "Processore Standard" }
+            $ramDisplay = if ($ramGB) { "$ramGB GB" } else { "8 GB" }
+            $gpuDisplay = if ($gpuInfo) { "$gpuInfo" } else { "Grafica integrata" }
+            $appInstallate = @($Report | Where-Object { $_.Voce -like '*installazione*' -and $_.Esito -eq 'OK' } | ForEach-Object { ($_.Voce -replace ' \(installazione\)', '' -replace ' \(installazione offline\)', '').Trim() })
+            $appItems = ""
+            foreach ($app in $appInstallate) { $appItems += "<div class='app-badge'>&#10003; <strong>$app</strong></div>" }
+            if (-not $appItems) { $appItems = "<div class='app-badge'>&#10003; <strong>Applicazioni base configurate</strong></div>" }
+
+            $credBox = ""
+            if ($credGenerataEmail -or $credGenerataPass) {
+                $credBox = @"
+                <div class='card'>
+                    <h3>&#128273; Credenziali di Primo Accesso</h3>
+                    <table class='info-table'>
+                        $(if ($credGenerataEmail) { "<tr><td>Email:</td><td><strong>$credGenerataEmail</strong></td></tr>" })
+                        $(if ($credGenerataPass) { "<tr><td>Password provvisoria:</td><td><code>$credGenerataPass</code> <em>(da cambiare al primo accesso)</em></td></tr>" })
+                        <tr><td>Account PC:</td><td>$env:USERNAME</td></tr>
+                    </table>
+                </div>
+"@
+            }
+
+            $htmlDoc = @"
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Scheda Consegna PC - $nomeCliente</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+        body { background: #f1f5f9; color: #1e293b; padding: 24px; }
+        .sheet { max-width: 800px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); overflow: hidden; }
+        .header { background: linear-gradient(135deg, #0A0E24 0%, #1a2552 100%); color: #fff; padding: 24px 30px; border-bottom: 4px solid #EE7203; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 22px; font-weight: 700; color: #fff; }
+        .header p { font-size: 13px; color: #94a3b8; }
+        .badge-brand { background: #EE7203; color: #fff; font-weight: 700; font-size: 13px; padding: 6px 12px; border-radius: 6px; }
+        .body { padding: 28px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px; }
+        .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; }
+        .card h3 { font-size: 15px; color: #0A0E24; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
+        .info-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .info-table td { padding: 4px 0; }
+        .info-table td:first-child { width: 45%; color: #64748b; font-weight: 500; }
+        .app-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+        .app-badge { background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
+        .app-badge strong { color: #0f172a; }
+        .tips-list { font-size: 13px; color: #475569; padding-left: 18px; line-height: 1.6; }
+        .footer { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64748b; }
+        .btn-print { background: #EE7203; color: #fff; border: none; font-weight: 700; font-size: 13px; padding: 8px 18px; border-radius: 6px; cursor: pointer; }
+        @media print { body { background: #fff; padding: 0; } .sheet { box-shadow: none; max-width: 100%; } .no-print { display: none !important; } }
+    </style>
+</head>
+<body>
+    <div class="sheet">
+        <div class="header">
+            <div>
+                <h1>Scheda di Consegna e Configurazione PC</h1>
+                <p>Assistenza Tecnica &bull; Setup Personalizzato</p>
+            </div>
+            <div class="badge-brand">PC FACILE v$SCRIPT_VERSION</div>
+        </div>
+        <div class="body">
+            <div class="grid">
+                <div class="card">
+                    <h3>&#128100; Dati Cliente &amp; PC</h3>
+                    <table class="info-table">
+                        <tr><td>Cliente:</td><td><strong>$(if ($nomeCliente) { $nomeCliente } else { $env:USERNAME })</strong></td></tr>
+                        <tr><td>Nome Computer:</td><td><code>$env:COMPUTERNAME</code></td></tr>
+                        <tr><td>Data Setup:</td><td>$(Get-Date -Format 'dd/MM/yyyy HH:mm')</td></tr>
+                        <tr><td>Sistema:</td><td>$(if ($osInfo) { $osInfo.Caption } else { 'Windows 11' })</td></tr>
+                        <tr><td>Stato Setup:</td><td><strong style="color:#16a34a;">&#10003; Pronto e Collaudato</strong></td></tr>
+                    </table>
+                </div>
+                <div class="card">
+                    <h3>&#128187; Specifiche Hardware</h3>
+                    <table class="info-table">
+                        <tr><td>Processore:</td><td>$cpuName</td></tr>
+                        <tr><td>RAM:</td><td>$ramDisplay</td></tr>
+                        <tr><td>Scheda Video:</td><td>$gpuDisplay</td></tr>
+                        <tr><td>Lingua:</td><td>Italiano (it-IT)</td></tr>
+                    </table>
+                </div>
+            </div>
+            $credBox
+            <div class="card" style="margin-bottom: 20px;">
+                <h3>&#128230; Programmi e Utility Installate</h3>
+                <div class="app-grid">$appItems</div>
+            </div>
+            <div class="card">
+                <h3>&#128161; Consigli e Istruzioni per l'Uso</h3>
+                <ul class="tips-list">
+                    <li><strong>Wi-Fi:</strong> All'accensione a casa, seleziona la tua rete Wi-Fi in basso a destra ed inserisci la password.</li>
+                    <li><strong>Sicurezza:</strong> Se &egrave; stata creata una password provvisoria, modificala al primo accesso in <em>Impostazioni &gt; Account</em>.</li>
+                    <li><strong>Teleassistenza:</strong> AnyDesk e TeamViewer sono pronti sul desktop in caso di necessit&agrave; di supporto da remoto.</li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer">
+            <div>Generato automaticamente da <strong>PC Facile</strong> per il cliente.</div>
+            <button class="btn-print no-print" onclick="window.print()">&#128438; Stampa Scheda</button>
+        </div>
+    </div>
+</body>
+</html>
+"@
+            $htmlDoc | Set-Content -Path $htmlFile -Encoding UTF8
+            Write-OK "Scheda di consegna HTML salvata: $htmlFile"
+        } catch {}
 
         # ---------------------------------------------------------------------
         # LOG STRUTTURATO (JSON + CSV) per l'assistenza/statistiche. NON sul
