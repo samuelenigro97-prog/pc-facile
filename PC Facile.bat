@@ -12,7 +12,7 @@ REM --- 1. Elevazione immediata ad amministratore (1 solo popup UAC) ---
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -ArgumentList 'elevated %*' -Verb RunAs"
-    exit /b
+    (goto) 2>nul & exit
 )
 
 REM Consuma l'argomento sentinel se rilanciato da elevazione
