@@ -262,11 +262,13 @@ Describe 'Install-VisualCRuntime' {
 
 Describe 'Open-PannelloOperatore' {
     It 'genera correttamente il file Pannello-Operatore.html con tutti i provider e i portali' {
+        $Global:Test = $true
         $testPannello = Join-Path ([System.IO.Path]::GetTempPath()) "Pannello-Operatore.html"
         Open-PannelloOperatore -NomeCliente "Mario Rossi" -Email "rossimario@outlook.it" -Password "Mario123!"
         Test-Path $testPannello | Should -BeTrue
         $content = Get-Content $testPannello -Raw
-        $content | Should -Match "Pannello Operatore Tecnico"
+        $content | Should -Match "Pannello Assistenza"
+        $content | Should -Match "UNIEURO"
         $content | Should -Match "rossimario@outlook\.it"
         $content | Should -Match "Mario123!"
         # Provider selectors

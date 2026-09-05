@@ -30,7 +30,10 @@ param(
     [string]$TargetDir
 )
 
-if ($TargetDir) { $Global:TargetDir = $TargetDir }
+if ($TargetDir) {
+    $TargetDir = ($TargetDir -replace '["'']', '').Trim().TrimEnd('\').TrimEnd('/')
+    $Global:TargetDir = $TargetDir
+}
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -683,69 +686,78 @@ function Open-PannelloOperatore {
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>PC Facile - Pannello Operatore Tecnico</title>
+    <title>Unieuro - Pannello Assistenza Tecnica PC</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
-        body { background: #0A0E24; color: #f8fafc; padding: 24px; }
-        .container { max-width: 960px; margin: 0 auto; }
-        .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; padding: 24px 30px; border-bottom: 4px solid #EE7203; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
-        .header h1 { font-size: 22px; color: #fff; font-weight: 700; }
-        .header p { font-size: 13px; color: #94a3b8; margin-top: 4px; }
-        .badge { background: #EE7203; color: #fff; font-weight: 700; font-size: 12px; padding: 6px 14px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px; animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { opacity: 0.9; } 50% { opacity: 1; transform: scale(1.03); } 100% { opacity: 0.9; } }
-        .status-alert { background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; border-radius: 10px; padding: 16px 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 14px; }
-        .status-alert .icon { font-size: 24px; color: #22c55e; }
-        .status-alert .text { font-size: 14px; color: #86efac; line-height: 1.4; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
-        .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-        .card h2 { font-size: 16px; color: #f1f5f9; margin-bottom: 14px; border-bottom: 1px solid #334155; padding-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        body { background: #00122B; color: #f8fafc; padding: 20px; }
+        .container { max-width: 980px; margin: 0 auto; }
+        .header { background: linear-gradient(135deg, #001A3A 0%, #002B5C 100%); border-radius: 12px; padding: 22px 28px; border-bottom: 4px solid #EE7203; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+        .brand-box { display: flex; align-items: center; gap: 14px; }
+        .u-logo { background: #EE7203; color: #fff; font-weight: 900; font-size: 20px; letter-spacing: 1.5px; padding: 8px 14px; border-radius: 8px; text-transform: uppercase; box-shadow: 0 2px 10px rgba(238,114,3,0.4); }
+        .brand-titles h1 { font-size: 20px; color: #fff; font-weight: 700; letter-spacing: 0.3px; }
+        .brand-titles p { font-size: 13px; color: #94a3b8; margin-top: 3px; }
+        .u-tagline { color: #EE7203; font-weight: 700; font-style: italic; }
+        .badge-live { background: linear-gradient(135deg, #EE7203 0%, #d95e00 100%); color: #fff; font-weight: 800; font-size: 12px; padding: 8px 16px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.6px; box-shadow: 0 0 14px rgba(238,114,3,0.6); animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 0.9; transform: scale(1); } 50% { opacity: 1; transform: scale(1.03); } 100% { opacity: 0.9; transform: scale(1); } }
+        .status-alert { background: rgba(238, 114, 3, 0.12); border: 1px solid #EE7203; border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; display: flex; align-items: center; gap: 14px; }
+        .status-alert .icon { font-size: 24px; color: #EE7203; }
+        .status-alert .text { font-size: 13px; color: #fed7aa; line-height: 1.45; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+        .card { background: #001F48; border: 1px solid #003B7A; border-radius: 12px; padding: 18px; box-shadow: 0 4px 14px rgba(0,0,0,0.3); }
+        .card h2 { font-size: 15px; color: #f8fafc; margin-bottom: 14px; border-bottom: 2px solid #003B7A; padding-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .card h2 .bar { width: 4px; height: 16px; background: #EE7203; border-radius: 2px; display: inline-block; }
         .cred-group { margin-bottom: 12px; }
-        .cred-label { font-size: 12px; color: #94a3b8; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; }
+        .cred-label { font-size: 11px; color: #93c5fd; margin-bottom: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
         .cred-box { display: flex; gap: 8px; }
-        .cred-input { flex: 1; background: #0f172a; border: 1px solid #475569; border-radius: 6px; padding: 10px 12px; font-size: 14px; color: #fff; font-family: monospace; outline: none; }
-        .cred-input:focus { border-color: #EE7203; }
-        .dom-selector { display: flex; gap: 6px; margin-bottom: 10px; }
-        .dom-btn { background: #0f172a; border: 1px solid #475569; color: #cbd5e1; font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .cred-input { flex: 1; background: #00142E; border: 1px solid #00458C; border-radius: 6px; padding: 10px 12px; font-size: 14px; color: #fff; font-family: 'Consolas', monospace; outline: none; transition: border-color 0.2s; }
+        .cred-input:focus { border-color: #EE7203; box-shadow: 0 0 0 2px rgba(238,114,3,0.35); }
+        .dom-selector { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+        .dom-btn { background: #00142E; border: 1px solid #00458C; color: #cbd5e1; font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
         .dom-btn:hover { border-color: #EE7203; color: #fff; }
-        .dom-btn.active { background: #EE7203; border-color: #EE7203; color: #fff; }
-        .btn-copy { background: #334155; border: 1px solid #64748b; color: #fff; border-radius: 6px; padding: 0 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
-        .btn-copy:hover { background: #475569; border-color: #94a3b8; }
-        .btn-copy.copied { background: #16a34a; border-color: #22c55e; }
+        .dom-btn.active { background: #EE7203; border-color: #EE7203; color: #fff; box-shadow: 0 2px 8px rgba(238,114,3,0.4); }
+        .btn-copy { background: linear-gradient(135deg, #003B7A 0%, #002B5C 100%); border: 1px solid #0056B3; color: #fff; border-radius: 6px; padding: 0 14px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+        .btn-copy:hover { background: #EE7203; border-color: #EE7203; }
+        .btn-copy.copied { background: #16a34a !important; border-color: #22c55e !important; }
         .links-grid { display: flex; flex-direction: column; gap: 8px; }
-        .portal-btn { display: flex; align-items: center; justify-content: space-between; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; color: #f8fafc; text-decoration: none; font-size: 13px; font-weight: 600; transition: all 0.2s; }
-        .portal-btn:hover { background: #1a2236; border-color: #EE7203; transform: translateX(3px); }
+        .portal-btn { display: flex; align-items: center; justify-content: space-between; background: #00142E; border: 1px solid #003B7A; border-radius: 8px; padding: 10px 12px; color: #f8fafc; text-decoration: none; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+        .portal-btn:hover { background: #00224D; border-color: #EE7203; transform: translateX(3px); }
         .portal-btn .icon { font-size: 16px; margin-right: 8px; }
         .portal-btn .arrow { color: #EE7203; font-weight: bold; }
-        .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
-        .checklist li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #cbd5e1; background: #0f172a; padding: 10px 14px; border-radius: 6px; border: 1px solid #334155; }
+        .portal-btn.highlight { border-color: #EE7203; background: rgba(238, 114, 3, 0.08); }
+        .checklist { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+        .checklist li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #e2e8f0; background: #00142E; padding: 9px 12px; border-radius: 6px; border: 1px solid #003B7A; }
         .checklist input[type="checkbox"] { width: 16px; height: 16px; accent-color: #EE7203; cursor: pointer; }
-        .bg-tasks { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+        .bg-tasks { list-style: none; display: flex; flex-direction: column; gap: 7px; }
         .bg-tasks li { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #94a3b8; }
-        .bg-tasks li .check { color: #22c55e; font-weight: bold; }
-        .footer { text-align: center; font-size: 12px; color: #64748b; margin-top: 20px; }
+        .bg-tasks li .check { color: #22c55e; font-weight: bold; font-size: 14px; }
+        .footer { text-align: center; font-size: 12px; color: #64748b; margin-top: 18px; padding-top: 14px; border-top: 1px solid #002B5C; }
+        .footer strong { color: #cbd5e1; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <div>
-                <h1>Pannello Operatore Tecnico</h1>
-                <p>PC Facile &bull; Assistenza &amp; Configurazione Parallela</p>
+            <div class="brand-box">
+                <div class="u-logo">UNIEURO</div>
+                <div class="brand-titles">
+                    <h1>Pannello Assistenza &amp; Configurazione PC</h1>
+                    <p><span class="u-tagline">Batte. Forte. Sempre.</span> &bull; Setup Tecnico Dedicato</p>
+                </div>
             </div>
-            <div class="badge">&#9889; Setup in corso</div>
+            <div class="badge-live">&#9889; Setup in corso</div>
         </div>
 
         <div class="status-alert">
-            <div class="icon">&#10003;</div>
+            <div class="icon">&#9881;</div>
             <div class="text">
-                <strong>La configurazione automatica del PC &egrave; gi&agrave; partita a massima velocit&agrave;!</strong><br>
-                Mentre la console installa le app, ripulisce il sistema e aggiorna i driver, usa questo pannello per completare le registrazioni account e i riscatti card del cliente.
+                <strong>La configurazione del PC &egrave; gi&agrave; in esecuzione in background a massima velocit&agrave;!</strong><br>
+                Mentre la console installa le app, ottimizza il sistema e aggiorna i driver, usa questo pannello Unieuro per registrare gli account e riscattare le card del cliente.
             </div>
         </div>
 
         <div class="grid">
             <div class="card">
-                <h2>&#128273; Credenziali Consigliate Cliente</h2>
+                <h2><span class="bar"></span> &#128273; Credenziali Consigliate Cliente</h2>
                 <div class="cred-group">
                     <div class="cred-label">Nome Cliente / Riferimento</div>
                     <div class="cred-box">
@@ -766,50 +778,50 @@ function Open-PannelloOperatore {
                     </div>
                 </div>
                 <div class="cred-group">
-                    <div class="cred-label">Password Consigliata</div>
+                    <div class="cred-label">Password Consigliata (Sicura)</div>
                     <div class="cred-box">
                         <input type="text" id="inPass" class="cred-input" value="$Password" readonly>
                         <button class="btn-copy" onclick="copia('inPass', this)">Copia Password</button>
                     </div>
                 </div>
-                <p style="font-size: 11px; color: #64748b; margin-top: 8px;">
-                    Password conforme ai requisiti di sicurezza (maiuscola, minuscola, numero, simbolo).
+                <p style="font-size: 11px; color: #94a3b8; margin-top: 6px;">
+                    Password conforme a tutti gli standard di sicurezza (maiuscola, minuscola, numero, simbolo).
                 </p>
             </div>
 
             <div class="card">
-                <h2>&#127760; Portali di Registrazione &amp; Attivazione (1-Click)</h2>
+                <h2><span class="bar"></span> &#127760; Portali Servizi &amp; Attivazione (1-Click)</h2>
                 <div class="links-grid">
                     <a href="https://account.microsoft.com" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128100;</span> Account Microsoft / Outlook</span>
+                        <span><span class="icon">&#128100;</span> 1. Account Microsoft / Outlook</span>
                         <span class="arrow">&rarr;</span>
                     </a>
                     <a href="https://accounts.google.com/signup" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128231;</span> Crea Account Google / Gmail</span>
+                        <span><span class="icon">&#128231;</span> 2. Account Google / Gmail</span>
                         <span class="arrow">&rarr;</span>
                     </a>
                     <a href="https://account.proton.me/signup" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128274;</span> Crea Account Proton Mail</span>
+                        <span><span class="icon">&#128274;</span> 3. Account Proton Mail</span>
                         <span class="arrow">&rarr;</span>
                     </a>
                     <a href="https://registrazione.libero.it" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128236;</span> Crea Account Libero Mail</span>
+                        <span><span class="icon">&#128236;</span> 4. Account Libero Mail</span>
                         <span class="arrow">&rarr;</span>
                     </a>
                     <a href="https://microsoft365.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128230;</span> Riscatto Microsoft 365 / Office</span>
+                        <span><span class="icon">&#128230;</span> 5. Riscatto Microsoft 365 / Office</span>
                         <span class="arrow">&rarr;</span>
                     </a>
                     <a href="https://www.mcafee.com/activate" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128737;</span> Attivazione McAfee Antivirus</span>
+                        <span><span class="icon">&#128737;</span> 6. Attivazione Card McAfee</span>
                         <span class="arrow">&rarr;</span>
                     </a>
                     <a href="https://www.norton.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128737;</span> Attivazione Norton Antivirus</span>
+                        <span><span class="icon">&#128737;</span> 7. Attivazione Card Norton</span>
                         <span class="arrow">&rarr;</span>
                     </a>
-                    <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128274;</span> Unieuro Cyber Protection</span>
+                    <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" rel="noopener noreferrer" class="portal-btn highlight">
+                        <span><span class="icon">&#128274;</span> 8. Unieuro Cyber Protection</span>
                         <span class="arrow">&rarr;</span>
                     </a>
                 </div>
@@ -818,17 +830,17 @@ function Open-PannelloOperatore {
 
         <div class="grid">
             <div class="card">
-                <h2>&#9745; Checklist Operatore</h2>
+                <h2><span class="bar"></span> &#9745; Checklist Operatore</h2>
                 <ul class="checklist">
                     <li><input type="checkbox"> Account cliente configurato / verificato (Microsoft/Google/Proton/Libero)</li>
-                    <li><input type="checkbox"> Codice PIN Office riscattato (se acquistato dal cliente)</li>
-                    <li><input type="checkbox"> Antivirus attivato con card cliente (se acquistato)</li>
-                    <li><input type="checkbox"> Cyber Protection registrata (se acquistata)</li>
+                    <li><input type="checkbox"> Codice PIN Office riscattato (se acquistato con il PC)</li>
+                    <li><input type="checkbox"> Antivirus attivato con card cliente (McAfee / Norton)</li>
+                    <li><input type="checkbox"> Servizio Unieuro Cyber Protection registrato (se acquistato)</li>
                 </ul>
             </div>
 
             <div class="card">
-                <h2>&#9881; Lavori in Corso in Background</h2>
+                <h2><span class="bar"></span> &#9881; Lavori Automatici in Background</h2>
                 <ul class="bg-tasks">
                     <li><span class="check">&#10003;</span> Rimozione Bloatware OEM e antivirus di prova</li>
                     <li><span class="check">&#10003;</span> Forzatura lingua e regione Italiana (it-IT)</li>
@@ -844,7 +856,7 @@ function Open-PannelloOperatore {
         </div>
 
         <div class="footer">
-            Generato automaticamente da PC Facile per l'assistenza tecnica.
+            Piattaforma Assistenza Tecnica <strong>PC Facile</strong> &bull; Servizio <strong>Unieuro</strong> &bull; Batte. Forte. Sempre.
         </div>
     </div>
 
@@ -895,7 +907,9 @@ function Open-PannelloOperatore {
 </html>
 "@
         $html | Set-Content -Path $pannelloFile -Encoding UTF8
-        try { Start-Process $pannelloFile } catch {}
+        if (-not $Global:Test -and -not $env:PESTER_TEST) {
+            try { Start-Process $pannelloFile } catch {}
+        }
         Write-OK "Pannello Operatore aperto nel browser: gestisci account, Office e antivirus in parallelo."
     } catch {
         Write-Info "Creazione pannello operatore non riuscita: $_"
@@ -908,54 +922,56 @@ function Open-PannelloOperatore {
 
 function Get-OfflineDirs {
     $dirs = [System.Collections.Generic.List[string]]::new()
-    if ($Global:TargetDir) {
-        $dirs.Add((Join-Path $Global:TargetDir "installers"))
-        $dirs.Add((Join-Path $Global:TargetDir "offline"))
-        $dirs.Add((Join-Path $Global:TargetDir "cache"))
-        $dirs.Add($Global:TargetDir)
+
+    $clean = {
+        param([string]$p)
+        if ([string]::IsNullOrWhiteSpace($p)) { return $null }
+        $p = ($p -replace '["'']', '').Trim().TrimEnd('\').TrimEnd('/')
+        return $p
     }
-    if ($TargetDir -and $TargetDir -ne $Global:TargetDir) {
-        $dirs.Add((Join-Path $TargetDir "installers"))
-        $dirs.Add((Join-Path $TargetDir "offline"))
-        $dirs.Add((Join-Path $TargetDir "cache"))
-        $dirs.Add($TargetDir)
+
+    $addDir = {
+        param([string]$base)
+        $b = & $clean $base
+        if ($b) {
+            $dirs.Add((Join-Path $b "installers"))
+            $dirs.Add((Join-Path $b "offline"))
+            $dirs.Add((Join-Path $b "cache"))
+            $dirs.Add($b)
+        }
     }
-    if ($PSScriptRoot) {
-        $dirs.Add((Join-Path $PSScriptRoot "installers"))
-        $dirs.Add((Join-Path $PSScriptRoot "offline"))
-        $dirs.Add((Join-Path $PSScriptRoot "cache"))
-        $dirs.Add($PSScriptRoot)
-    }
+
+    if ($Global:TargetDir) { & $addDir $Global:TargetDir }
+    if ($TargetDir -and $TargetDir -ne $Global:TargetDir) { & $addDir $TargetDir }
+    if ($PSScriptRoot) { & $addDir $PSScriptRoot }
     $curr = (Get-Location).Path
-    if ($curr) {
-        $dirs.Add((Join-Path $curr "installers"))
-        $dirs.Add((Join-Path $curr "offline"))
-        $dirs.Add((Join-Path $curr "cache"))
-        $dirs.Add($curr)
-    }
+    if ($curr) { & $addDir $curr }
+
     try {
-        $allDrives = [System.IO.DriveInfo]::GetDrives() | Where-Object { $_.IsReady }
+        $allDrives = [System.IO.DriveInfo]::GetDrives() | Where-Object { $_.IsReady -and ($_.Name -match '^[a-zA-Z]:' -or $_.DriveType -eq 'Removable') }
         foreach ($d in $allDrives) {
             $root = $d.RootDirectory.FullName
-            $dirs.Add((Join-Path $root "installers"))
-            $dirs.Add((Join-Path $root "offline"))
-            $dirs.Add((Join-Path $root "cache"))
+            if ($root) { & $addDir $root }
         }
     } catch {
         try {
-            $removables = Get-Volume | Where-Object { $_.DriveLetter }
+            $removables = Get-Volume -ErrorAction SilentlyContinue | Where-Object { $_.DriveLetter }
             foreach ($r in $removables) {
                 $rPath = "$($r.DriveLetter):\"
-                $dirs.Add((Join-Path $rPath "installers"))
-                $dirs.Add((Join-Path $rPath "offline"))
-                $dirs.Add((Join-Path $rPath "cache"))
+                & $addDir $rPath
             }
         } catch {}
     }
 
     $existing = @()
     foreach ($d in $dirs) {
-        if ($d -and (Test-Path $d) -and -not ($existing -contains $d)) { $existing += $d }
+        if (-not $d) { continue }
+        $cd = & $clean $d
+        try {
+            if ($cd -and (Test-Path -LiteralPath $cd -ErrorAction SilentlyContinue) -and -not ($existing -contains $cd)) {
+                $existing += $cd
+            }
+        } catch {}
     }
     return $existing
 }
@@ -1037,12 +1053,15 @@ function Find-OfflineInstaller {
     }
 
     foreach ($d in $dirs) {
-        foreach ($p in $searchList) {
-            try {
-                $found = Get-ChildItem -Path $d -Filter $p -File -ErrorAction SilentlyContinue | Select-Object -First 1
-                if ($found) { return $found.FullName }
-            } catch {}
-        }
+        if (-not (Test-Path -LiteralPath $d)) { continue }
+        try {
+            $files = @(Get-ChildItem -LiteralPath $d -File -ErrorAction SilentlyContinue)
+            if ($files.Count -eq 0) { continue }
+            foreach ($p in $searchList) {
+                $matched = $files | Where-Object { $_.Name -like $p } | Select-Object -First 1
+                if ($matched) { return $matched.FullName }
+            }
+        } catch {}
     }
     return $null
 }
@@ -4884,9 +4903,12 @@ per averlo sempre a disposizione in caso di necessita'.
 <body>
     <div class="sheet">
         <div class="header">
-            <div>
-                <h1>Scheda di Consegna e Configurazione PC</h1>
-                <p>Assistenza Tecnica &bull; Setup Personalizzato</p>
+            <div style="display: flex; align-items: center; gap: 14px;">
+                <div style="background: #EE7203; color: #fff; font-weight: 900; font-size: 18px; letter-spacing: 1.5px; padding: 6px 12px; border-radius: 6px;">UNIEURO</div>
+                <div>
+                    <h1>Scheda di Consegna e Configurazione PC</h1>
+                    <p>Assistenza Tecnica &bull; <em style="color: #EE7203;">Batte. Forte. Sempre.</em></p>
+                </div>
             </div>
             <div class="badge-brand">PC FACILE v$SCRIPT_VERSION</div>
         </div>
