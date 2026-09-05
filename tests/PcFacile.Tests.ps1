@@ -16,11 +16,12 @@ BeforeAll {
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:SetupPath, [ref]$null, [ref]$null)
 
     $script:FunzioniTestate = @(
-        'Write-OK', 'Write-Info', 'Write-Errore',
+        'Write-OK', 'Write-Info', 'Write-Errore', 'Add-Report',
         'New-PasswordCliente', 'New-EmailCliente',
         'Test-NomeSimile', 'Test-LnkJunk', 'Test-Indietro',
         'Get-OfflineDirs', 'Find-OfflineInstaller', 'Select-DestinazioneUSB',
         'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus',
+        'Get-SystemHardwareDetails', 'Install-VisualCRuntime',
         'Open-PannelloOperatore'
     )
     foreach ($nome in $script:FunzioniTestate) {
@@ -145,6 +146,8 @@ Describe 'Find-OfflineInstaller' {
         New-Item -Path (Join-Path $script:tempInstDir "7z2408-x64.exe") -ItemType File -Force | Out-Null
         New-Item -Path (Join-Path $script:tempInstDir "NRnR.exe") -ItemType File -Force | Out-Null
         New-Item -Path (Join-Path $script:tempInstDir "MCPR.exe") -ItemType File -Force | Out-Null
+        New-Item -Path (Join-Path $script:tempInstDir "vc_redist.x64.exe") -ItemType File -Force | Out-Null
+        New-Item -Path (Join-Path $script:tempInstDir "vc_redist.x86.exe") -ItemType File -Force | Out-Null
     }
 
     AfterAll {
@@ -174,6 +177,16 @@ Describe 'Find-OfflineInstaller' {
         $mcpr = Find-OfflineInstaller -Nome 'MCPR'
         $mcpr | Should -Not -BeNullOrEmpty
         $mcpr | Should -Match 'MCPR\.exe$'
+    }
+
+    It 'trova i pacchetti Microsoft Visual C++ redistributable x64 e x86' {
+        $vc64 = Find-OfflineInstaller -WingetId 'Microsoft.VCRedist.2015+.x64' -Nome 'Microsoft Visual C++ 2015-2022 (x64)'
+        $vc64 | Should -Not -BeNullOrEmpty
+        $vc64 | Should -Match 'vc_redist\.x64\.exe$'
+
+        $vc86 = Find-OfflineInstaller -WingetId 'Microsoft.VCRedist.2015+.x86' -Nome 'Microsoft Visual C++ 2015-2022 (x86)'
+        $vc86 | Should -Not -BeNullOrEmpty
+        $vc86 | Should -Match 'vc_redist\.x86\.exe$'
     }
 
     It 'restituisce null se il pacchetto non esiste' {
@@ -218,16 +231,54 @@ Describe 'Get-WindowsActivationStatus' {
     }
 }
 
+Describe 'Get-SystemHardwareDetails' {
+    It 'restituisce un oggetto hardware completo con garanzia legale di 2 anni' {
+        $hw = Get-SystemHardwareDetails
+        $hw | Should -Not -BeNullOrEmpty
+        $hw.Produttore | Should -Not -BeNullOrEmpty
+        $hw.Modello | Should -Not -BeNullOrEmpty
+        $hw.Seriale | Should -Not -BeNullOrEmpty
+        $hw.Cpu | Should -Not -BeNullOrEmpty
+        $hw.RamGB | Should -BeGreaterThan 0
+        $hw.Gpu | Should -Not -BeNullOrEmpty
+        $hw.DataSetup | Should -Match '^\d{2}/\d{2}/\d{4}$'
+        $hw.ScadenzaGaranzia | Should -Match '^\d{2}/\d{2}/\d{4}$'
+        
+        $annoSetup = [int]($hw.DataSetup.Split('/')[2])
+        $annoGaranzia = [int]($hw.ScadenzaGaranzia.Split('/')[2])
+        ($annoGaranzia - $annoSetup) | Should -Be 2
+    }
+}
+
+Describe 'Install-VisualCRuntime' {
+    It 'completa con successo in modalita simulata/test' {
+        $Global:Report = [System.Collections.ArrayList]::new()
+        $Global:Test = $true
+        $res = Install-VisualCRuntime
+        $res | Should -BeTrue
+        $Global:Test = $false
+    }
+}
+
 Describe 'Open-PannelloOperatore' {
-    It 'genera correttamente il file Pannello-Operatore.html con i portali e le credenziali' {
+    It 'genera correttamente il file Pannello-Operatore.html con tutti i provider e i portali' {
         $testPannello = Join-Path ([System.IO.Path]::GetTempPath()) "Pannello-Operatore.html"
         Open-PannelloOperatore -NomeCliente "Mario Rossi" -Email "rossimario@outlook.it" -Password "Mario123!"
         Test-Path $testPannello | Should -BeTrue
         $content = Get-Content $testPannello -Raw
         $content | Should -Match "Pannello Operatore Tecnico"
-        $content | Should -Match "rossimario@outlook.it"
+        $content | Should -Match "rossimario@outlook\.it"
         $content | Should -Match "Mario123!"
+        # Provider selectors
+        $content | Should -Match "@outlook\.it"
+        $content | Should -Match "@gmail\.com"
+        $content | Should -Match "@proton\.me"
+        $content | Should -Match "@libero\.it"
+        # 1-Click Portali
         $content | Should -Match "account\.microsoft\.com"
+        $content | Should -Match "accounts\.google\.com/signup"
+        $content | Should -Match "account\.proton\.me/signup"
+        $content | Should -Match "registrazione\.libero\.it"
         $content | Should -Match "microsoft365\.com/setup"
         $content | Should -Match "mcafee\.com/activate"
         $content | Should -Match "norton\.com/setup"

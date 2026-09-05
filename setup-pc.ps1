@@ -559,6 +559,78 @@ function Get-WindowsActivationStatus {
     return [pscustomobject]$r
 }
 
+function Get-SystemHardwareDetails {
+    $details = [ordered]@{
+        Produttore       = "Standard PC"
+        Modello          = "Desktop/Notebook"
+        Seriale          = "Non disponibile"
+        SchedaMadre      = "Standard"
+        Cpu              = "Processore Standard"
+        RamGB            = 8
+        Gpu              = "Grafica integrata"
+        DataSetup        = (Get-Date).ToString("dd/MM/yyyy")
+        ScadenzaGaranzia = (Get-Date).AddYears(2).ToString("dd/MM/yyyy")
+    }
+
+    try {
+        $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue
+        if ($cs) {
+            if ($cs.Manufacturer -and $cs.Manufacturer -notmatch "System manufacturer|To be filled") {
+                $details.Produttore = $cs.Manufacturer.Trim()
+            }
+            if ($cs.Model -and $cs.Model -notmatch "System Product|To be filled") {
+                $details.Modello = $cs.Model.Trim()
+            }
+            if ($cs.TotalPhysicalMemory) {
+                $details.RamGB = [Math]::Round($cs.TotalPhysicalMemory / 1GB)
+            }
+        }
+    } catch {}
+
+    try {
+        $bios = Get-CimInstance Win32_Bios -ErrorAction SilentlyContinue
+        if ($bios -and $bios.SerialNumber -and $bios.SerialNumber -notmatch "To be filled|Default|None|00000000|System Serial") {
+            $details.Seriale = $bios.SerialNumber.Trim()
+        } else {
+            $csp = Get-CimInstance Win32_ComputerSystemProduct -ErrorAction SilentlyContinue
+            if ($csp -and $csp.IdentifyingNumber -and $csp.IdentifyingNumber -notmatch "To be filled|Default|None|00000000|System Serial") {
+                $details.Seriale = $csp.IdentifyingNumber.Trim()
+            }
+        }
+    } catch {}
+
+    try {
+        $bb = Get-CimInstance Win32_BaseBoard -ErrorAction SilentlyContinue
+        if ($bb) {
+            $mfg = if ($bb.Manufacturer -and $bb.Manufacturer -notmatch "To be filled") { $bb.Manufacturer.Trim() } else { "" }
+            $prd = if ($bb.Product -and $bb.Product -notmatch "To be filled") { $bb.Product.Trim() } else { "" }
+            $details.SchedaMadre = "$mfg $prd".Trim()
+            if (-not $details.SchedaMadre) { $details.SchedaMadre = "Standard" }
+        }
+    } catch {}
+
+    try {
+        $proc = Get-CimInstance Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($proc -and $proc.Name) {
+            $details.Cpu = ($proc.Name -replace '\s+', ' ').Trim()
+        }
+    } catch {}
+
+    try {
+        $gpu = Get-GpuDedicata
+        if ($gpu) {
+            $details.Gpu = $gpu
+        } else {
+            $gpuDisp = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($gpuDisp -and $gpuDisp.Name) {
+                $details.Gpu = $gpuDisp.Name.Trim()
+            }
+        }
+    } catch {}
+
+    return [pscustomobject]$details
+}
+
 function Set-PreventSleep {
     param([bool]$Enable = $true)
     try {
@@ -615,7 +687,7 @@ function Open-PannelloOperatore {
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
         body { background: #0A0E24; color: #f8fafc; padding: 24px; }
-        .container { max-width: 900px; margin: 0 auto; }
+        .container { max-width: 960px; margin: 0 auto; }
         .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; padding: 24px 30px; border-bottom: 4px solid #EE7203; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
         .header h1 { font-size: 22px; color: #fff; font-weight: 700; }
         .header p { font-size: 13px; color: #94a3b8; margin-top: 4px; }
@@ -632,13 +704,17 @@ function Open-PannelloOperatore {
         .cred-box { display: flex; gap: 8px; }
         .cred-input { flex: 1; background: #0f172a; border: 1px solid #475569; border-radius: 6px; padding: 10px 12px; font-size: 14px; color: #fff; font-family: monospace; outline: none; }
         .cred-input:focus { border-color: #EE7203; }
+        .dom-selector { display: flex; gap: 6px; margin-bottom: 10px; }
+        .dom-btn { background: #0f172a; border: 1px solid #475569; color: #cbd5e1; font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .dom-btn:hover { border-color: #EE7203; color: #fff; }
+        .dom-btn.active { background: #EE7203; border-color: #EE7203; color: #fff; }
         .btn-copy { background: #334155; border: 1px solid #64748b; color: #fff; border-radius: 6px; padding: 0 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
         .btn-copy:hover { background: #475569; border-color: #94a3b8; }
         .btn-copy.copied { background: #16a34a; border-color: #22c55e; }
-        .links-grid { display: flex; flex-direction: column; gap: 10px; }
-        .portal-btn { display: flex; align-items: center; justify-content: space-between; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px 16px; color: #f8fafc; text-decoration: none; font-size: 14px; font-weight: 600; transition: all 0.2s; }
+        .links-grid { display: flex; flex-direction: column; gap: 8px; }
+        .portal-btn { display: flex; align-items: center; justify-content: space-between; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; color: #f8fafc; text-decoration: none; font-size: 13px; font-weight: 600; transition: all 0.2s; }
         .portal-btn:hover { background: #1a2236; border-color: #EE7203; transform: translateX(3px); }
-        .portal-btn .icon { font-size: 18px; margin-right: 10px; }
+        .portal-btn .icon { font-size: 16px; margin-right: 8px; }
         .portal-btn .arrow { color: #EE7203; font-weight: bold; }
         .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
         .checklist li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #cbd5e1; background: #0f172a; padding: 10px 14px; border-radius: 6px; border: 1px solid #334155; }
@@ -663,7 +739,7 @@ function Open-PannelloOperatore {
             <div class="icon">&#10003;</div>
             <div class="text">
                 <strong>La configurazione automatica del PC &egrave; gi&agrave; partita a massima velocit&agrave;!</strong><br>
-                Mentre la console installa le app, ripulisce il sistema e aggiorna i driver, usa questo pannello per completare le registrazioni e i riscatti card del cliente.
+                Mentre la console installa le app, ripulisce il sistema e aggiorna i driver, usa questo pannello per completare le registrazioni account e i riscatti card del cliente.
             </div>
         </div>
 
@@ -677,7 +753,13 @@ function Open-PannelloOperatore {
                     </div>
                 </div>
                 <div class="cred-group">
-                    <div class="cred-label">Email Suggerita</div>
+                    <div class="cred-label">Provider Email:</div>
+                    <div class="dom-selector">
+                        <button type="button" class="dom-btn active" onclick="setDomain('outlook.it', this)">@outlook.it</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('gmail.com', this)">@gmail.com</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('proton.me', this)">@proton.me</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('libero.it', this)">@libero.it</button>
+                    </div>
                     <div class="cred-box">
                         <input type="text" id="inEmail" class="cred-input" value="$Email" readonly>
                         <button class="btn-copy" onclick="copia('inEmail', this)">Copia Email</button>
@@ -691,7 +773,7 @@ function Open-PannelloOperatore {
                     </div>
                 </div>
                 <p style="font-size: 11px; color: #64748b; margin-top: 8px;">
-                    Password conforme ai requisiti Microsoft (maiuscola, minuscola, numero, simbolo).
+                    Password conforme ai requisiti di sicurezza (maiuscola, minuscola, numero, simbolo).
                 </p>
             </div>
 
@@ -699,23 +781,35 @@ function Open-PannelloOperatore {
                 <h2>&#127760; Portali di Registrazione &amp; Attivazione (1-Click)</h2>
                 <div class="links-grid">
                     <a href="https://account.microsoft.com" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128100;</span> 1. Account Microsoft / Outlook</span>
+                        <span><span class="icon">&#128100;</span> Account Microsoft / Outlook</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                    <a href="https://accounts.google.com/signup" target="_blank" rel="noopener noreferrer" class="portal-btn">
+                        <span><span class="icon">&#128231;</span> Crea Account Google / Gmail</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                    <a href="https://account.proton.me/signup" target="_blank" rel="noopener noreferrer" class="portal-btn">
+                        <span><span class="icon">&#128274;</span> Crea Account Proton Mail</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                    <a href="https://registrazione.libero.it" target="_blank" rel="noopener noreferrer" class="portal-btn">
+                        <span><span class="icon">&#128236;</span> Crea Account Libero Mail</span>
                         <span class="arrow">&rarr;</span>
                     </a>
                     <a href="https://microsoft365.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128230;</span> 2. Riscatto Microsoft 365 / Office</span>
+                        <span><span class="icon">&#128230;</span> Riscatto Microsoft 365 / Office</span>
                         <span class="arrow">&rarr;</span>
                     </a>
                     <a href="https://www.mcafee.com/activate" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128737;</span> 3. Attivazione McAfee Antivirus</span>
+                        <span><span class="icon">&#128737;</span> Attivazione McAfee Antivirus</span>
                         <span class="arrow">&rarr;</span>
                     </a>
                     <a href="https://www.norton.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128737;</span> 4. Attivazione Norton Antivirus</span>
+                        <span><span class="icon">&#128737;</span> Attivazione Norton Antivirus</span>
                         <span class="arrow">&rarr;</span>
                     </a>
                     <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128274;</span> 5. Unieuro Cyber Protection</span>
+                        <span><span class="icon">&#128274;</span> Unieuro Cyber Protection</span>
                         <span class="arrow">&rarr;</span>
                     </a>
                 </div>
@@ -726,7 +820,7 @@ function Open-PannelloOperatore {
             <div class="card">
                 <h2>&#9745; Checklist Operatore</h2>
                 <ul class="checklist">
-                    <li><input type="checkbox"> Account Microsoft del cliente configurato / verificato</li>
+                    <li><input type="checkbox"> Account cliente configurato / verificato (Microsoft/Google/Proton/Libero)</li>
                     <li><input type="checkbox"> Codice PIN Office riscattato (se acquistato dal cliente)</li>
                     <li><input type="checkbox"> Antivirus attivato con card cliente (se acquistato)</li>
                     <li><input type="checkbox"> Cyber Protection registrata (se acquistata)</li>
@@ -738,7 +832,8 @@ function Open-PannelloOperatore {
                 <ul class="bg-tasks">
                     <li><span class="check">&#10003;</span> Rimozione Bloatware OEM e antivirus di prova</li>
                     <li><span class="check">&#10003;</span> Forzatura lingua e regione Italiana (it-IT)</li>
-                    <li><span class="check">&#10003;</span> Creazione punto di ripristino di sicurezza</li>
+                    <li><span class="check">&#10003;</span> Creazione punto di ripristino di sicurezza (5% max SSD)</li>
+                    <li><span class="check">&#10003;</span> Installazione Runtime Microsoft Visual C++ (x86 &amp; x64)</li>
                     <li><span class="check">&#10003;</span> Installazione app Base (Chrome, 7-Zip, VLC, Adobe, AnyDesk...)</li>
                     <li><span class="check">&#10003;</span> Creazione icone Office Word/Excel sul Desktop</li>
                     <li><span class="check">&#10003;</span> Aggiornamenti di sicurezza e driver video/hardware</li>
@@ -754,6 +849,18 @@ function Open-PannelloOperatore {
     </div>
 
     <script>
+        var currentDomain = 'outlook.it';
+
+        function setDomain(dom, btn) {
+            currentDomain = dom;
+            var btns = document.querySelectorAll('.dom-btn');
+            for (var i = 0; i < btns.length; i++) {
+                btns[i].classList.remove('active');
+            }
+            if (btn) btn.classList.add('active');
+            aggiornaCred();
+        }
+
         function copia(id, btn) {
             var el = document.getElementById(id);
             if (!el) return;
@@ -771,13 +878,15 @@ function Open-PannelloOperatore {
         function aggiornaCred() {
             var nome = document.getElementById('inNome').value.trim();
             if (!nome) {
-                document.getElementById('inEmail').value = 'cliente@outlook.it';
+                document.getElementById('inEmail').value = 'cliente@' + currentDomain;
                 document.getElementById('inPass').value = 'Cliente123!';
                 return;
             }
-            var pulito = nome.toLowerCase().replace(/[^a-z0-9]/g, '');
-            document.getElementById('inEmail').value = pulito + '@outlook.it';
-            var prima = nome.split(' ')[0];
+            var parts = nome.toLowerCase().split(/\s+/).filter(Boolean);
+            var pulito = parts.length > 1 ? (parts.slice(1).join('') + parts[0]) : parts[0];
+            pulito = pulito.replace(/[^a-z0-9]/g, '');
+            document.getElementById('inEmail').value = pulito + '@' + currentDomain;
+            var prima = parts[0];
             var cap = prima.charAt(0).toUpperCase() + prima.slice(1).toLowerCase();
             document.getElementById('inPass').value = cap + '123!';
         }
@@ -880,11 +989,17 @@ function Find-OfflineInstaller {
         "AIMP.AIMP"                        = @("*aimp*.exe")
         "Intel.IntelDriverAndSupportAssistant" = @("*Intel*Driver*Support*Assistant*.exe", "*IntelDSA*.exe", "*Intel*.exe")
         "Microsoft.Office"                 = @("*OfficeSetup*.exe", "*Office*.exe", "*Setup32*.exe", "*Setup64*.exe")
+        "Microsoft.VCRedist.2015+.x64"      = @("*vc_redist.x64*.exe", "*vcredist*x64*.exe")
+        "Microsoft.VCRedist.2015+.x86"      = @("*vc_redist.x86*.exe", "*vcredist*x86*.exe")
         "MCPR"                             = @("*MCPR*.exe")
         "NRnR"                             = @("*NRnR*.exe")
     }
 
     $namePatterns = @{
+        "Visual C++ x64"                   = @("*vc_redist.x64*.exe", "*vcredist*x64*.exe")
+        "Visual C++ x86"                   = @("*vc_redist.x86*.exe", "*vcredist*x86*.exe")
+        "Microsoft Visual C++ 2015-2022 (x64)" = @("*vc_redist.x64*.exe", "*vcredist*x64*.exe")
+        "Microsoft Visual C++ 2015-2022 (x86)" = @("*vc_redist.x86*.exe", "*vcredist*x86*.exe")
         "VLC"                              = @("*vlc*win64.exe", "*vlc*.exe", "*vlc*.msi")
         "Adobe Acrobat Reader"             = @("*AcroRdr*.exe", "*Acrobat*Reader*.exe", "*AdbeRdr*.exe", "*AcroRdr*it_IT*.exe", "*Acro*.msi")
         "Sumatra PDF"                      = @("*SumatraPDF*.exe", "*SumatraPDF*.msi")
@@ -965,6 +1080,7 @@ function Install-OfflinePackage {
             elseif ($FilePath -like "*gimp*") { $arg = "/VERYSILENT /NORESTART /ALLUSERS" }
             elseif ($FilePath -like "*Steam*") { $arg = "/S" }
             elseif ($FilePath -like "*Intel*") { $arg = "/quiet /norestart" }
+            elseif ($FilePath -like "*vc_redist*" -or $FilePath -like "*vcredist*") { $arg = "/install /quiet /norestart" }
 
             $proc = Start-Process -FilePath $FilePath -ArgumentList $arg -Wait -PassThru -ErrorAction Stop
         }
@@ -979,6 +1095,69 @@ function Install-OfflinePackage {
         Write-Info "Installazione offline non riuscita ($($_.Exception.Message)). Procedo con Winget..."
     }
     return $false
+}
+
+function Install-VisualCRuntime {
+    if ($Test) {
+        Write-OK "TEST: Installazione Microsoft Visual C++ Redistributable (x64 & x86) simulata."
+        Add-Report "Microsoft Visual C++ Runtime (x64/x86)" "OK"
+        return $true
+    }
+
+    Write-Info "Verifica e installazione Runtime Essenziali (Microsoft Visual C++ 2015-2022)..."
+    $runtimes = @(
+        @{ Nome = "Microsoft Visual C++ 2015-2022 (x64)"; WingetId = "Microsoft.VCRedist.2015+.x64"; Url = "https://aka.ms/vs/17/release/vc_redist.x64.exe"; File = "vc_redist.x64.exe" },
+        @{ Nome = "Microsoft Visual C++ 2015-2022 (x86)"; WingetId = "Microsoft.VCRedist.2015+.x86"; Url = "https://aka.ms/vs/17/release/vc_redist.x86.exe"; File = "vc_redist.x86.exe" }
+    )
+
+    $allOk = $true
+    foreach ($rt in $runtimes) {
+        # 1. Prova prima da installer offline USB se presente
+        $offlineFile = Find-OfflineInstaller -WingetId $rt.WingetId -Nome $rt.Nome
+        if ($offlineFile) {
+            if (Install-OfflinePackage -FilePath $offlineFile -Nome $rt.Nome) {
+                Write-OK "$($rt.Nome) installato da archivio offline USB."
+                continue
+            }
+        }
+
+        # 2. Prova installazione via Winget
+        $wingetInstalled = $false
+        if (Confirm-Winget) {
+            try {
+                $p = Start-Process winget -ArgumentList "install --id $($rt.WingetId) --exact --silent --accept-source-agreements --accept-package-agreements --disable-interactivity" -Wait -PassThru -NoNewWindow -ErrorAction SilentlyContinue
+                if ($p -and ($p.ExitCode -eq 0 -or $p.ExitCode -eq 3010 -or $p.ExitCode -eq 1641 -or $p.ExitCode -eq -1978335189)) {
+                    $wingetInstalled = $true
+                    Write-OK "$($rt.Nome) installato via Winget."
+                }
+            } catch {}
+        }
+
+        # 3. Fallback download diretto da server ufficiale Microsoft
+        if (-not $wingetInstalled) {
+            try {
+                $tempDest = Join-Path $env:TEMP $rt.File
+                [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+                Invoke-WebRequest -Uri $rt.Url -OutFile $tempDest -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
+                $proc = Start-Process -FilePath $tempDest -ArgumentList "/install /quiet /norestart" -Wait -PassThru -ErrorAction Stop
+                if ($proc -and ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010 -or $proc.ExitCode -eq 1641)) {
+                    Write-OK "$($rt.Nome) installato da download diretto Microsoft."
+                } else {
+                    $allOk = $false
+                }
+            } catch {
+                Write-Info "Installazione di $($rt.Nome) non riuscita: $_"
+                $allOk = $false
+            }
+        }
+    }
+
+    if ($allOk) {
+        Add-Report "Microsoft Visual C++ Runtime (x64/x86)" "OK"
+    } else {
+        Add-Report "Microsoft Visual C++ Runtime (x64/x86)" "AVVISO"
+    }
+    return $allOk
 }
 
 function Select-DestinazioneUSB {
@@ -1297,13 +1476,31 @@ function Invoke-PreparaUSBOffline {
             )
             MinSizeKB = 80000
             Categoria = "Completo"
+        },
+        @{
+            Nome      = "Microsoft Visual C++ 2015-2022 (64-bit)"
+            File      = "vc_redist.x64.exe"
+            Urls      = @(
+                "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+            )
+            MinSizeKB = 20000
+            Categoria = "Base"
+        },
+        @{
+            Nome      = "Microsoft Visual C++ 2015-2022 (32-bit)"
+            File      = "vc_redist.x86.exe"
+            Urls      = @(
+                "https://aka.ms/vs/17/release/vc_redist.x86.exe"
+            )
+            MinSizeKB = 15000
+            Categoria = "Base"
         }
     )
 
     $daScaricare = $downloadCatalog
     if (-not $Test) {
         Write-Host "Cosa vuoi scaricare sulla chiavetta?" -ForegroundColor White
-        Write-Host "  1) Pacchetto Base + Utility (Consigliato: Chrome, Firefox, VLC, Adobe, 7-Zip, AnyDesk, NRnR, MCPR - ~450 MB)" -ForegroundColor Green
+        Write-Host "  1) Pacchetto Base + Utility (Consigliato: Chrome, Firefox, VLC, Adobe, 7-Zip, AnyDesk, Visual C++, NRnR, MCPR - ~500 MB)" -ForegroundColor Green
         Write-Host "  2) Pacchetto Completo (Tutti i programmi inclusi LibreOffice, Spotify, Zoom, GIMP, Steam, Discord - ~1.5 GB)" -ForegroundColor White
         Write-Host ""
         $sceltaPkg = Attendi-Risposta "Scelta (1/2, INVIO = Pacchetto Base)"
@@ -3292,6 +3489,27 @@ $bloatwareAppx = @(
         Add-Report "Privacy e telemetria Windows" "AVVISO"
     }
 
+    # --- OTTIMIZZAZIONE SPAZIO SU DISCO: Ibernazione (su SSD <= 260GB) e WinSxS (DISM) ---
+    try {
+        $driveC = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction SilentlyContinue
+        if ($driveC -and ($driveC.Size / 1GB) -le 260) {
+            Write-Info "Disco di sistema <= 256 GB: disattivazione ibernazione per liberare spazio SSD..."
+            powercfg /hibernate off 2>$null | Out-Null
+            Write-OK "Ibernazione disattivata (liberati da 8 a 32 GB di spazio SSD)."
+            Add-Report "Ottimizzazione spazio SSD (ibernazione off)" "OK"
+        }
+    } catch {}
+
+    try {
+        Write-Info "Pulizia componenti obsoleti WinSxS (DISM)..."
+        Start-BarraAnimata "Pulizia componenti WinSxS"
+        $dismProc = Start-Process dism.exe -ArgumentList "/Online /Cleanup-Image /StartComponentCleanup /NoRestart" -Wait -PassThru -NoNewWindow -ErrorAction SilentlyContinue
+        if ($dismProc -and $dismProc.ExitCode -eq 0) {
+            Write-OK "Pulizia WinSxS completata con successo."
+            Add-Report "Pulizia componenti WinSxS (DISM)" "OK"
+        }
+    } catch {} finally { Stop-BarraAnimata }
+
     Write-OK "Pulizia e ottimizzazione iniziale completata."
 } else {
     Write-Info "Pulizia e ottimizzazione iniziale saltata."
@@ -3493,6 +3711,8 @@ $vuoiRestore = Chiedi "Creare un punto di ripristino ora? (consigliato) (S/N)" "
 if (($vuoiRestore -match "^[Ss]") -or ($vuoiRestore.Trim() -eq '')) {
     try {
         Enable-ComputerRestore -Drive "$env:SystemDrive\" -ErrorAction SilentlyContinue
+        # Limita lo spazio massimo del ripristino al 5% del disco per proteggere lo storage SSD
+        try { vssadmin resize shadowstorage /for=C: /on=C: /maxsize=5% 2>$null | Out-Null } catch {}
         # Rimuove il limite di 1 punto ogni 24h, solo per crearne uno adesso
         New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore" `
             -Name "SystemRestorePointCreationFrequency" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
@@ -4020,6 +4240,9 @@ if ($Global:AppProfiloRipresa) {
 # --- Eseguo il PIANO: installo in ordine, salto quelle gia' fatte, e dopo OGNI
 #     app riuscita salvo il progresso -> se si chiude, si riparte dall'app esatta.
 if ($pianoApp.Count -gt 0) {
+    # 0) Installazione Runtime Essenziali (Microsoft Visual C++ 2015-2022 x86 & x64)
+    Install-VisualCRuntime
+
     # Installato un browser nostro, tolgo l'icona di Edge dal Desktop (superflua).
     if ($pianoApp | Where-Object { $_.Id -eq "Google.Chrome" -or $_.Id -eq "Opera.OperaGX" }) {
         Remove-EdgeDaDesktop
@@ -4429,6 +4652,7 @@ per averlo sempre a disposizione in caso di necessita'.
 
         # --- Dettagli tecnici per l'assistenza (troubleshooting nello stesso file) ---
         $osInfo = $null; try { $osInfo = Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue } catch {}
+        $hwInfo = Get-SystemHardwareDetails
         $wgVer = "n/d"; try { $wgVer = (winget --version) 2>$null } catch {}
         $resTxt = if ($hres) { "$hres" } else { "n/d" }
         $avTxt = try { (@(Get-AntivirusInstallati).Nome | Select-Object -Unique) -join ', ' } catch { '' }
@@ -4483,12 +4707,23 @@ per averlo sempre a disposizione in caso di necessita'.
         $f += $credBlocco
         $f += ""
         $f += $sep
-        $f += "STATO SISTEMA"
+        $f += "HARDWARE, SERIALE & GARANZIA LEGALE"
         $f += $sep
-        $f += "  Windows attivato : $($winActInfo.StatoBreve)"
-        if ($freeTxt) { $f += "  Spazio disco C:  : $freeTxt" }
-        $f += "  Salute disco/SSD : $($storageInfo.StatoCompleto)"
-        if ($batteryInfo.Presente) { $f += "  Batteria         : $($batteryInfo.Descrizione)" }
+        $f += "  Produttore / Modello : $($hwInfo.Produttore) $($hwInfo.Modello)"
+        $f += "  Seriale (Service Tag): $($hwInfo.Seriale)"
+        $f += "  Scheda Madre         : $($hwInfo.SchedaMadre)"
+        $f += "  Processore (CPU)     : $($hwInfo.Cpu)"
+        $f += "  Memoria RAM          : $($hwInfo.RamGB) GB"
+        $f += "  Scheda Video (GPU)   : $($hwInfo.Gpu)"
+        $f += "  Garanzia Legale (2a) : Valida fino al $($hwInfo.ScadenzaGaranzia)"
+        $f += ""
+        $f += $sep
+        $f += "STATO SISTEMA & DIAGNOSTICA"
+        $f += $sep
+        $f += "  Windows attivato     : $($winActInfo.StatoBreve)"
+        if ($freeTxt) { $f += "  Spazio disco C:      : $freeTxt" }
+        $f += "  Salute disco/SSD     : $($storageInfo.StatoCompleto)"
+        if ($batteryInfo.Presente) { $f += "  Batteria             : $($batteryInfo.Descrizione)" }
         $f += ""
         $f += $sep
         $f += "VERIFICA FINALE (ricontrollo automatico)"
@@ -4597,9 +4832,6 @@ per averlo sempre a disposizione in caso di necessita'.
         # Scheda di Consegna Cliente HTML stampabile con grafica moderna
         try {
             $htmlFile = Join-Path (Get-DesktopDir) ("Scheda-Consegna-Cliente.html")
-            $cpuName = if ($cpuInfo) { "$cpuInfo" } else { "Processore Standard" }
-            $ramDisplay = if ($ramGB) { "$ramGB GB" } else { "8 GB" }
-            $gpuDisplay = if ($gpuInfo) { "$gpuInfo" } else { "Grafica integrata" }
             $appInstallate = @($Report | Where-Object { $_.Voce -like '*installazione*' -and $_.Esito -eq 'OK' } | ForEach-Object { ($_.Voce -replace ' \(installazione\)', '' -replace ' \(installazione offline\)', '').Trim() })
             $appItems = ""
             foreach ($app in $appInstallate) { $appItems += "<div class='app-badge'>&#10003; <strong>$app</strong></div>" }
@@ -4661,12 +4893,13 @@ per averlo sempre a disposizione in caso di necessita'.
         <div class="body">
             <div class="grid">
                 <div class="card">
-                    <h3>&#128100; Dati Cliente &amp; PC</h3>
+                    <h3>&#128100; Dati Cliente &amp; Garanzia</h3>
                     <table class="info-table">
                         <tr><td>Cliente:</td><td><strong>$(if ($nomeCliente) { $nomeCliente } else { $env:USERNAME })</strong></td></tr>
                         <tr><td>Nome Computer:</td><td><code>$env:COMPUTERNAME</code></td></tr>
+                        <tr><td>Seriale / S/N:</td><td><strong>$($hwInfo.Seriale)</strong></td></tr>
+                        <tr><td>Garanzia Legale:</td><td><strong style="color:#0284c7;">2 Anni (fino al $($hwInfo.ScadenzaGaranzia))</strong></td></tr>
                         <tr><td>Data Setup:</td><td>$(Get-Date -Format 'dd/MM/yyyy HH:mm')</td></tr>
-                        <tr><td>Sistema:</td><td>$(if ($osInfo) { $osInfo.Caption } else { 'Windows 11' })</td></tr>
                         <tr><td>Licenza Windows:</td><td><strong style="color:$(if ($winActInfo.Attivo) { '#16a34a' } else { '#e11d48' });">&#10003; $($winActInfo.StatoBreve)</strong></td></tr>
                         <tr><td>Stato Setup:</td><td><strong style="color:#16a34a;">&#10003; Pronto e Collaudato</strong></td></tr>
                     </table>
@@ -4674,9 +4907,10 @@ per averlo sempre a disposizione in caso di necessita'.
                 <div class="card">
                     <h3>&#128187; Specifiche Hardware &amp; Diagnostica</h3>
                     <table class="info-table">
-                        <tr><td>Processore:</td><td>$cpuName</td></tr>
-                        <tr><td>RAM:</td><td>$ramDisplay</td></tr>
-                        <tr><td>Scheda Video:</td><td>$gpuDisplay</td></tr>
+                        <tr><td>Dispositivo:</td><td><strong>$($hwInfo.Produttore) $($hwInfo.Modello)</strong></td></tr>
+                        <tr><td>Processore:</td><td>$($hwInfo.Cpu)</td></tr>
+                        <tr><td>RAM:</td><td>$($hwInfo.RamGB) GB</td></tr>
+                        <tr><td>Scheda Video:</td><td>$($hwInfo.Gpu)</td></tr>
                         <tr><td>Stato Disco / SSD:</td><td><strong>$($storageInfo.StatoCompleto)</strong></td></tr>
                         $(if ($batteryInfo.Presente) { "<tr><td>Salute Batteria:</td><td><strong>$($batteryInfo.Descrizione)</strong></td></tr>" })
                         <tr><td>Lingua:</td><td>Italiano (it-IT)</td></tr>
@@ -4724,19 +4958,23 @@ per averlo sempre a disposizione in caso di necessita'.
             $baseLog = Join-Path $logDir ("setup_{0}_{1}" -f $env:COMPUTERNAME, $stamp)
 
             $logObj = [ordered]@{
-                versioneTool = $SCRIPT_VERSION
-                data         = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-                cliente      = "$nomeCliente"
-                nomePc       = "$env:COMPUTERNAME"
-                utente       = "$env:USERNAME"
-                sistema      = if ($osInfo) { "$($osInfo.Caption) build $($osInfo.BuildNumber)" } else { 'n/d' }
-                powershell   = "$($PSVersionTable.PSVersion)"
-                winget       = "$wgVer"
-                windowsAttivato = [bool]$winOk
-                risoluzione  = "$resTxt"
-                antivirus    = "$avTxt"
-                esiti        = @($Report | ForEach-Object { [ordered]@{ voce = $_.Voce; esito = $_.Esito } })
-                verificaFinale = @($verifica | ForEach-Object { [ordered]@{ voce = $_.N; ok = [bool]$_.Ok } })
+                versioneTool     = $SCRIPT_VERSION
+                data             = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+                cliente          = "$nomeCliente"
+                nomePc           = "$env:COMPUTERNAME"
+                utente           = "$env:USERNAME"
+                seriale          = "$($hwInfo.Seriale)"
+                produttore       = "$($hwInfo.Produttore)"
+                modello          = "$($hwInfo.Modello)"
+                scadenzaGaranzia = "$($hwInfo.ScadenzaGaranzia)"
+                sistema          = if ($osInfo) { "$($osInfo.Caption) build $($osInfo.BuildNumber)" } else { 'n/d' }
+                powershell       = "$($PSVersionTable.PSVersion)"
+                winget           = "$wgVer"
+                windowsAttivato  = [bool]$winOk
+                risoluzione      = "$resTxt"
+                antivirus        = "$avTxt"
+                esiti            = @($Report | ForEach-Object { [ordered]@{ voce = $_.Voce; esito = $_.Esito } })
+                verificaFinale   = @($verifica | ForEach-Object { [ordered]@{ voce = $_.N; ok = [bool]$_.Ok } })
                 erroriImprevisti = @($Global:ErroriImprevisti)
             }
             $logObj | ConvertTo-Json -Depth 6 | Set-Content -Path "$baseLog.json" -Encoding UTF8
