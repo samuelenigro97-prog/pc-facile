@@ -149,37 +149,16 @@ function Write-Errore {
 }
 
 # =============================================================================
-# GESTIONE UAC SILENZIOSO & AVVISI SICUREZZA
-# Salva il valore originale di ConsentPromptBehaviorAdmin e lo imposta a 0
-# per l'intera durata dello script, eliminando qualsiasi richiesta UAC
-# intermedia durante l'installazione di programmi, runtime e driver.
+# GESTIONE AVVISI SICUREZZA
 # =============================================================================
-$Global:OriginalUacConsent = $null
-
 function Enable-SilentElevation {
     try {
         $env:SEE_MASK_NOZONECHECKS = '1'
-        [Environment]::SetEnvironmentVariable('SEE_MASK_NOZONECHECKS', '1', 'Process')
-        $uacKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
-        if (Test-Path $uacKey) {
-            $prop = Get-ItemProperty -Path $uacKey -Name 'ConsentPromptBehaviorAdmin' -ErrorAction SilentlyContinue
-            if ($prop -and ($null -ne $prop.ConsentPromptBehaviorAdmin)) {
-                $Global:OriginalUacConsent = [int]$prop.ConsentPromptBehaviorAdmin
-            } else {
-                $Global:OriginalUacConsent = 5
-            }
-            Set-ItemProperty -Path $uacKey -Name 'ConsentPromptBehaviorAdmin' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-        }
     } catch {}
 }
 
 function Restore-SilentElevation {
-    try {
-        $uacKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
-        if ((Test-Path $uacKey) -and ($null -ne $Global:OriginalUacConsent)) {
-            Set-ItemProperty -Path $uacKey -Name 'ConsentPromptBehaviorAdmin' -Value $Global:OriginalUacConsent -Type DWord -Force -ErrorAction SilentlyContinue
-        }
-    } catch {}
+    # Pulizia impostazioni
 }
 
 # Avviso sonoro. [console]::Beep e' un metodo .NET gestito: NON e' P/Invoke,
@@ -1638,7 +1617,7 @@ function Install-OfflinePackage {
                 }
             } catch {
                 try {
-                    Start-Process -FilePath "runas.exe" -ArgumentList "/trustlevel:0x20000 `"`"$FilePath`" /silent`"" -WorkingDirectory $workDir -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
+                    Start-Process -FilePath $FilePath -ArgumentList "/silent" -WorkingDirectory $workDir -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
                 } catch {}
             }
 

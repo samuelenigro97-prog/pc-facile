@@ -20,14 +20,12 @@ if /i "%~1"=="run" (
 
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -ArgumentList 'elevated %*' -Verb RunAs" >nul 2>&1
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath 'cmd.exe' -ArgumentList '/c \"\"%~f0\" elevated %*\"' -Verb RunAs"
     exit /b 0
 )
 
 :elevato
-set "USER_ARGS=%1 %2 %3 %4 %5 %6 %7 %8 %9"
-set "USER_ARGS=%USER_ARGS:   = %"
-set "USER_ARGS=%USER_ARGS:  = %"
+set "USER_ARGS=%*"
 
 REM --- 2. Impostazioni console a tema Unieuro (Navy #00122B & Arancio #EE7203) ---
 set "SEE_MASK_NOZONECHECKS=1"
@@ -61,7 +59,7 @@ echo Scarico l'ultima versione da GitHub...
 del "%TEMP%\setup-pc*.ps1" /f /q >nul 2>&1
 set "PS1=%TEMP%\setup-pc-%RANDOM%%RANDOM%.ps1"
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13; $bases=@('https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main','https://cdn.jsdelivr.net/gh/samuelenigro97-prog/pc-facile@main'); $done=$false; foreach($base in $bases){ if($done){break}; for($i=1;$i -le 2 -and -not $done;$i++){ try { $t=(Get-Date -UFormat %%s); irm ($base+'/setup-pc.ps1?t='+$t) -Headers @{ 'Cache-Control'='no-cache' } -OutFile '%PS1%' -ErrorAction Stop; try { $atteso=(((irm ($base+'/setup-pc.ps1.sha256?t='+$t) -Headers @{ 'Cache-Control'='no-cache' } -ErrorAction Stop).Trim()) -split '\s+')[0].ToLower(); $reale=(Get-FileHash '%PS1%' -Algorithm SHA256).Hash.ToLower(); if ($atteso -and $reale -ne $atteso) { Write-Host 'Impronta SHA256 non combacia: scarto.' -ForegroundColor Yellow; Remove-Item '%PS1%' -Force -ErrorAction SilentlyContinue } else { Write-Host ('Scaricato e verificato da: '+$base) -ForegroundColor Green; $done=$true } } catch { Write-Host 'Verifica SHA256 saltata.' -ForegroundColor Yellow; $done=$true } } catch { Start-Sleep -Milliseconds 500 } } }; if(-not $done){ Remove-Item '%PS1%' -Force -ErrorAction SilentlyContinue; if ('%HAS_LOCAL%' -eq '1') { Write-Host 'Download online non riuscito: avvio diretto dalla copia offline su chiavetta...' -ForegroundColor Yellow } else { Write-Host 'Impossibile scaricare lo script: connessione assente o bloccata.' -ForegroundColor Yellow } }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12; $bases=@('https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main','https://cdn.jsdelivr.net/gh/samuelenigro97-prog/pc-facile@main'); $done=$false; foreach($base in $bases){ if($done){break}; for($i=1;$i -le 2 -and -not $done;$i++){ try { $t=(Get-Date).Ticks; irm ($base+'/setup-pc.ps1?t='+$t) -Headers @{ 'Cache-Control'='no-cache' } -OutFile '%PS1%' -ErrorAction Stop; try { $atteso=(((irm ($base+'/setup-pc.ps1.sha256?t='+$t) -Headers @{ 'Cache-Control'='no-cache' } -ErrorAction Stop).Trim()) -split '\s+')[0].ToLower(); $reale=(Get-FileHash '%PS1%' -Algorithm SHA256).Hash.ToLower(); if ($atteso -and $reale -ne $atteso) { Write-Host 'Impronta SHA256 non combacia: scarto.' -ForegroundColor Yellow; Remove-Item '%PS1%' -Force -ErrorAction SilentlyContinue } else { Write-Host ('Scaricato e verificato da: '+$base) -ForegroundColor Green; $done=$true } } catch { Write-Host 'Verifica SHA256 saltata.' -ForegroundColor Yellow; $done=$true } } catch { Start-Sleep -Milliseconds 500 } } }; if(-not $done){ Remove-Item '%PS1%' -Force -ErrorAction SilentlyContinue; if ('%HAS_LOCAL%' -eq '1') { Write-Host 'Download online non riuscito: avvio diretto dalla copia offline su chiavetta...' -ForegroundColor Yellow } else { Write-Host 'Impossibile scaricare lo script: connessione assente o bloccata.' -ForegroundColor Yellow } }"
 
 REM --- 4. Esecuzione script ---
 set "TARGET_DIR=%~dp0"
@@ -69,13 +67,21 @@ if "%TARGET_DIR:~-1%"=="\" set "TARGET_DIR=%TARGET_DIR:~0,-1%"
 
 if exist "%PS1%" (
     copy /y "%PS1%" "%~dp0setup-pc.ps1" >nul 2>&1
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -TargetDir "%TARGET_DIR%" %USER_ARGS%
+    if defined USER_ARGS (
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -TargetDir "%TARGET_DIR%" %USER_ARGS%
+    ) else (
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -TargetDir "%TARGET_DIR%"
+    )
     goto :fine
 )
 
 if exist "%~dp0setup-pc.ps1" (
     echo Offline: uso la copia sulla chiavetta ^(funziona al 100%% senza Internet^).
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" -TargetDir "%TARGET_DIR%" %USER_ARGS%
+    if defined USER_ARGS (
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" -TargetDir "%TARGET_DIR%" %USER_ARGS%
+    ) else (
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" -TargetDir "%TARGET_DIR%"
+    )
 ) else (
     echo.
     echo ============================================================
