@@ -5387,28 +5387,33 @@ if ($vuoiUpgrade -match "^[Ss]") {
     # 2) AGGIORNAMENTI DI SICUREZZA DI WINDOWS - in BACKGROUND.
     Write-Host ""
     Write-Info "Aggiornamenti di Windows: li SCARICO in background mentre proseguo."
-    try {
-        $Global:JobWinUpdate = Start-Job -ScriptBlock {
-            try {
-                $s    = New-Object -ComObject Microsoft.Update.Session
-                $res  = $s.CreateUpdateSearcher().Search("IsInstalled=0 and Type='Software' and IsHidden=0")
-                $coll = New-Object -ComObject Microsoft.Update.UpdateColl
-                foreach ($u in $res.Updates) {
-                    if ($u.InstallationBehavior -and $u.InstallationBehavior.CanRequestUserInput) { continue }
-                    if (-not $u.EulaAccepted) { try { $u.AcceptEula() } catch {} }
-                    $coll.Add($u) | Out-Null
-                }
-                if ($coll.Count -gt 0) {
-                    $dl = $s.CreateUpdateDownloader(); $dl.Updates = $coll; $dl.Download() | Out-Null
-                }
-                return $coll.Count
-            } catch { return -1 }
-        }
-        Write-OK "Download aggiornamenti Windows avviato in background."
+    if ($Test) {
+        Write-OK "TEST: simulazione download aggiornamenti Windows avviato in background."
         Add-Report "Aggiornamenti Windows (scaricati in background)" "OK"
-    } catch {
-        Write-Errore "Impossibile avviare gli aggiornamenti di Windows: $_"
-        Add-Report "Aggiornamenti di sicurezza Windows" "ERRORE"
+    } else {
+        try {
+            $Global:JobWinUpdate = Start-Job -ScriptBlock {
+                try {
+                    $s    = New-Object -ComObject Microsoft.Update.Session
+                    $res  = $s.CreateUpdateSearcher().Search("IsInstalled=0 and Type='Software' and IsHidden=0")
+                    $coll = New-Object -ComObject Microsoft.Update.UpdateColl
+                    foreach ($u in $res.Updates) {
+                        if ($u.InstallationBehavior -and $u.InstallationBehavior.CanRequestUserInput) { continue }
+                        if (-not $u.EulaAccepted) { try { $u.AcceptEula() } catch {} }
+                        $coll.Add($u) | Out-Null
+                    }
+                    if ($coll.Count -gt 0) {
+                        $dl = $s.CreateUpdateDownloader(); $dl.Updates = $coll; $dl.Download() | Out-Null
+                    }
+                    return $coll.Count
+                } catch { return -1 }
+            }
+            Write-OK "Download aggiornamenti Windows avviato in background."
+            Add-Report "Aggiornamenti Windows (scaricati in background)" "OK"
+        } catch {
+            Write-Errore "Impossibile avviare gli aggiornamenti di Windows: $_"
+            Add-Report "Aggiornamenti di sicurezza Windows" "ERRORE"
+        }
     }
     Update-PannelloStatus -TaskId "aggiorna" -Stato "running" -Percentuale 62 -Dettaglio "Aggiornamenti avviati in background"
 } else {
@@ -5477,51 +5482,57 @@ switch ($gpuDed) {
 
     $vuoiDriver = "S"
 if ($vuoiDriver -match "^[Ss]") {
-    try {
-        Write-Info "Ricerca driver su Windows Update (puo' richiedere qualche minuto)..."
-        Start-BarraAnimata "Cerco i driver su Windows Update"
+    if ($Test) {
+        Write-OK "TEST: simulazione ricerca/aggiornamento driver Windows Update completata."
+        Add-Report "Driver (Windows Update)" "OK"
+        Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 72 -Dettaglio "Completato (test)"
+    } else {
         try {
-            $sess = New-Object -ComObject Microsoft.Update.Session
-            $searcher = $sess.CreateUpdateSearcher()
-            $result = $searcher.Search("Type='Driver' and IsInstalled=0")
-        } finally { Stop-BarraAnimata }
-        if ($result.Updates.Count -eq 0) {
-            Write-OK "Nessun driver da installare: risultano gia' tutti aggiornati."
-            Add-Report "Driver (Windows Update)" "OK"
-        } else {
-            $daInstallare = New-Object -ComObject Microsoft.Update.UpdateColl
-            foreach ($u in $result.Updates) {
-                Write-Info "Driver trovato: $($u.Title)"
-                $daInstallare.Add($u) | Out-Null
-            }
-            Write-Info "Download driver..."
-            Start-BarraAnimata "Scarico i driver"
+            Write-Info "Ricerca driver su Windows Update (puo' richiedere qualche minuto)..."
+            Start-BarraAnimata "Cerco i driver su Windows Update"
             try {
-                $downloader = $sess.CreateUpdateDownloader()
-                $downloader.Updates = $daInstallare
-                $downloader.Download() | Out-Null
+                $sess = New-Object -ComObject Microsoft.Update.Session
+                $searcher = $sess.CreateUpdateSearcher()
+                $result = $searcher.Search("Type='Driver' and IsInstalled=0")
             } finally { Stop-BarraAnimata }
-            Write-Info "Installazione driver..."
-            Start-BarraAnimata "Installo i driver"
-            try {
-                $installer = $sess.CreateUpdateInstaller()
-                $installer.Updates = $daInstallare
-                $esito = $installer.Install()
-            } finally { Stop-BarraAnimata }
-            if ($esito.ResultCode -eq 2) {
-                Write-OK "Driver installati ($($daInstallare.Count))."
-                Add-Report "Driver installati ($($daInstallare.Count))" "OK"
+            if ($result.Updates.Count -eq 0) {
+                Write-OK "Nessun driver da installare: risultano gia' tutti aggiornati."
+                Add-Report "Driver (Windows Update)" "OK"
             } else {
-                Write-Info "Installazione driver conclusa (codice $($esito.ResultCode)): alcuni potrebbero richiedere riavvio."
-                Add-Report "Driver (Windows Update)" "AVVISO"
+                $daInstallare = New-Object -ComObject Microsoft.Update.UpdateColl
+                foreach ($u in $result.Updates) {
+                    Write-Info "Driver trovato: $($u.Title)"
+                    $daInstallare.Add($u) | Out-Null
+                }
+                Write-Info "Download driver..."
+                Start-BarraAnimata "Scarico i driver"
+                try {
+                    $downloader = $sess.CreateUpdateDownloader()
+                    $downloader.Updates = $daInstallare
+                    $downloader.Download() | Out-Null
+                } finally { Stop-BarraAnimata }
+                Write-Info "Installazione driver..."
+                Start-BarraAnimata "Installo i driver"
+                try {
+                    $installer = $sess.CreateUpdateInstaller()
+                    $installer.Updates = $daInstallare
+                    $esito = $installer.Install()
+                } finally { Stop-BarraAnimata }
+                if ($esito.ResultCode -eq 2) {
+                    Write-OK "Driver installati ($($daInstallare.Count))."
+                    Add-Report "Driver installati ($($daInstallare.Count))" "OK"
+                } else {
+                    Write-Info "Installazione driver conclusa (codice $($esito.ResultCode)): alcuni potrebbero richiedere riavvio."
+                    Add-Report "Driver (Windows Update)" "AVVISO"
+                }
+                if ($esito.RebootRequired) { Write-Info "Alcuni driver richiedono un RIAVVIO per completare." }
             }
-            if ($esito.RebootRequired) { Write-Info "Alcuni driver richiedono un RIAVVIO per completare." }
+            Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 72 -Dettaglio "Completato"
+        } catch {
+            Write-Errore "Ricerca/installazione driver non riuscita: $_"
+            Add-Report "Driver (Windows Update)" "ERRORE"
+            Update-PannelloStatus -TaskId "aggiorna" -Stato "error" -Percentuale 72 -Dettaglio "Non riuscito (proseguo)"
         }
-        Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 72 -Dettaglio "Completato"
-    } catch {
-        Write-Errore "Ricerca/installazione driver non riuscita: $_"
-        Add-Report "Driver (Windows Update)" "ERRORE"
-        Update-PannelloStatus -TaskId "aggiorna" -Stato "error" -Percentuale 72 -Dettaglio "Non riuscito (proseguo)"
     }
 } else {
     Write-Info "Installazione driver saltata."

@@ -37,13 +37,15 @@ jobs:
       - name: PSScriptAnalyzer
         shell: pwsh
         run: |
-          # Alcuni runner ogni tanto non hanno PSGallery registrato: lo (ri)registro
-          # prima di usarlo, cosi' la CI non fallisce per un intoppo dell'ambiente.
-          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
-            Register-PSRepository -Default -ErrorAction SilentlyContinue
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          if (-not (Get-Module -ListAvailable -Name PSScriptAnalyzer)) {
+            if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+              try { Register-PSRepository -Default -ErrorAction SilentlyContinue } catch {}
+            }
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+            try { Install-PackageProvider -Name NuGet -Force -ErrorAction SilentlyContinue | Out-Null } catch {}
+            Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -ErrorAction SilentlyContinue
           }
-          Set-PSRepository PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
-          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
           $res = Invoke-ScriptAnalyzer -Path './setup-pc.ps1' -Settings './PSScriptAnalyzerSettings.psd1'
           $res | Format-Table -AutoSize | Out-String | Write-Host
           $errori = @($res | Where-Object { $_.Severity -eq 'Error' })
@@ -53,11 +55,15 @@ jobs:
       - name: Test Pester
         shell: pwsh
         run: |
-          if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
-            Register-PSRepository -Default -ErrorAction SilentlyContinue
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          if (-not (Get-Module -ListAvailable -Name Pester)) {
+            if (-not (Get-PSRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+              try { Register-PSRepository -Default -ErrorAction SilentlyContinue } catch {}
+            }
+            Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
+            try { Install-PackageProvider -Name NuGet -Force -ErrorAction SilentlyContinue | Out-Null } catch {}
+            Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5.0.0 -SkipPublisherCheck -ErrorAction SilentlyContinue
           }
-          Set-PSRepository PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
-          Install-Module Pester -Force -Scope CurrentUser -MinimumVersion 5.0.0 -SkipPublisherCheck
           Import-Module Pester -MinimumVersion 5.0.0
           $cfg = New-PesterConfiguration
           $cfg.Run.Path = './tests'
