@@ -1052,18 +1052,12 @@ function Open-PannelloOperatore {
             <div class="card">
                 <h2><span class="bar"></span> &#9881; Lavori Automatici in Background</h2>
                 <ul class="bg-tasks" id="tasksContainer">
-                    <li id="task-pulizia" class="task-item pending">
-                        <div class="task-left">
-                            <span class="task-icon">&#9675;</span>
-                            <span class="task-name">Pulizia Bloatware OEM &amp; Ottimizzazione SSD</span>
-                            <span class="task-detail"></span>
-                        </div>
-                        <span class="task-badge badge-pending">In attesa</span>
-                    </li>
+                    <!-- FASE 1: BASELINE SISTEMA -->
+                    <div class="portal-divider" style="margin-top: 0;"><span>&#128736; 1. Baseline &amp; Preparazione Sistema</span></div>
                     <li id="task-lingua" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">Forzatura Lingua &amp; Regione Italiana (it-IT)</span>
+                            <span class="task-name">1. Forzatura Lingua &amp; Regione Italiana (it-IT)</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -1071,39 +1065,26 @@ function Open-PannelloOperatore {
                     <li id="task-ripristino" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">Punto di Ripristino di Sicurezza (5% SSD)</span>
+                            <span class="task-name">2. Punto di Ripristino di Sicurezza (5% SSD)</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
                     </li>
+                    <li id="task-pulizia" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">3. Pulizia Bloatware OEM &amp; Ottimizzazione SSD</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
+
+                    <!-- FASE 2: COMPONENTI & HARDWARE -->
+                    <div class="portal-divider"><span>&#9881; 2. Componenti &amp; Driver Hardware</span></div>
                     <li id="task-runtime" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">Runtime Microsoft Visual C++ (x86 &amp; x64)</span>
-                            <span class="task-detail"></span>
-                        </div>
-                        <span class="task-badge badge-pending">In attesa</span>
-                    </li>
-                    <li id="task-office" class="task-item pending">
-                        <div class="task-left">
-                            <span class="task-icon">&#9675;</span>
-                            <span class="task-name">Configurazione Icone Office / Microsoft 365</span>
-                            <span class="task-detail"></span>
-                        </div>
-                        <span class="task-badge badge-pending">In attesa</span>
-                    </li>
-                    <li id="task-antivirus" class="task-item pending">
-                        <div class="task-left">
-                            <span class="task-icon">&#9675;</span>
-                            <span class="task-name">Sicurezza &amp; Antivirus (Windows Defender / Card)</span>
-                            <span class="task-detail"></span>
-                        </div>
-                        <span class="task-badge badge-pending">In attesa</span>
-                    </li>
-                    <li id="task-cyber" class="task-item pending">
-                        <div class="task-left">
-                            <span class="task-icon">&#9675;</span>
-                            <span class="task-name">Servizio Unieuro Cyber Protection</span>
+                            <span class="task-name">4. Runtime Microsoft Visual C++ (x86 &amp; x64)</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -1111,15 +1092,45 @@ function Open-PannelloOperatore {
                     <li id="task-aggiorna" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">Aggiornamenti &amp; Driver Windows Update</span>
+                            <span class="task-name">5. Aggiornamenti &amp; Driver Windows Update</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
                     </li>
+
+                    <!-- FASE 3: SICUREZZA & PRODUTTIVITA' -->
+                    <div class="portal-divider"><span>&#128737; 3. Sicurezza &amp; Produttivit&agrave;</span></div>
+                    <li id="task-antivirus" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">6. Sicurezza &amp; Antivirus (Defender / Card)</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
+                    <li id="task-cyber" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">7. Servizio Unieuro Cyber Protection</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
+                    <li id="task-office" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">8. Configurazione Icone Office / Microsoft 365</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
+
+                    <!-- FASE 4: APPLICAZIONI & COLLAUDO -->
+                    <div class="portal-divider"><span>&#128640; 4. Applicazioni &amp; Consegna</span></div>
                     <li id="task-app" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">Installazione Applicazioni (Ultimo Passaggio)</span>
+                            <span class="task-name">9. Installazione Applicazioni (Ultimo Passaggio)</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -1127,7 +1138,7 @@ function Open-PannelloOperatore {
                     <li id="task-diagnostica" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">Diagnostica Hardware, BitLocker &amp; Scheda Consegna</span>
+                            <span class="task-name">10. Diagnostica Hardware, BitLocker &amp; Scheda</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
