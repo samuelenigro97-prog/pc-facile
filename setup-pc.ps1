@@ -57,58 +57,45 @@ $BOX_FULL  = [char]0x2588                  # blocco pieno (barra progresso)
 $BOX_EMPTY = [char]0x2591                  # blocco leggero (barra progresso)
 $LINEA_D   = ([string][char]0x2550) * 60   # linea doppia orizzontale
 
-# Tema colori: Unieuro = ARANCIONE (#EE7203) + navy + bianco.
-# La console conhost (parte col doppio-click del .bat) ha solo 16 colori con
-# nome e NON ha l'arancione. Per l'arancione ESATTO servono le sequenze ANSI
-# truecolor (24-bit), che pero' funzionano solo se il "Virtual Terminal" e'
-# abilitato. Lo abilitiamo SENZA P/Invoke (vietato: l'antivirus lo segnala)
-# scrivendo la chiave di registro HKCU\Console\VirtualTerminalLevel=1, che
-# conhost legge all'avvio di ogni nuova finestra.
-#
-# Logica: se il VT risulta gia' abilitato -> uso l'arancione vero via ANSI
-# ($AON/$AOFF avvolgono il testo). Altrimenti fallback pulito su 'DarkYellow'
-# (ambra, l'arancio piu' vicino tra i 16 nomi). In piu' scriviamo la chiave,
-# cosi' dai lanci successivi su quel PC parte l'arancione vero.
-$THEME_TXT = "White"    # testo dei titoli (bianco, come il payoff del logo)
+# =============================================================================
+# TEMA GRAFICO UFFICIALE UNIEURO (NAVY #00122B & ARANCIONE #EE7203)
+# =============================================================================
+$ESC         = [char]27
+$U_NAVY_BG   = "$ESC[48;2;0;18;43m"          # Sfondo Navy Unieuro (#00122B)
+$U_CARD_BG   = "$ESC[48;2;0;31;72m"          # Sfondo Card Navy (#001F48)
+$U_ORANGE    = "$ESC[38;2;238;114;3m"        # Arancione Unieuro (#EE7203)
+$U_ORANGE_BG = "$ESC[48;2;238;114;3m$ESC[38;2;255;255;255m$ESC[1m" # Badge UNIEURO
+$U_WHITE     = "$ESC[38;2;248;250;252m$ESC[1m" # Bianco brillante (#F8FAFC)
+$U_GREEN     = "$ESC[38;2;34;197;94m$ESC[1m"  # Verde spunta (#22C55E)
+$U_BLUE      = "$ESC[38;2;147;197;253m"      # Blu chiaro (#93C5FD)
+$U_PEACH     = "$ESC[38;2;254;215;170m"      # Evidenziatore pesca (#FED7AA)
+$U_MUTED     = "$ESC[38;2;148;163;184m"      # Grigio secondario (#94A3B8)
+$U_ERR       = "$ESC[38;2;239;68;68m$ESC[1m"  # Rosso errore (#EF4444)
+$U_RESET     = "$ESC[0m"
 
-# La chiave vale per le finestre APERTE DOPO averla scritta: il primo giro su
-# un PC nuovo puo' essere ancora ambra, i successivi arancione.
+$AON         = $U_ORANGE
+$AOFF        = $U_RESET
+$THEME_COL   = "DarkYellow"
+$THEME_TXT   = "White"
+
+# Rileva se il Virtual Terminal (ANSI 24-bit) e' attivo
+$vtOn = $true
 try {
     if (-not (Test-Path 'HKCU:\Console')) { New-Item -Path 'HKCU:\Console' -Force | Out-Null }
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -Value 1 -Type DWord -ErrorAction Stop
-    # Rimappa lo slot "DarkBlue" (indice 1) al navy SCURO #0A0E24, cosi' lo
-    # sfondo blu e' un navy vero e non il DarkBlue acceso di default. DWORD in
-    # formato 0x00BBGGRR = 0x00240E0A. Vale dalle finestre aperte dopo.
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -Value 0x00240E0A -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -Value 1 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable00' -Value 0x002B1200 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -Value 0x002B1200 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable02' -Value 0x005EC522 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable03' -Value 0x00FDC593 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable06' -Value 0x000372EE -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable07' -Value 0x00FCFAF8 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable10' -Value 0x005EC522 -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable14' -Value 0x000372EE -Type DWord -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable15' -Value 0x00FFFFFF -Type DWord -ErrorAction SilentlyContinue
 } catch {}
 
-# Rileva se il VT e' attivo per QUESTA finestra (chiave gia' presente al lancio).
-$vtOn = $false
-try { $vtOn = ((Get-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction Stop).VirtualTerminalLevel -eq 1) } catch {}
-
-if ($vtOn) {
-    $ESC       = [char]27
-    $AON       = "$ESC[38;2;238;114;3m"   # arancione Unieuro #EE7203 (foreground)
-    $AOFF      = "$ESC[0m"                  # reset
-    $THEME_COL = "White"   # colore -ForegroundColor "di riserva"; l'ANSI ha priorita'
-} else {
-    $AON       = ""
-    $AOFF      = ""
-    $THEME_COL = "DarkYellow"   # ambra: fallback quando l'arancione vero non e' disponibile
-}
-
-# Sfondo scuro. ATTENZIONE: su Windows 11 la console di default e' Windows
-# Terminal, che IGNORA il registro (ColorTable) e rende 'DarkBlue' come un blu
-# ACCESO (brutto). Il trucco navy col registro vale solo sulla vecchia console
-# (conhost). Percio': se sono in Windows Terminal ($env:WT_SESSION c'e') uso
-# NERO (scuro e pulito, il navy pieno non e' forzabile da script in WT); su
-# conhost uso 'DarkBlue' che col ColorTable rimappato diventa navy vero.
 try {
-    if ($env:WT_SESSION) {
-        $Host.UI.RawUI.BackgroundColor = 'Black'
-    } else {
-        $Host.UI.RawUI.BackgroundColor = 'DarkBlue'
-    }
+    $Host.UI.RawUI.BackgroundColor = 'Black'
     $Host.UI.RawUI.ForegroundColor = 'Gray'
     Clear-Host
 } catch {}
@@ -119,30 +106,46 @@ try {
 
 function Write-Titolo {
     param([string]$Testo)
-    # Titolo ben visibile: barra piena arancione + testo MAIUSCOLO su riga sua.
-    # Piu' "grosso" e netto della vecchia doppia linea, si legge a colpo d'occhio.
-    $barra = ([string]$BOX_FULL) * 50
+    $barra = ([string]$BOX_FULL) * 54
     Write-Host ""
     Write-Host ""
-    Write-Host "$AON  $barra$AOFF" -ForegroundColor $THEME_COL
-    Write-Host "$AON   $($Testo.ToUpper())$AOFF" -ForegroundColor $THEME_TXT
-    Write-Host "$AON  $barra$AOFF" -ForegroundColor $THEME_COL
+    if ($vtOn) {
+        Write-Host "  $U_ORANGE$barra$U_RESET"
+        Write-Host "  $U_ORANGE_BG UNIEURO $U_RESET  $U_WHITE$($Testo.ToUpper())$U_RESET"
+        Write-Host "  $U_ORANGE$barra$U_RESET"
+    } else {
+        Write-Host "  $barra" -ForegroundColor DarkYellow
+        Write-Host "   [UNIEURO] $($Testo.ToUpper())" -ForegroundColor White
+        Write-Host "  $barra" -ForegroundColor DarkYellow
+    }
     Write-Host ""
 }
 
 function Write-OK {
     param([string]$Testo)
-    Write-Host "   $SYM_OK  $Testo" -ForegroundColor Green
+    if ($vtOn) {
+        Write-Host "   $U_GREEN$SYM_OK$U_RESET  $U_WHITE$Testo$U_RESET"
+    } else {
+        Write-Host "   $SYM_OK  $Testo" -ForegroundColor Green
+    }
 }
 
 function Write-Info {
     param([string]$Testo)
-    Write-Host "   $SYM_INFO  $Testo" -ForegroundColor Yellow
+    if ($vtOn) {
+        Write-Host "   $U_ORANGE$SYM_INFO$U_RESET  $U_BLUE$Testo$U_RESET"
+    } else {
+        Write-Host "   $SYM_INFO  $Testo" -ForegroundColor Yellow
+    }
 }
 
 function Write-Errore {
     param([string]$Testo)
-    Write-Host "   $SYM_ERR  $Testo" -ForegroundColor Red
+    if ($vtOn) {
+        Write-Host "   $U_ERR$SYM_ERR$U_RESET  $U_ERR$Testo$U_RESET"
+    } else {
+        Write-Host "   $SYM_ERR  $Testo" -ForegroundColor Red
+    }
 }
 
 # =============================================================================
@@ -241,18 +244,18 @@ function Start-BarraAnimata {
     try {
         $ps = [PowerShell]::Create()
         [void]$ps.AddScript({
-            param($testo, $full, $empty, $aon, $aoff)
+            param($testo, $full, $empty, $uOrange, $uReset, $uBlue, $uPeach)
             $larg = 22; $span = 4; $period = ($larg - $span) * 2; $inizio = Get-Date; $i = 0
             while ($true) {
                 $phase = $i % $period
                 $pos = if ($phase -le ($larg - $span)) { $phase } else { $period - $phase }
                 $barra = ($empty * $pos) + ($full * $span) + ($empty * ($larg - $span - $pos))
                 $sec = [int]((Get-Date) - $inizio).TotalSeconds
-                $riga = "   $testo  [$barra]  ${sec}s"
-                try { if ($aon) { [Console]::Write("`r$aon$riga$aoff") } else { [Console]::Write("`r$riga") } } catch {}
+                $riga = "   $uBlue$testo$uReset  [$uOrange$barra$uReset]  $uPeach${sec}s$uReset"
+                try { [Console]::Write("`r$riga") } catch {}
                 Start-Sleep -Milliseconds 120; $i++
             }
-        }).AddArgument($Testo).AddArgument([string]$BOX_FULL).AddArgument([string]$BOX_EMPTY).AddArgument($AON).AddArgument($AOFF)
+        }).AddArgument($Testo).AddArgument([string]$BOX_FULL).AddArgument([string]$BOX_EMPTY).AddArgument($U_ORANGE).AddArgument($U_RESET).AddArgument($U_BLUE).AddArgument($U_PEACH)
         [void]$ps.BeginInvoke()
         $Global:BarraPS = $ps
     } catch { $Global:BarraPS = $null }
@@ -2320,14 +2323,28 @@ if ($Menu) {
     $titoloB = "PC FACILE   -   versione $SCRIPT_VERSION"
     $padSx = [int](($larg - $titoloB.Length) / 2)
     $padDx = $larg - $padSx - $titoloB.Length
-    Write-Host ("$AON  " + [char]0x2554 + (([string][char]0x2550) * $larg) + [char]0x2557 + "$AOFF") -ForegroundColor $THEME_COL
-    Write-Host ("  " + [char]0x2551 + (" " * $padSx) + $titoloB + (" " * $padDx) + [char]0x2551) -ForegroundColor $THEME_TXT
-    Write-Host ("$AON  " + [char]0x255A + (([string][char]0x2550) * $larg) + [char]0x255D + "$AOFF") -ForegroundColor $THEME_COL
+    $boxLine = ([string][char]0x2550) * $larg
     Write-Host ""
-    Write-Host "  CONFIGURAZIONE AUTOMATICA AVVIATA A MASSIMA VELOCITA'!" -ForegroundColor Green
-    Write-Host "  Tutte le ottimizzazioni, pulizie e installazioni sono partite in tempo reale." -ForegroundColor White
-    Write-Host "  Pannello Operatore aperto nel browser per gestire account, Office e antivirus." -ForegroundColor Cyan
-    Write-Host ""
+    if ($vtOn) {
+        Write-Host "  $U_ORANGE$([char]0x2554)$boxLine$([char]0x2557)$U_RESET"
+        Write-Host "  $U_ORANGE$([char]0x2551)$U_RESET  $U_ORANGE_BG UNIEURO $U_RESET $U_WHITE PC FACILE  -  Assistenza & Configurazione PC      $U_ORANGE$([char]0x2551)$U_RESET"
+        Write-Host "  $U_ORANGE$([char]0x2551)$U_RESET  $U_ORANGE Batte. Forte. Sempre.$U_RESET $U_PEACH • Setup Tecnico Dedicato v$SCRIPT_VERSION      $U_ORANGE$([char]0x2551)$U_RESET"
+        Write-Host "  $U_ORANGE$([char]0x255A)$boxLine$([char]0x255D)$U_RESET"
+        Write-Host ""
+        Write-Host "  $U_GREEN$SYM_OK$U_RESET $U_WHITE CONFIGURAZIONE AUTOMATICA AVVIATA A MASSIMA VELOCITA'!$U_RESET"
+        Write-Host "  $U_ORANGE$SYM_INFO$U_RESET $U_PEACH Tutte le ottimizzazioni, pulizie e aggiornamenti sono in esecuzione.$U_RESET"
+        Write-Host "  $U_BLUE$SYM_INFO$U_RESET $U_WHITE Pannello Operatore aperto su Microsoft Edge per gestire credenziali e portali.$U_RESET"
+        Write-Host ""
+    } else {
+        Write-Host "  $([char]0x2554)$boxLine$([char]0x2557)" -ForegroundColor DarkYellow
+        Write-Host "  $([char]0x2551)$(" " * $padSx)$titoloB$(" " * $padDx)$([char]0x2551)" -ForegroundColor White
+        Write-Host "  $([char]0x255A)$boxLine$([char]0x255D)" -ForegroundColor DarkYellow
+        Write-Host ""
+        Write-Host "  CONFIGURAZIONE AUTOMATICA AVVIATA A MASSIMA VELOCITA'!" -ForegroundColor Green
+        Write-Host "  Tutte le ottimizzazioni, pulizie e installazioni sono partite in tempo reale." -ForegroundColor White
+        Write-Host "  Pannello Operatore aperto nel browser per gestire account, Office e antivirus." -ForegroundColor Cyan
+        Write-Host ""
+    }
 }
 
 if ($Espresso) {

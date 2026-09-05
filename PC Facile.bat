@@ -29,11 +29,26 @@ set "USER_ARGS=%1 %2 %3 %4 %5 %6 %7 %8 %9"
 set "USER_ARGS=%USER_ARGS:   = %"
 set "USER_ARGS=%USER_ARGS:  = %"
 
-REM --- 2. Impostazioni console, disattivazione avvisi di sicurezza e sblocco file ---
+REM --- 2. Impostazioni console a tema Unieuro (Navy #00122B & Arancio #EE7203) ---
 set "SEE_MASK_NOZONECHECKS=1"
 reg add "HKCU\Console" /v VirtualTerminalLevel /t REG_DWORD /d 1 /f >nul 2>&1
 reg add "HKCU\Console" /v FaceName /t REG_SZ /d "Consolas" /f >nul 2>&1
 reg add "HKCU\Console" /v FontWeight /t REG_DWORD /d 700 /f >nul 2>&1
+reg add "HKCU\Console" /v ColorTable00 /t REG_DWORD /d 0x002B1200 /f >nul 2>&1
+reg add "HKCU\Console" /v ColorTable01 /t REG_DWORD /d 0x002B1200 /f >nul 2>&1
+reg add "HKCU\Console" /v ColorTable02 /t REG_DWORD /d 0x005EC522 /f >nul 2>&1
+reg add "HKCU\Console" /v ColorTable03 /t REG_DWORD /d 0x00FDC593 /f >nul 2>&1
+reg add "HKCU\Console" /v ColorTable04 /t REG_DWORD /d 0x004444EF /f >nul 2>&1
+reg add "HKCU\Console" /v ColorTable06 /t REG_DWORD /d 0x000372EE /f >nul 2>&1
+reg add "HKCU\Console" /v ColorTable07 /t REG_DWORD /d 0x00FCFAF8 /f >nul 2>&1
+reg add "HKCU\Console" /v ColorTable08 /t REG_DWORD /d 0x00B8A394 /f >nul 2>&1
+reg add "HKCU\Console" /v ColorTable09 /t REG_DWORD /d 0x00FDC593 /f >nul 2>&1
+reg add "HKCU\Console" /v ColorTable10 /t REG_DWORD /d 0x005EC522 /f >nul 2>&1
+reg add "HKCU\Console" /v ColorTable11 /t REG_DWORD /d 0x00AAD7FE /f >nul 2>&1
+reg add "HKCU\Console" /v ColorTable12 /t REG_DWORD /d 0x004444EF /f >nul 2>&1
+reg add "HKCU\Console" /v ColorTable14 /t REG_DWORD /d 0x000372EE /f >nul 2>&1
+reg add "HKCU\Console" /v ColorTable15 /t REG_DWORD /d 0x00FFFFFF /f >nul 2>&1
+reg add "HKCU\Console" /v ScreenColors /t REG_DWORD /d 7 /f >nul 2>&1
 
 REM Sblocca automaticamente tutti i file della chiavetta ed elimina gli avvisi SmartScreen / Apri file
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:SEE_MASK_NOZONECHECKS=1; Get-ChildItem -Path '%~dp0' -Recurse -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue" >nul 2>&1
