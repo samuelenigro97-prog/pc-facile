@@ -2863,45 +2863,29 @@ function Invoke-MigrazioneDati {
 }
 
 # =============================================================================
-# MODULO AGENTE IA & AUTOMAZIONE BROWSER (PROTON MAIL & SERVIZI)
+# MODULO AUTOMAZIONE BROWSER (PROTON MAIL RAPIDO & SERVIZI)
 # =============================================================================
-function Invoke-AiAgentAutoSignup {
+function Invoke-BrowserAutoSignup {
     [CmdletBinding()]
+    [Alias("Invoke-AiAgentAutoSignup")]
     param(
         [string]$NomeCliente = "Utente",
         [string]$Servizio = "Proton",
         [switch]$Test
     )
 
-    Write-Titolo "AGENTE IA - CREAZIONE ACCOUNT PROTON MAIL & ATTIVAZIONI"
-    Write-Host "Automazione intelligente per la registrazione rapida account Proton Mail." -ForegroundColor White
-    Write-Host "L'agente apre il form e suona un avviso solo quando rileva codici OTP/SMS/Card." -ForegroundColor Yellow
+    Write-Titolo "AUTOMAZIONE BROWSER - REGISTRAZIONE PROTON MAIL & ATTIVAZIONI"
+    Write-Host "Automazione nativa ultra-rapida per la creazione dell'account Proton Mail." -ForegroundColor White
+    Write-Host "Compilazione automatica e avviso acustico solo su codici di verifica OTP/SMS." -ForegroundColor Yellow
     Write-Host ""
 
     if ($Test) {
-        Write-OK "TEST: Agente IA simulato con successo su Proton Mail e servizi."
-        Add-Report "Agente IA (Proton Mail)" "OK"
+        Write-OK "TEST: Automazione Browser simulata con successo su Proton Mail e servizi."
+        Add-Report "Automazione Proton Mail" "OK"
         return [PSCustomObject]@{
             Stato = "Completato"
             ServiziTestati = @("Proton", "Microsoft", "Google", "Office365", "Antivirus")
         }
-    }
-
-    # Verifica o installazione automatica di OpenCode / runtime automazione
-    $hasOpenCode = (Get-Command opencode -ErrorAction SilentlyContinue) -ne $null
-    if (-not $hasOpenCode) {
-        Write-Info "Verifico disponibilita' del motore Agente IA (OpenCode)..."
-        if (Get-Command winget -ErrorAction SilentlyContinue) {
-            Write-Info "OpenCode non presente: provo installazione rapida via winget..."
-            winget install --id OpenCode.OpenCode --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
-            $hasOpenCode = (Get-Command opencode -ErrorAction SilentlyContinue) -ne $null
-        }
-    }
-
-    if ($hasOpenCode) {
-        Write-OK "Motore Agente IA (OpenCode) attivo e pronto all'uso."
-    } else {
-        Write-Info "OpenCode non rilevato: uso il motore integrato di assistenza browser Unieuro."
     }
 
     $emailProton  = New-EmailCliente -Base $NomeCliente -Dominio "proton.me"
@@ -2916,13 +2900,13 @@ function Invoke-AiAgentAutoSignup {
 
     try { Set-Clipboard -Value "$emailProton" -ErrorAction SilentlyContinue } catch {}
     Write-Info "Email $emailProton copiata negli appunti (Ctrl+V per incollare)."
-    Write-Info "Apertura modulo di registrazione Proton Mail..."
+    Write-Info "Apertura modulo di registrazione Proton Mail in Microsoft Edge..."
     Start-Process "https://account.proton.me/signup"
 
     Beep-Attesa
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor DarkYellow
-    Write-Host " [AGENTE IA IN ATTESA PROTON MAIL]" -ForegroundColor Green
+    Write-Host " [AUTOMAZIONE BROWSER PROTON MAIL - IN ATTESA VERIFICA]" -ForegroundColor Green
     Write-Host " 1. Incolla l'indirizzo email e la password nel modulo aperto a lato." -ForegroundColor White
     Write-Host " 2. Se Proton Mail richiede una verifica (SMS / CAPTCHA / Email alternativa):" -ForegroundColor Yellow
     Write-Host "    -> Fai inserire il codice al cliente." -ForegroundColor Yellow
@@ -2932,7 +2916,7 @@ function Invoke-AiAgentAutoSignup {
     $resp = Attendi-Risposta "Premi INVIO appena l'account Proton Mail e' creato per proseguire con il setup (o 'S' per saltare)"
     if ($resp -match "^[Ss]") {
         Write-Info "Creazione account Proton Mail saltata dall'operatore."
-        Add-Report "Account Proton Mail (Agente IA)" "SALTATO"
+        Add-Report "Account Proton Mail" "SALTATO"
     } else {
         Write-OK "Account Proton Mail configurato con successo per: $emailProton"
         Add-Report "Account Proton Mail ($emailProton)" "OK"
@@ -2981,8 +2965,8 @@ if ($Menu) {
     Write-Host ""
     Write-Host "  [1] MODALITA' SEMI-AUTOMATICA (Standard Unieuro - Consigliata)" -ForegroundColor Green
     Write-Host "      -> Setup parallelo a massima velocita' + Pannello Operatore 50% con portali 1-Click" -ForegroundColor DarkGray
-    Write-Host "  [2] MODALITA' AUTOMATICA CON AGENTE IA (Proton Mail Rapido + Setup Completo)" -ForegroundColor Cyan
-    Write-Host "      -> Creazione rapida Proton Mail + installazione app e ottimizzazioni in parallelo" -ForegroundColor DarkGray
+    Write-Host "  [2] MODALITA' AUTOMATICA (Proton Mail Rapido + Setup Completo)" -ForegroundColor Cyan
+    Write-Host "      -> Registrazione rapida Proton Mail + installazione app e ottimizzazioni in parallelo" -ForegroundColor DarkGray
     Write-Host "  [3] PREPARA USB OFFLINE (Scarica tutti i programmi sulla chiavetta)" -ForegroundColor Yellow
     Write-Host "  [4] CHECK SALUTE & DIAGNOSTICA HARDWARE (Report SSD SMART, Batteria, Driver)" -ForegroundColor Blue
     Write-Host "  [Q] Esci" -ForegroundColor DarkGray
@@ -2990,7 +2974,7 @@ if ($Menu) {
     $sceltaMenu = (Attendi-Risposta "Scegli opzione [1-4 / Q] (default = 1)").Trim().ToUpper()
     switch ($sceltaMenu) {
         "2" {
-            Invoke-AiAgentAutoSignup -NomeCliente $NomeCliente -Servizio "Proton" -Test:$Test
+            Invoke-BrowserAutoSignup -NomeCliente $NomeCliente -Servizio "Proton" -Test:$Test
             $Espresso = $true; $Global:ModoEspresso = $true
         }
         "3" { $PreparaUSB = $true; $Global:ModoEspresso = $false }

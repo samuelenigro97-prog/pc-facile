@@ -21,13 +21,13 @@ if command -v caffeinate >/dev/null 2>&1 && [[ "$1" != "--test" && "$1" != "-t" 
   caffeinate -dimsu -w $$ >/dev/null 2>&1 &
 fi
 
-# ---- Modalita': -Test / -Diagnostica / -Veloce / -IA -------------------------
-MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST | AGENTE_IA
+# ---- Modalita': -Test / -Diagnostica / -Veloce / -Auto -------------------------
+MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST | AUTOMATICA
 case "$1" in
-  --test|-t)           MODO="TEST" ;;
-  --diagnostica|-d)    MODO="DIAGNOSTICA" ;;
-  --veloce|-v)         MODO="VELOCE" ;;
-  --ia|--agente-ia|-a) MODO="AGENTE_IA" ;;
+  --test|-t)                 MODO="TEST" ;;
+  --diagnostica|-d)          MODO="DIAGNOSTICA" ;;
+  --veloce|-v)               MODO="VELOCE" ;;
+  --auto|--automatica|--ia|-a) MODO="AUTOMATICA" ;;
 esac
 
 # ---- Colori (Terminal.app: 256 colori; arancione ~208, no truecolor) --------
@@ -503,27 +503,19 @@ EOF
 }
 
 # =============================================================================
-# MODULO AGENTE IA & AUTOMAZIONE BROWSER (PROTON MAIL & MAC)
+# MODULO AUTOMAZIONE BROWSER (PROTON MAIL RAPIDO & MAC)
 # =============================================================================
-invoke_ai_agent_mac() {
+invoke_auto_signup_mac() {
     local nome_c="${1:-Utente}"
-    titolo "AGENTE IA (MAC) - CREAZIONE ACCOUNT PROTON MAIL & ATTIVAZIONI"
-    info "Automazione intelligente per la registrazione rapida account Proton Mail."
-    print -r -- "${C_INFO}   L'agente apre il form ed emette un avviso sonoro solo su codici OTP/SMS/Card.${C_RST}"
+    titolo "AUTOMAZIONE BROWSER (MAC) - REGISTRAZIONE PROTON MAIL & ATTIVAZIONI"
+    info "Automazione nativa ultra-rapida per la creazione dell'account Proton Mail."
+    print -r -- "${C_INFO}   Compilazione rapida ed emissione avviso sonoro solo su codici OTP/SMS/Card.${C_RST}"
     print -r -- ""
 
     if $MODO_TEST; then
-        ok "TEST: Agente IA Mac simulato con successo su Proton Mail."
-        add_report "Account Proton Mail (Agente IA)" "OK"
+        ok "TEST: Automazione Browser Mac simulata con successo su Proton Mail."
+        add_report "Account Proton Mail" "OK"
         return 0
-    fi
-
-    local has_opencode=false
-    if command -v opencode >/dev/null 2>&1 || [[ -x "/Users/samuele/.opencode/bin/opencode" ]]; then
-        has_opencode=true
-        ok "Motore Agente IA (OpenCode) attivo e pronto all'uso."
-    else
-        info "OpenCode non presente nel PATH: uso il motore di assistenza browser integrato."
     fi
 
     local email_proton="${nome_c//[^a-zA-Z0-9]/}@proton.me"
@@ -543,7 +535,7 @@ invoke_ai_agent_mac() {
     printf '\a'
     print -r -- ""
     print -r -- "${C_INFO}  ============================================================${C_RST}"
-    print -r -- "${C_OK}   [AGENTE IA IN ATTESA PROTON MAIL]${C_RST}"
+    print -r -- "${C_OK}   [AUTOMAZIONE BROWSER PROTON MAIL - IN ATTESA VERIFICA]${C_RST}"
     print -r -- "${C_TXT}   1. Incolla email e password nel modulo aperto a lato.${C_RST}"
     print -r -- "${C_INFO}   2. Se Proton Mail richiede una verifica (SMS / CAPTCHA / Email):${C_RST}"
     print -r -- "${C_INFO}      -> Fai inserire il codice al cliente.${C_RST}"
@@ -553,7 +545,7 @@ invoke_ai_agent_mac() {
     beep_attesa; print -n -- "   Premi INVIO appena l'account Proton Mail e' creato (o 'S' per saltare): "; read -r r_ok
     if [[ "$r_ok" == [Ss]* ]]; then
         info "Creazione account Proton Mail saltata dall'operatore."
-        add_report "Account Proton Mail (Agente IA)" "SALTATO"
+        add_report "Account Proton Mail" "SALTATO"
     else
         ok "Account Proton Mail configurato con successo: $email_proton"
         add_report "Account Proton Mail ($email_proton)" "OK"
@@ -563,11 +555,16 @@ invoke_ai_agent_mac() {
     ok "Account pronto: il setup parallelo delle applicazioni e del Mac prosegue ora a pieno ritmo!"
 }
 
+# Alias compatibilita'
+invoke_ai_agent_mac() {
+    invoke_auto_signup_mac "$@"
+}
+
 # =============================================================================
 # MENU PRINCIPALE
 # =============================================================================
-if [[ "$MODO" == "AGENTE_IA" ]]; then
-    invoke_ai_agent_mac "Utente"
+if [[ "$MODO" == "AUTOMATICA" ]]; then
+    invoke_auto_signup_mac "Utente"
     MODO="CONFIGURA"
     RUN_REALE=true
 fi
@@ -582,8 +579,8 @@ if [[ "$MODO" == "MENU" ]]; then
   print -r -- ""
   print -r -- "   ${C_OK}[1] MODALITÀ SEMI-AUTOMATICA (Standard Unieuro - Consigliata)${C_RST}"
   print -r -- "       ${C_DIM}-> Setup parallelo con Pannello Operatore Safari/Edge 50% e portali 1-Click${C_RST}"
-  print -r -- "   ${C_CYAN}[2] MODALITÀ AUTOMATICA CON AGENTE IA (Proton Mail Rapido + Setup Completo)${C_RST}"
-  print -r -- "       ${C_DIM}-> Creazione rapida Proton Mail + installazione app e ottimizzazioni in parallelo${C_RST}"
+  print -r -- "   ${C_CYAN}[2] MODALITÀ AUTOMATICA (Proton Mail Rapido + Setup Completo)${C_RST}"
+  print -r -- "       ${C_DIM}-> Registrazione rapida Proton Mail + installazione app e ottimizzazioni in parallelo${C_RST}"
   print -r -- "   ${C_INFO}[3] PREPARA USB OFFLINE (Scarica pacchetti su memoria esterna)${C_RST}"
   print -r -- "   ${C_CYAN}[4] CHECK SALUTE & DIAGNOSTICA HARDWARE (Report Batteria, SSD, FileVault)${C_RST}"
   print -r -- "   ${C_DIM}[Q] Esci${C_RST}"
@@ -591,7 +588,7 @@ if [[ "$MODO" == "MENU" ]]; then
   print -n -- "   Scelta [1-4 / Q] (default = 1): "; read -r t
   case "${(U)t}" in
     2)
-      invoke_ai_agent_mac "Utente"
+      invoke_auto_signup_mac "Utente"
       MODO="CONFIGURA"
       RUN_REALE=true
       ;;

@@ -25,7 +25,7 @@ BeforeAll {
         'Update-PannelloStatus', 'Open-PannelloOperatore', 'Set-SplitScreenLayout', 'Get-CredenzialiSalvatePannello',
         'Enable-SilentElevation', 'Restore-SilentElevation',
         'New-WlanProfileXml', 'Connect-AutoWiFi', 'Save-StoreWiFiProfile',
-        'Invoke-AiAgentAutoSignup'
+        'Invoke-BrowserAutoSignup'
     )
     foreach ($nome in $script:FunzioniTestate) {
         $fn = $ast.FindAll({
@@ -413,9 +413,9 @@ Describe 'Invoke-PcFacileDiagnostics' {
     }
 }
 
-Describe 'Invoke-AiAgentAutoSignup' {
+Describe 'Invoke-BrowserAutoSignup' {
     It 'completa con successo in modalita test' {
-        $res = Invoke-AiAgentAutoSignup -NomeCliente 'Mario Rossi' -Test
+        $res = Invoke-BrowserAutoSignup -NomeCliente 'Mario Rossi' -Test
         $res | Should -Not -BeNullOrEmpty
         $res.Stato | Should -BeExactly 'Completato'
         $res.ServiziTestati | Should -Contain 'Proton'
