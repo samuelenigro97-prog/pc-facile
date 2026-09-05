@@ -508,7 +508,6 @@ function Find-OfflineInstaller {
         "Valve.Steam"                      = @("*SteamSetup*.exe", "*Steam*.exe")
         "EpicGames.EpicGamesLauncher"      = @("*EpicGamesLauncher*.msi", "*EpicInstaller*.msi", "*EpicGames*.exe")
         "Discord.Discord"                  = @("*DiscordSetup*.exe", "*Discord*.exe")
-        "qBittorrent.qBittorrent"          = @("*qbittorrent*setup*.exe", "*qbittorrent*.exe")
         "AIMP.AIMP"                        = @("*aimp*.exe")
         "Intel.IntelDriverAndSupportAssistant" = @("*Intel*Driver*Support*Assistant*.exe", "*IntelDSA*.exe", "*Intel*.exe")
         "Microsoft.Office"                 = @("*OfficeSetup*.exe", "*Office*.exe", "*Setup32*.exe", "*Setup64*.exe")
@@ -532,7 +531,6 @@ function Find-OfflineInstaller {
         "Steam"                            = @("*SteamSetup*.exe", "*Steam*.exe")
         "Epic Games Launcher"              = @("*EpicGamesLauncher*.msi", "*EpicInstaller*.msi", "*EpicGames*.exe")
         "Discord"                          = @("*DiscordSetup*.exe", "*Discord*.exe")
-        "qBittorrent"                      = @("*qbittorrent*setup*.exe", "*qbittorrent*.exe")
         "AIMP"                             = @("*aimp*.exe")
         "Intel Driver e Support Assistant" = @("*Intel*Driver*Support*Assistant*.exe", "*IntelDSA*.exe", "*Intel*.exe")
         "Microsoft 365"                    = @("*OfficeSetup*.exe", "*Office*.exe", "*Setup32*.exe", "*Setup64*.exe")
@@ -597,7 +595,6 @@ function Install-OfflinePackage {
             elseif ($FilePath -like "*Spotify*") { $arg = "/silent" }
             elseif ($FilePath -like "*gimp*") { $arg = "/VERYSILENT /NORESTART /ALLUSERS" }
             elseif ($FilePath -like "*Steam*") { $arg = "/S" }
-            elseif ($FilePath -like "*qbittorrent*") { $arg = "/S" }
             elseif ($FilePath -like "*Intel*") { $arg = "/quiet /norestart" }
 
             $proc = Start-Process -FilePath $FilePath -ArgumentList $arg -Wait -PassThru -ErrorAction Stop
@@ -930,16 +927,6 @@ function Invoke-PreparaUSBOffline {
                 "https://discord.com/api/download?platform=win"
             )
             MinSizeKB = 80000
-            Categoria = "Completo"
-        },
-        @{
-            Nome      = "qBittorrent (64-bit)"
-            File      = "qbittorrent_setup.exe"
-            Urls      = @(
-                "https://downloads.sourceforge.net/project/qbittorrent/qbittorrent-win32/qbittorrent-5.0.0/qbittorrent_5.0.0_x64_setup.exe",
-                "https://sourceforge.net/projects/qbittorrent/files/latest/download"
-            )
-            MinSizeKB = 30000
             Categoria = "Completo"
         }
     )
@@ -1300,7 +1287,6 @@ $CatalogoApp = @(
     @{ Nome = "Steam";                Id = "Valve.Steam";                  Profili = @("GAMING") },
     @{ Nome = "Epic Games Launcher";  Id = "EpicGames.EpicGamesLauncher";  Profili = @("GAMING") },
     @{ Nome = "AnyDesk";              Id = "AnyDesk.AnyDesk";              Profili = @("BASE","UFFICIO","GAMING") },
-    @{ Nome = "qBittorrent";          Id = "qBittorrent.qBittorrent";      Profili = @("GAMING") },
     @{ Nome = "Discord";              Id = "Discord.Discord";              Profili = @("GAMING") },
     @{ Nome = "Zoom";                 Id = "Zoom.Zoom";                    Profili = @("BASE","UFFICIO","GAMING") }
 )
@@ -3420,7 +3406,7 @@ if ($Global:AppProfiloRipresa) {
     Write-Host "Scegli come installare le applicazioni (browser incluso in automatico):" -ForegroundColor White
     Write-Host "  1) PROFILO BASE     (Chrome + VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, AIMP, Zoom, AnyDesk)"
     Write-Host "  2) PROFILO UFFICIO  (Chrome + BASE + GIMP, Sumatra PDF)"
-    Write-Host "  3) PROFILO GAMING   (Opera GX + BASE + Steam, Epic, Discord, qBittorrent)"
+    Write-Host "  3) PROFILO GAMING   (Opera GX + BASE + Steam, Epic, Discord)"
     Write-Host "  4) COMPLETO         (Chrome + tutte le app in lista)"
     Write-Host "  5) MANUALE          (Chrome + scelgo io i singoli numeri)"
     Write-Host "  S) Salta"

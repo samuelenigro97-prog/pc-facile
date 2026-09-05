@@ -153,7 +153,7 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 **Profili app** (browser incluso: Chrome, o Opera GX per GAMING):
 - **BASE** — VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, Zoom, AnyDesk
 - **UFFICIO** — BASE + GIMP, Sumatra PDF
-- **GAMING** — BASE + Steam, Epic, Discord, qBittorrent
+- **GAMING** — BASE + Steam, Epic, Discord
 - **COMPLETO** — tutte · **MANUALE** — scegli i singoli numeri
 
 **Driver scheda video**: la ricerca di Windows Update spesso non prende il driver
