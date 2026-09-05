@@ -2888,6 +2888,18 @@ function Invoke-BrowserAutoSignup {
         }
     }
 
+    if (-not $NomeCliente -or $NomeCliente -eq "Utente") {
+        if ($Global:nomeCliente -and $Global:nomeCliente -ne "Utente") {
+            $NomeCliente = $Global:nomeCliente
+        } else {
+            $nInput = (Attendi-Risposta "Nome e Cognome del Cliente (es. Mario Rossi)").Trim()
+            if ($nInput) {
+                $NomeCliente = $nInput
+                $Global:nomeCliente = $nInput
+            }
+        }
+    }
+
     $emailProton  = New-EmailCliente -Base $NomeCliente -Dominio "proton.me"
     $passGenerata = New-PasswordCliente -Base $NomeCliente
 

@@ -518,6 +518,12 @@ invoke_auto_signup_mac() {
         return 0
     fi
 
+    if [[ -z "$nome_c" || "$nome_c" == "Utente" ]]; then
+        chiedi_sempre "Nome e Cognome del Cliente (es. Mario Rossi):"
+        [[ -n "$REPLY" ]] && nome_c="$REPLY"
+        NOME_CLIENTE="$nome_c"
+    fi
+
     local email_proton="${nome_c//[^a-zA-Z0-9]/}@proton.me"
     local pass_gen="$(password_cliente "$nome_c")"
 
