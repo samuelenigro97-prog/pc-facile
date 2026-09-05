@@ -468,10 +468,11 @@ open_pannello_mac() {
                 <h3 style="font-size:13px; margin-bottom:8px; color:#fed7aa;">&#127760; Portali di Attivazione Rapida</h3>
                 <a href="https://account.proton.me/signup?plan=free" target="_blank" class="portal-btn" style="border-color:#0284c7;"><span>🔒 1. Account Proton Mail Free</span> <span>&rarr;</span></a>
                 <a href="https://appleid.apple.com" target="_blank" class="portal-btn"><span>🍎 2. Gestione &amp; Creazione Apple ID</span> <span>&rarr;</span></a>
-                <a href="https://microsoft365.com/setup" target="_blank" class="portal-btn"><span>📦 3. Riscatto Office / Microsoft 365</span> <span>&rarr;</span></a>
-                <a href="https://www.mcafee.com/activate" target="_blank" class="portal-btn"><span>🛡️ 4. Attivazione Card McAfee Mac</span> <span>&rarr;</span></a>
-                <a href="https://www.norton.com/setup" target="_blank" class="portal-btn"><span>🛡️ 5. Attivazione Card Norton Mac</span> <span>&rarr;</span></a>
-                <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" class="portal-btn" style="border-color:#EE7203;"><span>🔒 6. Unieuro Cyber Protection</span> <span>&rarr;</span></a>
+                <a href="https://microsoft365.com/setup" target="_blank" class="portal-btn"><span>📦 3. Riscatto Card Office / Microsoft 365</span> <span>&rarr;</span></a>
+                <a href="https://account.microsoft.com/services" target="_blank" class="portal-btn"><span>📥 4. Installa Office da Account Microsoft</span> <span>&rarr;</span></a>
+                <a href="https://www.mcafee.com/activate" target="_blank" class="portal-btn"><span>🛡️ 5. Attivazione Card McAfee Mac</span> <span>&rarr;</span></a>
+                <a href="https://www.norton.com/setup" target="_blank" class="portal-btn"><span>🛡️ 6. Attivazione Card Norton Mac</span> <span>&rarr;</span></a>
+                <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" class="portal-btn" style="border-color:#EE7203;"><span>🔒 7. Unieuro Cyber Protection</span> <span>&rarr;</span></a>
             </div>
         </div>
 

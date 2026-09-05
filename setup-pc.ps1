@@ -1392,26 +1392,30 @@ function Open-PannelloOperatore {
 
                     <!-- SEZIONE 2: PRODUTTIVITA' & OFFICE -->
                     <div class="portal-divider"><span>&#128230; Produttivit&agrave; &amp; Licenze Office</span></div>
-                    <a href="https://microsoft365.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="office microsoft 365 setup pin">
-                        <span><span class="icon">&#128230;</span> 5. Riscatto Microsoft 365 / Office</span>
+                    <a href="https://microsoft365.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="office microsoft 365 setup pin riscatto">
+                        <span><span class="icon">&#128230;</span> 5. Riscatto Card Microsoft 365 / Office</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                    <a href="https://account.microsoft.com/services" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="office microsoft download installa account abbonamento">
+                        <span><span class="icon">&#128229;</span> 6. Installa Office da Account Microsoft</span>
                         <span class="arrow">&rarr;</span>
                     </a>
 
                     <!-- SEZIONE 3: ANTIVIRUS DA CARD -->
                     <div class="portal-divider"><span>&#128737; Sicurezza &amp; Antivirus da Card</span></div>
                     <a href="https://www.mcafee.com/activate" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="mcafee activate antivirus card">
-                        <span><span class="icon">&#128737;</span> 6. Attivazione Card McAfee</span>
+                        <span><span class="icon">&#128737;</span> 7. Attivazione Card McAfee</span>
                         <span class="arrow">&rarr;</span>
                     </a>
                     <a href="https://www.norton.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="norton setup antivirus card">
-                        <span><span class="icon">&#128737;</span> 7. Attivazione Card Norton</span>
+                        <span><span class="icon">&#128737;</span> 8. Attivazione Card Norton</span>
                         <span class="arrow">&rarr;</span>
                     </a>
 
                     <!-- SEZIONE 4: SERVIZIO UNIEURO -->
                     <div class="portal-divider"><span>&#128274; Servizio Esclusivo Unieuro</span></div>
                     <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" rel="noopener noreferrer" class="portal-btn highlight" data-name="unieuro cyber protection covercare">
-                        <span><span class="icon">&#128274;</span> 8. Unieuro Cyber Protection</span>
+                        <span><span class="icon">&#128274;</span> 9. Unieuro Cyber Protection</span>
                         <span class="arrow">&rarr;</span>
                     </a>
                 </div>
