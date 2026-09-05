@@ -19,6 +19,9 @@ param(
     # direttamente nella cartella 'installers' della chiavetta per lavorare al 100% offline.
     [Alias("USB", "Offline", "DownloadOffline")]
     [switch]$PreparaUSB,
+    # Modulo Trasferimento Dati / Migrazione: copia dati utente da vecchio PC o disco USB.
+    [Alias("Backup", "Trasferimento", "Migra")]
+    [switch]$Migrazione,
     # Veloce: parametro di compatibilita'
     [switch]$Veloce,
     # Salta la creazione del punto di ripristino
@@ -34,7 +37,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "11.1 (2026-09-05)"
+$SCRIPT_VERSION = "12.0 (2026-09-05)"
 
 # Versione SEMPRE VISIBILE: la scrivo nella barra del titolo della finestra, che
 # resta a video in QUALSIASI schermata (a differenza dell'header, che scorre via).
@@ -422,6 +425,153 @@ function Get-BitLockerRecovery {
     }
 
     return [pscustomobject]$r
+}
+
+# -----------------------------------------------------------------------------
+# DIAGNOSTICA HARDWARE, BATTERIA E STATO ATTIVAZIONE WINDOWS
+# -----------------------------------------------------------------------------
+
+function Get-StorageHealthInfo {
+    $info = [ordered]@{
+        Modello       = "Disco di sistema"
+        Tipo          = "SSD"
+        Salute        = "Buono"
+        Usura         = ""
+        Temperatura   = ""
+        StatoCompleto = "OK"
+    }
+    try {
+        if (Get-Command Get-PhysicalDisk -ErrorAction SilentlyContinue) {
+            $disks = Get-PhysicalDisk -ErrorAction SilentlyContinue | Where-Object { $_.DeviceId -eq 0 -or $_.OperationalStatus -eq 'OK' } | Select-Object -First 1
+            if ($disks) {
+                if ($disks.FriendlyName) { $info.Modello = $disks.FriendlyName }
+                $info.Tipo = if ($disks.MediaType -and $disks.MediaType -ne 'Unspecified') { "$($disks.MediaType)" } else { "SSD" }
+                $info.Salute = if ($disks.HealthStatus) { "$($disks.HealthStatus)" } else { "Healthy" }
+            }
+        }
+        if (Get-Command Get-StorageReliabilityCounter -ErrorAction SilentlyContinue) {
+            $disk = Get-PhysicalDisk -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($disk) {
+                $counter = Get-StorageReliabilityCounter -PhysicalDisk $disk -ErrorAction SilentlyContinue
+                if ($counter) {
+                    if ($counter.Wear -ne $null -and $counter.Wear -ge 0) {
+                        $info.Usura = "Usura SSD: $($counter.Wear)%"
+                    }
+                    if ($counter.Temperature -gt 0) {
+                        $info.Temperatura = "$($counter.Temperature)°C"
+                    }
+                }
+            }
+        }
+        if (-not $info.Modello -or $info.Modello -eq "Disco di sistema") {
+            $wmiDisk = Get-CimInstance Win32_DiskDrive -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($wmiDisk) {
+                if ($wmiDisk.Model) { $info.Modello = $wmiDisk.Model }
+                $info.Salute = if ($wmiDisk.Status -eq 'OK') { "Buono (SMART OK)" } else { "$($wmiDisk.Status)" }
+            }
+        }
+    } catch {}
+
+    $disp = "$($info.Tipo) - $($info.Modello)"
+    if ($info.Salute) { $disp += " (Stato: $($info.Salute))" }
+    if ($info.Usura) { $disp += " - $($info.Usura)" }
+    $info.StatoCompleto = $disp
+    return [pscustomobject]$info
+}
+
+function Get-BatteryHealthInfo {
+    $r = [ordered]@{
+        Presente     = $false
+        Salute       = "Non presente (PC Desktop)"
+        Percentuale  = 100
+        StatoCarica  = ""
+        Descrizione  = ""
+    }
+    try {
+        $batt = Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($batt) {
+            $r.Presente = $true
+            $r.StatoCarica = "$($batt.EstimatedChargeRemaining)%"
+            $fullCap = $null
+            $desCap  = $null
+            try {
+                $staticData = Get-CimInstance -Namespace root\wmi -ClassName BatteryStaticData -ErrorAction SilentlyContinue | Select-Object -First 1
+                $fullData   = Get-CimInstance -Namespace root\wmi -ClassName BatteryFullChargedCapacity -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($staticData -and $fullData -and $staticData.DesignedCapacity -gt 0) {
+                    $desCap  = $staticData.DesignedCapacity
+                    $fullCap = $fullData.FullChargedCapacity
+                }
+            } catch {}
+
+            if ($fullCap -and $desCap -and $desCap -gt 0) {
+                $pct = [Math]::Round(($fullCap / $desCap) * 100)
+                if ($pct -gt 100) { $pct = 100 }
+                $r.Percentuale = $pct
+                $condizione = if ($pct -ge 85) { "Ottima" } elseif ($pct -ge 70) { "Buona" } else { "Usurata" }
+                $r.Salute = "$pct% ($condizione)"
+                $r.Descrizione = "Salute Batteria: $pct% ($condizione) - Livello carica: $($batt.EstimatedChargeRemaining)%"
+            } else {
+                $r.Salute = "Presente (Carica: $($batt.EstimatedChargeRemaining)%)"
+                $r.Descrizione = "Batteria Notebook: Carica $($batt.EstimatedChargeRemaining)%"
+            }
+        }
+    } catch {}
+    return [pscustomobject]$r
+}
+
+function Get-WindowsActivationStatus {
+    $r = [ordered]@{
+        Attivo      = $false
+        Tipo        = "Sconosciuto"
+        Messaggio   = "Non verificato"
+        StatoBreve  = "Da verificare"
+    }
+    try {
+        $lic = Get-CimInstance -Query "SELECT LicenseStatus, Description, Name, PartialProductKey FROM SoftwareLicensingProduct WHERE PartialProductKey IS NOT NULL" -ErrorAction SilentlyContinue |
+               Where-Object { $_.Name -like "*Windows*" } | Select-Object -First 1
+        if ($lic) {
+            if ($lic.LicenseStatus -eq 1) {
+                $r.Attivo = $true
+                $r.Tipo = if ($lic.Description -like "*OEM*") { "Licenza OEM" }
+                          elseif ($lic.Description -like "*VOLUME*" -or $lic.Description -like "*KMS*") { "Licenza Volume/KMS" }
+                          elseif ($lic.Description -like "*RETAIL*") { "Licenza Retail / Digitale" }
+                          else { "Licenza Digitale Permanente" }
+                $r.Messaggio  = "Attivato regolarmente ($($r.Tipo))"
+                $r.StatoBreve = "Attivato ($($r.Tipo))"
+            } else {
+                $r.Attivo     = $false
+                $r.Tipo       = "Non Attivo"
+                $r.Messaggio  = "Windows NON attivato o in periodo di prova (Status: $($lic.LicenseStatus))"
+                $r.StatoBreve = "NON ATTIVATO (Richiede licenza)"
+            }
+        } else {
+            $slmgrOut = & cscript.exe //nologo "$env:SystemRoot\System32\slmgr.vbs" /dli 2>$null | Out-String
+            if ($slmgrOut -match "License Status:\s*Licensed" -or $slmgrOut -match "Stato licenza:\s*Con licenza") {
+                $r.Attivo = $true
+                $r.Tipo = "Licenza Digitale"
+                $r.Messaggio = "Attivato regolarmente"
+                $r.StatoBreve = "Attivato"
+            }
+        }
+    } catch {
+        $r.Messaggio = "Impossibile interrogare lo stato licenza: $_"
+    }
+    return [pscustomobject]$r
+}
+
+function Set-PreventSleep {
+    param([bool]$Enable = $true)
+    try {
+        if ($Enable) {
+            # Evita spegnimento schermo e sospensione durante il lavoro
+            powercfg /change standby-timeout-ac 0 2>$null | Out-Null
+            powercfg /change monitor-timeout-ac 0 2>$null | Out-Null
+        } else {
+            # Ripristina valori standard (15 min schermo, 30 min sospensione)
+            powercfg /change monitor-timeout-ac 15 2>$null | Out-Null
+            powercfg /change standby-timeout-ac 30 2>$null | Out-Null
+        }
+    } catch {}
 }
 
 # =============================================================================
@@ -1053,6 +1203,137 @@ function Invoke-PreparaUSBOffline {
     Beep-Completato
 }
 
+function Invoke-MigrazioneDati {
+    param(
+        [switch]$Test
+    )
+
+    try { Clear-Host } catch {}
+    Write-Titolo "MODULO TRASFERIMENTO DATI (MIGRAZIONE VECCHIO PC)"
+    Write-Host "Questo strumento ti permette di copiare rapidamente i dati personali" -ForegroundColor White
+    Write-Host "da un hard disk esterno o chiavetta USB del cliente nel nuovo profilo utente." -ForegroundColor White
+    Write-Host "Cartella di destinazione: $env:USERPROFILE" -ForegroundColor Cyan
+    Write-Host ""
+
+    if ($Test) {
+        Write-OK "TEST: simulazione modulo migrazione dati completata."
+        return
+    }
+
+    # Trova le unita' disco collegate (esclusa C:)
+    $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Root -ne "$env:SystemDrive\" -and (Test-Path $_.Root) }
+    if (-not $drives -or @($drives).Count -eq 0) {
+        Write-Errore "Nessuna unita' disco o USB secondaria rilevata."
+        Write-Host "Collega la chiavetta o l'hard disk esterno con i dati del cliente e riprova." -ForegroundColor Yellow
+        Write-Host ""
+        Attendi-Risposta "Premi INVIO per tornare indietro" | Out-Null
+        return
+    }
+
+    Write-Host "Unita' esterne rilevate:" -ForegroundColor White
+    $dList = @($drives)
+    for ($i = 0; $i -lt $dList.Count; $i++) {
+        $d = $dList[$i]
+        $freeGB = [Math]::Round($d.Free / 1GB, 1)
+        Write-Host "  $($i + 1)) [$($d.Name):] $freeGB GB liberi - $($d.Description)" -ForegroundColor Green
+    }
+    Write-Host "  M) Inserisci percorso personalizzato a mano" -ForegroundColor White
+    Write-Host "  Q) Annulla e torna al menu" -ForegroundColor DarkGray
+    Write-Host ""
+
+    $sceltaD = (Attendi-Risposta "Seleziona unita' sorgente (1-$($dList.Count), default = 1)").Trim()
+    if ($sceltaD -match "^[Qq]") { return }
+
+    $sorgente = ""
+    if ($sceltaD -match "^[Mm]") {
+        $sorgente = (Attendi-Risposta "Inserisci percorso sorgente completo (es. E:\BackupMario)").Trim()
+    } elseif ([string]::IsNullOrWhiteSpace($sceltaD) -or $sceltaD -eq "1") {
+        $sorgente = $dList[0].Root
+    } elseif ($sceltaD -match '^\d+$' -and [int]$sceltaD -le $dList.Count -and [int]$sceltaD -ge 1) {
+        $sorgente = $dList[[int]$sceltaD - 1].Root
+    }
+
+    if (-not $sorgente -or -not (Test-Path $sorgente)) {
+        Write-Errore "Percorso non valido o inesistente: $sorgente"
+        Attendi-Risposta "Premi INVIO per continuare" | Out-Null
+        return
+    }
+
+    $subUsers = Get-ChildItem -Path $sorgente -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'Users|Utenti' } | Select-Object -First 1
+    if ($subUsers) {
+        $profiliTrovati = Get-ChildItem -Path $subUsers.FullName -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch 'Public|Default|All Users' }
+        if ($profiliTrovati -and @($profiliTrovati).Count -eq 1) {
+            $sorgente = $profiliTrovati[0].FullName
+            Write-Info "Rilevato profilo utente: $sorgente"
+        }
+    }
+
+    Write-Host ""
+    Write-Info "Scansione cartelle in: $sorgente"
+
+    $mappaCartelle = @(
+        @{ Nome = "Desktop";    Src = @("Desktop");              Dst = [Environment]::GetFolderPath("Desktop") },
+        @{ Nome = "Documenti";  Src = @("Documents","Documenti"); Dst = [Environment]::GetFolderPath("MyDocuments") },
+        @{ Nome = "Immagini";   Src = @("Pictures","Immagini");   Dst = [Environment]::GetFolderPath("MyPictures") },
+        @{ Nome = "Download";   Src = @("Downloads","Download");  Dst = (Join-Path $env:USERPROFILE "Downloads") },
+        @{ Nome = "Video";      Src = @("Videos","Video");        Dst = [Environment]::GetFolderPath("MyVideos") },
+        @{ Nome = "Musica";     Src = @("Music","Musica");        Dst = [Environment]::GetFolderPath("MyMusic") },
+        @{ Nome = "Preferiti";  Src = @("Favorites","Preferiti"); Dst = [Environment]::GetFolderPath("Favorites") }
+    )
+
+    $trovate = @()
+    foreach ($m in $mappaCartelle) {
+        foreach ($s in $m.Src) {
+            $p = Join-Path $sorgente $s
+            if (Test-Path $p) {
+                $trovate += [pscustomobject]@{ Nome = $m.Nome; SrcPath = $p; DstPath = $m.Dst }
+                break
+            }
+        }
+    }
+
+    if ($trovate.Count -eq 0) {
+        Write-Info "Nessuna sottocartella standard trovata. Copio l'intera cartella sorgente in 'Dati Vecchio PC' sul Desktop."
+        $trovate += [pscustomobject]@{ Nome = "Tutti i dati"; SrcPath = $sorgente; DstPath = (Join-Path ([Environment]::GetFolderPath("Desktop")) "Dati Vecchio PC") }
+    } else {
+        Write-Host "Cartelle rilevate da trasferire:" -ForegroundColor Green
+        foreach ($t in $trovate) {
+            Write-Host "  - $($t.Nome) ($($t.SrcPath) -> $($t.DstPath))" -ForegroundColor Gray
+        }
+    }
+
+    Write-Host ""
+    $conferma = Attendi-Risposta "Avviare la copia dei dati? (S/N, default = S)"
+    if ($conferma -notmatch "^[Ss]" -and -not [string]::IsNullOrWhiteSpace($conferma)) {
+        Write-Info "Operazione annullata."
+        return
+    }
+
+    Write-Titolo "COPIA DATI IN CORSO"
+    $totCopiate = 0
+    foreach ($item in $trovate) {
+        Write-Host ""
+        Write-Info "Copia in corso: $($item.Nome)..."
+        if (-not (Test-Path $item.DstPath)) { New-Item -Path $item.DstPath -ItemType Directory -Force | Out-Null }
+        Start-BarraAnimata "Copia $($item.Nome)..."
+        try {
+            $rc = & robocopy.exe "$($item.SrcPath)" "$($item.DstPath)" /E /R:1 /W:1 /MT:8 /XJ /NFL /NDL /NP /NJH /NJS 2>&1
+            Write-OK "Copia completata: $($item.Nome)"
+            $totCopiate++
+        } catch {
+            Write-Errore "Errore durante la copia di $($item.Nome): $_"
+        } finally {
+            Stop-BarraAnimata
+        }
+    }
+
+    Write-Host ""
+    Write-Titolo "MIGRAZIONE DATI COMPLETATA"
+    Write-OK "Trasferite $totCopiate cartelle nel profilo di $env:USERNAME."
+    Beep-Completato
+    Attendi-Risposta "Premi INVIO per tornare al menu" | Out-Null
+}
+
 # =============================================================================
 # MODALITA' DI AVVIO E MENU INIZIALE
 # =============================================================================
@@ -1072,7 +1353,7 @@ if ($Test -or $Diagnostica) {
 $Global:ModoEspresso = $false
 
 # Se nessun parametro esplicito e' stato fornito da CLI, mostro il MENU INIZIALE:
-if (-not $Test -and -not $Diagnostica -and -not $Espresso -and -not $Manuale -and -not $PreparaUSB) {
+if (-not $Test -and -not $Diagnostica -and -not $Espresso -and -not $Manuale -and -not $PreparaUSB -and -not $Migrazione) {
     try { Clear-Host } catch {}
     $larg = 64
     $titoloB = "PC FACILE   -   versione $SCRIPT_VERSION"
@@ -1101,15 +1382,19 @@ if (-not $Test -and -not $Diagnostica -and -not $Espresso -and -not $Manuale -an
     Write-Host "      Scarica tutti gli installer (.exe/.msi) nella cartella 'installers'." -ForegroundColor Gray
     Write-Host "      I prossimi PC si installeranno al 100% OFFLINE e super veloci!" -ForegroundColor Gray
     Write-Host ""
+    Write-Host "  [B] TRASFERIMENTO DATI (Migrazione da vecchio PC / USB)" -ForegroundColor Magenta
+    Write-Host "      Copia Desktop, Documenti, Immagini e Preferiti da un'unita' esterna." -ForegroundColor Gray
+    Write-Host ""
     Write-Host "  [D] Diagnostica (Verifica sistema e pacchetti senza modifiche)" -ForegroundColor DarkGray
     Write-Host "  [T] Test (Simulazione rapida a vuoto)" -ForegroundColor DarkGray
     Write-Host "  [Q] Esci" -ForegroundColor DarkGray
     Write-Host ""
 
-    $sceltaMenu = (Attendi-Risposta "Scegli modalita' [E/M/P/D/T/Q] (INVIO = Espresso)").Trim().ToUpper()
+    $sceltaMenu = (Attendi-Risposta "Scegli modalita' [E/M/P/B/D/T/Q] (INVIO = Espresso)").Trim().ToUpper()
 
     switch -Regex ($sceltaMenu) {
         "^P" { $PreparaUSB = $true }
+        "^B" { $Migrazione = $true }
         "^M" { $Manuale = $true; $Global:ModoEspresso = $false }
         "^D" { $Diagnostica = $true }
         "^T" { $Test = $true }
@@ -1120,6 +1405,12 @@ if (-not $Test -and -not $Diagnostica -and -not $Espresso -and -not $Manuale -an
 
 if ($Espresso) {
     $Global:ModoEspresso = $true
+}
+
+# Se e' richiesta la migrazione dei dati:
+if ($Migrazione) {
+    Invoke-MigrazioneDati -Test:$Test
+    return
 }
 
 # Se e' richiesta la preparazione della USB Offline:
@@ -1135,6 +1426,9 @@ if (-not $Test -and -not $Diagnostica) {
 }
 
 $RunReale = (-not $Test -and -not $Diagnostica)
+if ($RunReale) {
+    Set-PreventSleep $true
+}
 
 # =============================================================================
 # GESTIONE ERRORI CENTRALIZZATA
@@ -2730,12 +3024,45 @@ $bloatwareAppx = @(
         Add-Report "Rimozione OneDrive" "AVVISO"
     } finally { Stop-BarraAnimata }
 
+    # --- PRIVACY & TELEMETRIA MICROSOFT: disattivazione telemetria diagnostica,
+    # advertising ID e tracciamento personalizzato per massimizzare privacy e reattivita' ---
+    try {
+        $dcPolicy = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection"
+        if (-not (Test-Path $dcPolicy)) { New-Item -Path $dcPolicy -Force | Out-Null }
+        Set-ItemProperty -Path $dcPolicy -Name "AllowTelemetry" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+        $advId = "HKCU:\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo"
+        if (-not (Test-Path $advId)) { New-Item -Path $advId -Force | Out-Null }
+        Set-ItemProperty -Path $advId -Name "Enabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+        $priv = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Privacy"
+        if (-not (Test-Path $priv)) { New-Item -Path $priv -Force | Out-Null }
+        Set-ItemProperty -Path $priv -Name "TailoredExperiencesWithDiagnosticDataEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+        $cloud = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent"
+        if (-not (Test-Path $cloud)) { New-Item -Path $cloud -Force | Out-Null }
+        Set-ItemProperty -Path $cloud -Name "DisableConsumerAccountStateContent" -Value 1 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cloud -Name "DisableWindowsConsumerFeatures" -Value 1 -Type DWord -ErrorAction SilentlyContinue
+
+        $cdm = "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
+        if (Test-Path $cdm) {
+            Set-ItemProperty -Path $cdm -Name "SystemPaneSuggestionsEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $cdm -Name "SoftLandingEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        }
+        Write-OK "Privacy Windows potenziata (telemetria e tracciamento pubblicitario disattivati)."
+        Add-Report "Privacy e telemetria Windows" "OK"
+    } catch {
+        Write-Info "Alcune impostazioni privacy non applicate: $_"
+        Add-Report "Privacy e telemetria Windows" "AVVISO"
+    }
+
     Write-OK "Pulizia e ottimizzazione iniziale completata."
 } else {
     Write-Info "Pulizia e ottimizzazione iniziale saltata."
     Add-Report "Antivirus di prova" "SALTATO"
     Add-Report "Rimozione bloatware" "SALTATO"
     Add-Report "Configurazione Windows base" "SALTATO"
+    Add-Report "Privacy e telemetria Windows" "SALTATO"
 }
 
 Save-Fase 3 "Pulizia e ottimizzazione"
@@ -3764,11 +4091,49 @@ if ($RunReale) {
     Write-Host ""
     $bitlocker = Get-BitLockerRecovery -Volume $env:SystemDrive
     switch ($bitlocker.Esito) {
-        "OK"      { Write-OK "Chiave di ripristino BitLocker salvata (volume $($bitlocker.Volume))." }
+        "OK"      {
+            Write-OK "Chiave di ripristino BitLocker salvata (volume $($bitlocker.Volume))."
+            try {
+                $nonCancFile = Join-Path (Get-DesktopDir) "NON CANCELLARE - Chiave di Ripristino BitLocker.txt"
+                $nonCancText = @"
+================================================================================
+   CHIAVE DI RIPRISTINO BITLOCKER - NON CANCELLARE QUESTO FILE
+================================================================================
+
+Questo computer ha la crittografia di sicurezza BitLocker attiva.
+Se dopo un aggiornamento di Windows, un cambio di password o un intervento tecnico
+il sistema dovesse richiedere la 'Chiave di ripristino di BitLocker', inserisci
+il codice numerico di 48 cifre riportato qui sotto:
+
+ID CHIAVE (Identificatore):
+$($bitlocker.KeyId)
+
+CHIAVE DI RIPRISTINO (48 cifre):
+$($bitlocker.RecoveryKey)
+
+Volume protetto : $($bitlocker.Volume)
+Data salvataggio: $(Get-Date -Format 'dd/MM/yyyy HH:mm')
+
+================================================================================
+IMPORTANTE:
+Non eliminare questo file. Ti consigliamo di scattare una foto con lo smartphone
+a questo promemoria o di salvarne una copia su una chiavetta USB personale
+per averlo sempre a disposizione in caso di necessita'.
+================================================================================
+"@
+                $nonCancText | Set-Content -Path $nonCancFile -Encoding UTF8
+                Write-OK "Creato file di sicurezza sul Desktop: $nonCancFile"
+            } catch {}
+        }
         "SALTATO" { Write-Info $bitlocker.Messaggio }
         default   { Write-Info $bitlocker.Messaggio }   # AVVISO
     }
     Add-Report "Chiave di ripristino BitLocker" $bitlocker.Esito
+
+    # Diagnostica salute hardware e stato licenza
+    $storageInfo = Get-StorageHealthInfo
+    $batteryInfo = Get-BatteryHealthInfo
+    $winActInfo  = Get-WindowsActivationStatus
 
     # Le credenziali del nuovo account le ha GENERATE lo script allo step Account
     # Microsoft ($credMsAccount / $credMsPassword). Se quel passo e' stato saltato
@@ -3787,8 +4152,8 @@ if ($RunReale) {
         $credMsAccount = New-EmailCliente -Base $nomeCliente -Dominio $domRete
     }
     try {
-        $winOk   = @($Report | Where-Object { $_.Voce -eq 'Windows attivato' -and $_.Esito -eq 'OK' }).Count -gt 0
-        $diskBad = @($Report | Where-Object { $_.Voce -eq 'Salute disco' -and $_.Esito -eq 'ERRORE' }).Count -gt 0
+        $winOk   = ($winActInfo.Attivo -or (@($Report | Where-Object { $_.Voce -eq 'Windows attivato' -and $_.Esito -eq 'OK' }).Count -gt 0))
+        $diskBad = ($storageInfo.Salute -notmatch 'Healthy|Buono|OK' -or (@($Report | Where-Object { $_.Voce -eq 'Salute disco' -and $_.Esito -eq 'ERRORE' }).Count -gt 0))
         $freeTxt = ""
         try { $freeTxt = "{0} GB liberi" -f [math]::Round((Get-PSDrive ($env:SystemDrive.TrimEnd(':')) -ErrorAction SilentlyContinue).Free / 1GB, 1) } catch {}
 
@@ -3884,10 +4249,10 @@ if ($RunReale) {
         $f += $sep
         $f += "STATO SISTEMA"
         $f += $sep
-        $f += "  Windows attivato : $(if ($winOk) { 'SI' } else { 'NO - da verificare' })"
+        $f += "  Windows attivato : $($winActInfo.StatoBreve)"
         if ($freeTxt) { $f += "  Spazio disco C:  : $freeTxt" }
-        $f += "  Salute dischi    : $(if ($diskBad) { 'ATTENZIONE: un disco non Healthy' } else { 'OK' })"
-        if ($Global:HaBatteria) { $f += "  Batteria         : presente (laptop)" }
+        $f += "  Salute disco/SSD : $($storageInfo.StatoCompleto)"
+        if ($batteryInfo.Presente) { $f += "  Batteria         : $($batteryInfo.Descrizione)" }
         $f += ""
         $f += $sep
         $f += "VERIFICA FINALE (ricontrollo automatico)"
@@ -3915,8 +4280,7 @@ if ($RunReale) {
             if ($bitlocker.RecoveryKey) {
                 $f += "  ID chiave     : $($bitlocker.KeyId)"
                 $f += "  Recovery key  : $($bitlocker.RecoveryKey)"
-                $f += "  >> CONSERVA questa chiave: senza, dopo un reset o un cambio"
-                $f += "     hardware il disco cifrato NON e' piu' accessibile."
+                $f += "  >> NOTA: Salvata anche nel file 'NON CANCELLARE - Chiave di Ripristino BitLocker.txt' sul Desktop."
             } else {
                 $f += "  $($bitlocker.Messaggio)"
             }
@@ -3947,7 +4311,9 @@ if ($RunReale) {
             $daFare += "Controllare le voci in ERRORE del report."
         }
         $daFare += "Installare/attivare l'antivirus definitivo del cliente."
-        $daFare += "Verificare l'attivazione di Windows e di Office."
+        if (-not $winActInfo.Attivo) {
+            $daFare += "ATTIVARE WINDOWS: inserire codice licenza o completare attivazione digitale."
+        }
         $f += ""
         $f += $sep
         $f += "DA COMPLETARE A MANO"
@@ -4065,15 +4431,18 @@ if ($RunReale) {
                         <tr><td>Nome Computer:</td><td><code>$env:COMPUTERNAME</code></td></tr>
                         <tr><td>Data Setup:</td><td>$(Get-Date -Format 'dd/MM/yyyy HH:mm')</td></tr>
                         <tr><td>Sistema:</td><td>$(if ($osInfo) { $osInfo.Caption } else { 'Windows 11' })</td></tr>
+                        <tr><td>Licenza Windows:</td><td><strong style="color:$(if ($winActInfo.Attivo) { '#16a34a' } else { '#e11d48' });">&#10003; $($winActInfo.StatoBreve)</strong></td></tr>
                         <tr><td>Stato Setup:</td><td><strong style="color:#16a34a;">&#10003; Pronto e Collaudato</strong></td></tr>
                     </table>
                 </div>
                 <div class="card">
-                    <h3>&#128187; Specifiche Hardware</h3>
+                    <h3>&#128187; Specifiche Hardware &amp; Diagnostica</h3>
                     <table class="info-table">
                         <tr><td>Processore:</td><td>$cpuName</td></tr>
                         <tr><td>RAM:</td><td>$ramDisplay</td></tr>
                         <tr><td>Scheda Video:</td><td>$gpuDisplay</td></tr>
+                        <tr><td>Stato Disco / SSD:</td><td><strong>$($storageInfo.StatoCompleto)</strong></td></tr>
+                        $(if ($batteryInfo.Presente) { "<tr><td>Salute Batteria:</td><td><strong>$($batteryInfo.Descrizione)</strong></td></tr>" })
                         <tr><td>Lingua:</td><td>Italiano (it-IT)</td></tr>
                     </table>
                 </div>
@@ -4088,6 +4457,7 @@ if ($RunReale) {
                 <ul class="tips-list">
                     <li><strong>Wi-Fi:</strong> All'accensione a casa, seleziona la tua rete Wi-Fi in basso a destra ed inserisci la password.</li>
                     <li><strong>Sicurezza:</strong> Se &egrave; stata creata una password provvisoria, modificala al primo accesso in <em>Impostazioni &gt; Account</em>.</li>
+                    $(if ($bitlocker -and $bitlocker.RecoveryKey) { "<li><strong>BitLocker:</strong> La chiave di sicurezza del disco &egrave; stata salvata sul Desktop nel file <code>NON CANCELLARE - Chiave di Ripristino BitLocker.txt</code>.</li>" })
                     <li><strong>Teleassistenza:</strong> AnyDesk e TeamViewer sono pronti sul desktop in caso di necessit&agrave; di supporto da remoto.</li>
                 </ul>
             </div>
@@ -4211,6 +4581,7 @@ if ($RunReale -and $Global:JobWinUpdate) {
 # RIAVVIO FINALE: sempre proposto (e sempre CHIESTO, anche nel flusso automatico).
 # Serve per applicare del tutto lingua italiana, barra, impostazioni nuovi utenti.
 if ($RunReale) {
+    Set-PreventSleep $false
     $linguaOk = @($Report | Where-Object { $_.Voce -like "Lingua italiana (it-IT*" -and $_.Esito -eq "OK" }).Count -gt 0
     Write-Titolo "ULTIMO PASSO: RIAVVIO"
     Write-Host "Ho finito TUTTO (pulizia, lingua, app, aggiornamenti, driver, antivirus)." -ForegroundColor White

@@ -18,7 +18,8 @@ BeforeAll {
     $script:FunzioniTestate = @(
         'New-PasswordCliente', 'New-EmailCliente',
         'Test-NomeSimile', 'Test-LnkJunk', 'Test-Indietro',
-        'Get-OfflineDirs', 'Find-OfflineInstaller', 'Select-DestinazioneUSB'
+        'Get-OfflineDirs', 'Find-OfflineInstaller', 'Select-DestinazioneUSB',
+        'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus'
     )
     foreach ($nome in $script:FunzioniTestate) {
         $fn = $ast.FindAll({
@@ -184,6 +185,34 @@ Describe 'Select-DestinazioneUSB' {
         $dest = Select-DestinazioneUSB -DefaultDir $PSScriptRoot -Test
         $dest | Should -Not -BeNullOrEmpty
         Test-Path $dest | Should -BeTrue
+    }
+}
+
+Describe 'Get-StorageHealthInfo' {
+    It 'restituisce un oggetto con campi validi e non nullo' {
+        $info = Get-StorageHealthInfo
+        $info | Should -Not -BeNullOrEmpty
+        $info.Modello | Should -Not -BeNullOrEmpty
+        $info.Salute | Should -Not -BeNullOrEmpty
+        $info.StatoCompleto | Should -Not -BeNullOrEmpty
+    }
+}
+
+Describe 'Get-BatteryHealthInfo' {
+    It 'restituisce un oggetto con campi validi e stato batteria' {
+        $batt = Get-BatteryHealthInfo
+        $batt | Should -Not -BeNullOrEmpty
+        $batt.Salute | Should -Not -BeNullOrEmpty
+        $batt.PSObject.Properties['Presente'] | Should -Not -BeNullOrEmpty
+    }
+}
+
+Describe 'Get-WindowsActivationStatus' {
+    It 'restituisce un oggetto con stato licenza e messaggio' {
+        $act = Get-WindowsActivationStatus
+        $act | Should -Not -BeNullOrEmpty
+        $act.StatoBreve | Should -Not -BeNullOrEmpty
+        $act.Messaggio | Should -Not -BeNullOrEmpty
     }
 }
 

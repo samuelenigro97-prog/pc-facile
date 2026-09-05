@@ -55,7 +55,7 @@ https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps
 ```text
   [E] ESPRESSO (Automatico 1-Click)  <-- PREDEFINITO (INVIO)
       Fa TUTTO da solo alla massima velocita' senza interruzioni:
-      pulizia bloatware/AV trial, lingua italiana, ottimizzazioni,
+      pulizia bloatware/AV trial, lingua italiana, ottimizzazioni privacy,
       app Base (Chrome, 7-Zip, VLC, Adobe, AnyDesk), update Windows e driver,
       e genera la Scheda Consegna Cliente su Desktop.
 
@@ -66,6 +66,10 @@ https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps
   [P] PREPARA USB OFFLINE (Scarica programmi sulla chiavetta)
       Scarica tutti gli installer (.exe/.msi) nella cartella 'installers'.
       I prossimi PC si installeranno al 100% OFFLINE e super veloci!
+
+  [B] TRASFERIMENTO DATI (Migrazione da vecchio PC / USB)
+      Copia rapida di Desktop, Documenti, Immagini, Download, Video e Preferiti
+      da un hard disk esterno o chiavetta USB nel nuovo profilo utente.
 
   [D] Diagnostica  |  [T] Test simulazione  |  [Q] Esci
 ```
@@ -84,6 +88,9 @@ Apri **Windows PowerShell** come Amministratore e usa questi comandi:
 
 # MODALITA' ESPRESSO 1-CLICK (tutto automatico da solo)
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1))) -Espresso
+
+# TRASFERIMENTO DATI DA VECCHIO PC / DISCO USB
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1))) -Migrazione
 
 # PREPARA USB OFFLINE (scarica i pacchetti sulla chiavetta)
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1))) -PreparaUSB
@@ -139,7 +146,7 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 |------|--------|
 | 1  | **Nome cliente** (cambia il "Nome visualizzato" dell'account **e** il nome del PC): serve subito, genera anche le credenziali suggerite |
 | 2  | **Account Microsoft** (subito, col cliente davanti): apre il login/registrazione; genera o annota email + password `Nome123!` nel riepilogo. Così Office e antivirus dopo non richiedono altri OTP |
-| 3  | **Pulizia e ottimizzazione** (una sola domanda): rimuove antivirus di prova, bloatware OEM, promo dal menu Start, disinstalla OneDrive, piccole comodità Windows. **Spostata qui**, prima di lingua/app/driver, così l'antivirus di prova non blocca quei passaggi |
+| 3  | **Pulizia e ottimizzazione**: rimuove antivirus di prova, bloatware OEM, promo dal menu Start, disinstalla OneDrive, potenzia la **privacy** (disattivazione telemetria diagnostica Microsoft e Advertising ID), piccole comodità Windows (estensioni file visibili, Questo PC predefinito) |
 | 4  | Lingua/regione **Italiano (it-IT)** + tastiera + language pack + propagazione a login/nuovi utenti |
 | 5  | **Punto di ripristino** (opzionale, consigliato): rete di sicurezza prima delle modifiche |
 | 6  | **App Office**: installa la suite scelta se manca (Office 365, perpetuo, OpenOffice, LibreOffice), poi **attivazione** — card PIN → riscatto web (`microsoft365.com/setup` o `office.com/setup`) + accesso in Word. Crea i collegamenti Office sul Desktop |
@@ -148,7 +155,7 @@ sincronizza l'**orologio** ed evita che il PC vada in **sospensione**.
 | 9  | **Aggiornamento** di tutte le app installate (`winget upgrade --all`) |
 | 10 | **Driver**: scheda video dedicata (tool del produttore) + driver generici da Windows Update |
 | 11 | **Antivirus** (ultimo passo): McAfee, Norton, o Salta — dopo le altre installazioni, così un AV appena attivato non le blocca |
-| —  | **Report finale**: verifica finale + chiave BitLocker + **due file sul Desktop** (`Il tuo nuovo PC - <cliente>.txt` con le credenziali IN CIMA, e `Credenziali - <cliente>.txt` dedicato) + riavvio |
+| —  | **Report finale & Consegna**: verifica finale + diagnostica **Salute SSD (SMART)**, **Salute Batteria** (notebook) e **Licenza Windows** + generazione file **`NON CANCELLARE - Chiave di Ripristino BitLocker.txt`** (se crittografato) + **Scheda Consegna Cliente HTML** stampabile + riavvio |
 
 **Profili app** (browser incluso: Chrome, o Opera GX per GAMING):
 - **BASE** — VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, Zoom, AnyDesk
@@ -184,6 +191,8 @@ La pulizia toglie anche i **collegamenti promo dal menu Start** (Booking.com,
 "Offerte Adobe", HP Documentation).
 
 **Comodità durante l'uso** (valgono per tutto lo script):
+- **Prevenzione Standby**: durante tutto il setup e gli aggiornamenti Windows Update,
+  lo script impedisce lo spegnimento dello schermo e la sospensione automatica.
 - **Barra di avanzamento**: durante ogni download/installazione una barra animata
   con i secondi mostra che sta lavorando (l'output tecnico resta nascosto).
 - **Bip di richiamo**: quando lo script aspetta una tua risposta fa un bip; se non
