@@ -1346,9 +1346,12 @@ function Open-PannelloOperatore {
                     </div>
                 </div>
 
-                <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
-                    <button type="button" id="btnSalvaCred" class="btn-scheda" style="background: #EE7203; border: none; font-size: 11px; padding: 6px 12px; cursor: pointer;" onclick="salvaCredenziali()">&#128190; Salva per Scheda Consegna</button>
-                    <button type="button" class="btn-quick" onclick="copiaRiepilogoCred()">&#128203; Copia Tutto per Ticket</button>
+                <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+                    <button type="button" id="btnAvviaAuto" class="btn-scheda" style="background: #16a34a; font-weight: 700; font-size: 13px; padding: 10px 14px; width: 100%; border: none; cursor: pointer; text-align: center; border-radius: 6px; color: #fff;" onclick="avviaSetupAutomatico()">🚀 AVVIA SETUP AUTOMATICO (Zero Clic)</button>
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                        <button type="button" id="btnSalvaCred" class="btn-scheda" style="background: #EE7203; border: none; font-size: 11px; padding: 6px 12px; cursor: pointer;" onclick="salvaCredenziali()">&#128190; Salva per Scheda Consegna</button>
+                        <button type="button" class="btn-quick" onclick="copiaRiepilogoCred()">&#128203; Copia Tutto per Ticket</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1724,6 +1727,16 @@ function Open-PannelloOperatore {
                     btn.innerHTML = old;
                     btn.style.background = '#EE7203';
                 }, 3000);
+            }
+        }
+
+        function avviaSetupAutomatico() {
+            salvaCredenziali();
+            showToast('🚀 Setup Automatico Avviato! Il sistema procede in autonomia.');
+            var btn = document.getElementById('btnAvviaAuto');
+            if (btn) {
+                btn.innerHTML = '&#10003; Setup in corso...';
+                btn.style.background = '#0284c7';
             }
         }
 

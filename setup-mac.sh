@@ -432,23 +432,46 @@ open_pannello_mac() {
 
         <div id="tab-cred" class="section-view active-view">
             <div class="card">
-                <h3 style="font-size:13px; margin-bottom:8px; color:#fed7aa;">&#128273; Credenziali Apple ID &amp; Servizi</h3>
-                <label style="font-size:11px; color:#93c5fd;">Email / Apple ID:</label>
+                <h3 style="font-size:13px; margin-bottom:8px; color:#fed7aa;">&#128273; Configurazione Credenziali &amp; Dati Cliente</h3>
+                
+                <label style="font-size:11px; color:#93c5fd;">1. Provider Email:</label>
+                <div style="display:flex; gap:4px; margin-bottom:8px; flex-wrap:wrap;">
+                    <button type="button" class="dom-btn" style="background:#0284c7; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;" onclick="setDomMac('proton.me', 'Proton', this)">@proton.me</button>
+                    <button type="button" class="dom-btn" style="background:#334155; color:#cbd5e1; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;" onclick="setDomMac('icloud.com', 'iCloud', this)">@icloud.com</button>
+                    <button type="button" class="dom-btn" style="background:#334155; color:#cbd5e1; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;" onclick="setDomMac('gmail.com', 'Google', this)">@gmail.com</button>
+                    <button type="button" class="dom-btn" style="background:#334155; color:#cbd5e1; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;" onclick="setDomMac('outlook.it', 'Microsoft', this)">@outlook.it</button>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">
+                    <div>
+                        <label style="font-size:11px; color:#93c5fd;">Cognome:</label>
+                        <input type="text" class="cred-input" id="inCognome" placeholder="es. Rossi" oninput="aggiornaCredMac()">
+                    </div>
+                    <div>
+                        <label style="font-size:11px; color:#93c5fd;">Nome:</label>
+                        <input type="text" class="cred-input" id="inNome" placeholder="es. Mario" oninput="aggiornaCredMac()">
+                    </div>
+                </div>
+
+                <label style="font-size:11px; color:#93c5fd;">Email Generata:</label>
                 <input type="text" class="cred-input" id="inEmail" value="__EMAIL__">
                 <label style="font-size:11px; color:#93c5fd;">Password Consigliata:</label>
                 <input type="text" class="cred-input" id="inPass" value="__PASS__">
-                <a href="Scheda-Consegna-Mac.html" target="_blank" class="btn-scheda">&#128196; Apri Scheda Consegna Mac</a>
+
+                <button type="button" id="btnAvviaAuto" class="btn-scheda" style="background:#16a34a; font-weight:700; font-size:13px; padding:10px 14px; width:100%; border:none; cursor:pointer; text-align:center; border-radius:6px; color:#fff; margin-top:8px;" onclick="avviaAutoMac()">🚀 AVVIA SETUP AUTOMATICO (Zero Clic)</button>
+                <a href="Scheda-Consegna-Mac.html" target="_blank" class="btn-scheda" style="margin-top:6px; background:#334155;">&#128196; Apri Scheda Consegna Mac</a>
             </div>
         </div>
 
         <div id="tab-portali" class="section-view">
             <div class="card">
                 <h3 style="font-size:13px; margin-bottom:8px; color:#fed7aa;">&#127760; Portali di Attivazione Rapida</h3>
-                <a href="https://appleid.apple.com" target="_blank" class="portal-btn"><span>🍎 1. Gestione &amp; Creazione Apple ID</span> <span>&rarr;</span></a>
-                <a href="https://microsoft365.com/setup" target="_blank" class="portal-btn"><span>📦 2. Riscatto Office / Microsoft 365</span> <span>&rarr;</span></a>
-                <a href="https://www.mcafee.com/activate" target="_blank" class="portal-btn"><span>🛡️ 3. Attivazione Card McAfee Mac</span> <span>&rarr;</span></a>
-                <a href="https://www.norton.com/setup" target="_blank" class="portal-btn"><span>🛡️ 4. Attivazione Card Norton Mac</span> <span>&rarr;</span></a>
-                <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" class="portal-btn" style="border-color:#EE7203;"><span>🔒 5. Unieuro Cyber Protection</span> <span>&rarr;</span></a>
+                <a href="https://account.proton.me/signup?plan=free" target="_blank" class="portal-btn" style="border-color:#0284c7;"><span>🔒 1. Account Proton Mail Free</span> <span>&rarr;</span></a>
+                <a href="https://appleid.apple.com" target="_blank" class="portal-btn"><span>🍎 2. Gestione &amp; Creazione Apple ID</span> <span>&rarr;</span></a>
+                <a href="https://microsoft365.com/setup" target="_blank" class="portal-btn"><span>📦 3. Riscatto Office / Microsoft 365</span> <span>&rarr;</span></a>
+                <a href="https://www.mcafee.com/activate" target="_blank" class="portal-btn"><span>🛡️ 4. Attivazione Card McAfee Mac</span> <span>&rarr;</span></a>
+                <a href="https://www.norton.com/setup" target="_blank" class="portal-btn"><span>🛡️ 5. Attivazione Card Norton Mac</span> <span>&rarr;</span></a>
+                <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" class="portal-btn" style="border-color:#EE7203;"><span>🔒 6. Unieuro Cyber Protection</span> <span>&rarr;</span></a>
             </div>
         </div>
 
@@ -462,11 +485,51 @@ open_pannello_mac() {
     </div>
 
     <script>
+        var currentDom = 'proton.me';
+        var currentProv = 'Proton';
+
         function showTab(id, btn) {
             document.querySelectorAll('.section-view').forEach(function(el){ el.classList.remove('active-view'); });
             document.querySelectorAll('.tab-btn').forEach(function(el){ el.classList.remove('active'); });
             document.getElementById(id).classList.add('active-view');
             btn.classList.add('active');
+        }
+
+        function setDomMac(dom, prov, btn) {
+            currentDom = dom;
+            currentProv = prov;
+            document.querySelectorAll('.dom-btn').forEach(function(b){ b.style.background = '#334155'; b.style.color = '#cbd5e1'; });
+            btn.style.background = '#0284c7';
+            btn.style.color = '#fff';
+            aggiornaCredMac();
+        }
+
+        function aggiornaCredMac() {
+            var c = (document.getElementById('inCognome') ? document.getElementById('inCognome').value.trim() : '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            var n = (document.getElementById('inNome') ? document.getElementById('inNome').value.trim() : '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            var pre = (c && n) ? (c + n) : (n || c || 'utente');
+            if (pre.length > 20) pre = pre.substring(0, 20);
+            document.getElementById('inEmail').value = pre + '@' + currentDom;
+            var passBase = n || c || 'Utente';
+            var cap = passBase.charAt(0).toUpperCase() + passBase.slice(1).toLowerCase();
+            document.getElementById('inPass').value = cap + '123!';
+        }
+
+        function avviaAutoMac() {
+            var email = document.getElementById('inEmail').value.trim();
+            var pass = document.getElementById('inPass').value.trim();
+            var c = (document.getElementById('inCognome') ? document.getElementById('inCognome').value.trim() : '');
+            var n = (document.getElementById('inNome') ? document.getElementById('inNome').value.trim() : '');
+            var payload = { Email: email, Password: pass, Provider: currentProv, Cliente: (c + ' ' + n).trim() || 'Utente' };
+            var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'pcfacile-cred.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            var btn = document.getElementById('btnAvviaAuto');
+            if (btn) { btn.innerHTML = '✓ Setup in corso...'; btn.style.background = '#0284c7'; }
         }
 
         function applyStatus(data) {
