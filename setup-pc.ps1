@@ -847,6 +847,13 @@ function Open-PannelloOperatore {
     if (-not $Password -and $NomeCliente) { $Password = New-PasswordCliente -Base $NomeCliente }
     elseif (-not $Password) { $Password = "Utente123!" }
 
+    # Rileva specifiche hardware rapide per il mini-dashboard del pannello
+    $hw = Get-SystemHardwareDetails
+    $hwModello = if ($hw.Produttore -and $hw.Modello) { "$($hw.Produttore) $($hw.Modello)" } else { "PC Windows" }
+    $hwCpu = if ($hw.Cpu) { $hw.Cpu } else { "Processore" }
+    $hwRam = if ($hw.RamGB) { "$($hw.RamGB) GB RAM" } else { "8 GB RAM" }
+    $hwSeriale = if ($hw.Seriale -and $hw.Seriale -ne "Non disponibile") { $hw.Seriale } else { "" }
+
     $tempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { [System.IO.Path]::GetTempPath() }
     $pannelloFile = Join-Path $tempDir "Pannello-Operatore.html"
     
@@ -859,88 +866,129 @@ function Open-PannelloOperatore {
 <html lang="it">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Unieuro - Pannello Assistenza Tecnica PC</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
-        body { background: #00122B; color: #f8fafc; padding: 20px; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #000c1e; }
+        ::-webkit-scrollbar-thumb { background: #003875; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #EE7203; }
+
+        body { background: radial-gradient(circle at 50% 0%, #001a3d 0%, #000d20 70%, #000713 100%); color: #f8fafc; padding: 12px; min-height: 100vh; line-height: 1.4; }
         .container { max-width: 980px; margin: 0 auto; }
-        .header { background: linear-gradient(135deg, #001A3A 0%, #002B5C 100%); border-radius: 12px; padding: 20px 24px; border-bottom: 4px solid #EE7203; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-        .brand-box { display: flex; align-items: center; gap: 14px; }
-        .u-logo { background: #EE7203; color: #fff; font-weight: 900; font-size: 20px; letter-spacing: 1.5px; padding: 8px 14px; border-radius: 8px; text-transform: uppercase; box-shadow: 0 2px 10px rgba(238,114,3,0.4); }
-        .brand-titles h1 { font-size: 19px; color: #fff; font-weight: 700; letter-spacing: 0.3px; }
-        .brand-titles p { font-size: 13px; color: #94a3b8; margin-top: 2px; }
+
+        /* HEADER & BRAND */
+        .header { background: linear-gradient(135deg, rgba(0,26,58,0.95) 0%, rgba(0,43,92,0.95) 100%); backdrop-filter: blur(10px); border: 1px solid #00458C; border-radius: 12px; padding: 12px 16px; border-bottom: 3.5px solid #EE7203; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 6px 20px rgba(0,0,0,0.45); }
+        .brand-box { display: flex; align-items: center; gap: 10px; }
+        .u-logo { background: #EE7203; color: #fff; font-weight: 900; font-size: 17px; letter-spacing: 1.2px; padding: 6px 12px; border-radius: 7px; text-transform: uppercase; box-shadow: 0 2px 10px rgba(238,114,3,0.4); flex-shrink: 0; }
+        .brand-titles h1 { font-size: 15.5px; color: #fff; font-weight: 700; letter-spacing: 0.2px; line-height: 1.2; }
+        .brand-titles p { font-size: 11.5px; color: #94a3b8; margin-top: 2px; }
         .u-tagline { color: #EE7203; font-weight: 700; font-style: italic; }
-        .badge-live { background: linear-gradient(135deg, #EE7203 0%, #d95e00 100%); color: #fff; font-weight: 800; font-size: 11px; padding: 6px 14px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.6px; box-shadow: 0 0 14px rgba(238,114,3,0.6); animation: pulse 2s infinite; }
-        .badge-done { background: #16a34a !important; box-shadow: 0 0 14px rgba(34,197,94,0.6) !important; animation: none !important; color: #fff; font-weight: 800; font-size: 11px; padding: 6px 14px; border-radius: 20px; text-transform: uppercase; }
-        @keyframes pulse { 0% { opacity: 0.9; transform: scale(1); } 50% { opacity: 1; transform: scale(1.03); } 100% { opacity: 0.9; transform: scale(1); } }
         
-        /* CARD PROGRESSO SINCRONIZZATO IN TEMPO REALE */
-        .progress-card { background: linear-gradient(135deg, #001A3A 0%, #00264D 100%); border: 1px solid #00458C; border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(0,0,0,0.3); }
-        .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 13px; }
-        .progress-title { color: #fed7aa; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+        .header-actions { display: flex; align-items: center; gap: 8px; }
+        .btn-audio { background: #00142E; border: 1px solid #00458C; color: #93c5fd; border-radius: 20px; padding: 5px 10px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 4px; }
+        .btn-audio:hover { border-color: #EE7203; color: #fff; }
+        .badge-live { background: linear-gradient(135deg, #EE7203 0%, #d95e00 100%); color: #fff; font-weight: 800; font-size: 10.5px; padding: 5px 12px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 0 12px rgba(238,114,3,0.6); animation: pulse 2s infinite; white-space: nowrap; }
+        .badge-done { background: #16a34a !important; box-shadow: 0 0 14px rgba(34,197,94,0.6) !important; animation: none !important; color: #fff; font-weight: 800; font-size: 10.5px; padding: 5px 12px; border-radius: 20px; text-transform: uppercase; white-space: nowrap; }
+        @keyframes pulse { 0% { opacity: 0.9; transform: scale(1); } 50% { opacity: 1; transform: scale(1.02); } 100% { opacity: 0.9; transform: scale(1); } }
+
+        /* MINI DASHBOARD HARDWARE */
+        .hw-bar { background: rgba(0, 20, 46, 0.8); border: 1px solid #003366; border-radius: 8px; padding: 6px 12px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: #cbd5e1; flex-wrap: wrap; }
+        .hw-item { display: flex; align-items: center; gap: 5px; }
+        .hw-item strong { color: #38bdf8; }
+        .hw-item .hw-val { color: #fff; font-weight: 600; }
+        .hw-copy-sn { cursor: pointer; color: #fed7aa; text-decoration: underline; font-size: 10.5px; }
+        .hw-copy-sn:hover { color: #EE7203; }
+
+        /* HERO PROGRESS BAR SINCRONIZZATA IN TEMPO REALE */
+        .progress-card { background: linear-gradient(135deg, rgba(0,26,58,0.9) 0%, rgba(0,38,77,0.9) 100%); border: 1px solid #00458C; border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.3); }
+        .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 12px; }
+        .progress-title { color: #fed7aa; font-weight: 700; display: flex; align-items: center; gap: 6px; font-size: 12px; }
+        .progress-meta { display: flex; align-items: center; gap: 10px; }
+        .progress-timer { color: #94a3b8; font-size: 11px; font-family: monospace; }
         .progress-pct { color: #EE7203; font-size: 16px; font-weight: 900; }
-        .progress-bar-bg { background: #00122B; border: 1px solid #003B7A; height: 14px; border-radius: 7px; overflow: hidden; position: relative; }
-        .progress-bar-fill { background: linear-gradient(90deg, #EE7203 0%, #ff9d42 100%); height: 100%; width: 5%; border-radius: 7px; transition: width 0.4s ease; box-shadow: 0 0 10px rgba(238,114,3,0.7); }
-        .progress-status-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 12px; }
+        .progress-bar-bg { background: #000c1c; border: 1px solid #003B7A; height: 11px; border-radius: 6px; overflow: hidden; position: relative; }
+        .progress-bar-fill { background: linear-gradient(90deg, #EE7203 0%, #ff9d42 70%, #38bdf8 100%); height: 100%; width: 5%; border-radius: 6px; transition: width 0.4s ease; box-shadow: 0 0 10px rgba(238,114,3,0.7); }
+        .progress-status-row { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 11px; }
         .current-fase { color: #fff; font-weight: 600; }
-        .current-detail { color: #94a3b8; font-style: italic; }
+        .current-detail { color: #94a3b8; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; text-align: right; }
 
-        .banner-complete { display: none; background: rgba(34, 197, 94, 0.15); border: 2px solid #22c55e; border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; text-align: center; }
-        .banner-complete h3 { color: #4ade80; font-size: 15px; margin-bottom: 4px; }
-        .banner-complete p { color: #dcfce7; font-size: 13px; margin-bottom: 10px; }
-        .btn-scheda { display: inline-block; background: #22c55e; color: #fff; font-weight: 700; font-size: 13px; padding: 8px 18px; border-radius: 6px; text-decoration: none; box-shadow: 0 2px 10px rgba(34,197,94,0.4); }
-        .btn-scheda:hover { background: #16a34a; }
+        /* COMPLETION BANNER */
+        .banner-complete { display: none; background: rgba(34, 197, 94, 0.15); border: 2px solid #22c55e; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; text-align: center; }
+        .banner-complete h3 { color: #4ade80; font-size: 14px; margin-bottom: 3px; }
+        .banner-complete p { color: #dcfce7; font-size: 12px; margin-bottom: 8px; }
+        .btn-scheda { display: inline-block; background: #22c55e; color: #fff; font-weight: 700; font-size: 12px; padding: 7px 16px; border-radius: 6px; text-decoration: none; box-shadow: 0 2px 10px rgba(34,197,94,0.4); transition: all 0.2s; }
+        .btn-scheda:hover { background: #16a34a; transform: translateY(-1px); }
 
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-        .card { background: #001F48; border: 1px solid #003B7A; border-radius: 12px; padding: 18px; box-shadow: 0 4px 14px rgba(0,0,0,0.3); }
-        .card h2 { font-size: 15px; color: #f8fafc; margin-bottom: 14px; border-bottom: 2px solid #003B7A; padding-bottom: 8px; display: flex; align-items: center; gap: 8px; }
-        .card h2 .bar { width: 4px; height: 16px; background: #EE7203; border-radius: 2px; display: inline-block; }
+        /* NAVIGATION TABS (OTTIMIZZAZIONE 50% SPLIT SCREEN) */
+        .tab-bar { display: flex; gap: 4px; margin-bottom: 10px; background: rgba(0, 20, 46, 0.95); padding: 4px; border-radius: 8px; border: 1px solid #003366; overflow-x: auto; }
+        .tab-btn { flex: 1; min-width: max-content; background: transparent; border: none; color: #94a3b8; font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
+        .tab-btn:hover { color: #fff; background: rgba(0, 59, 122, 0.4); }
+        .tab-btn.active { background: #003B7A; color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 1px solid #0056B3; }
+        .tab-btn.active .tab-badge-num { background: #EE7203; color: #fff; }
+        .tab-badge-num { background: #001f48; color: #93c5fd; font-size: 9.5px; padding: 1px 5px; border-radius: 10px; font-weight: 800; }
+
+        /* SEZIONI E CARD */
+        .section-view { display: none; }
+        .section-view.active-view { display: block; }
+        .grid-view-all { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+        
+        .card { background: rgba(0, 31, 72, 0.85); backdrop-filter: blur(8px); border: 1px solid #003B7A; border-radius: 10px; padding: 12px 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); margin-bottom: 10px; }
+        .card h2 { font-size: 13.5px; color: #f8fafc; margin-bottom: 10px; border-bottom: 1.5px solid #003B7A; padding-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
+        .card h2 .title-left { display: flex; align-items: center; gap: 6px; }
+        .card h2 .bar { width: 3.5px; height: 14px; background: #EE7203; border-radius: 2px; display: inline-block; }
         
         /* CREDENZIALI */
-        .cred-group { margin-bottom: 12px; }
-        .cred-label { font-size: 11px; color: #93c5fd; margin-bottom: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-        .cred-box { display: flex; gap: 8px; }
-        .cred-input { flex: 1; background: #00142E; border: 1px solid #00458C; border-radius: 6px; padding: 9px 12px; font-size: 13px; color: #fff; font-family: 'Consolas', monospace; outline: none; transition: border-color 0.2s; }
+        .cred-group { margin-bottom: 9px; }
+        .cred-label { font-size: 10.5px; color: #93c5fd; margin-bottom: 3px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; display: flex; justify-content: space-between; align-items: center; }
+        .cred-box { display: flex; gap: 6px; }
+        .cred-input { flex: 1; background: #00122B; border: 1px solid #00458C; border-radius: 6px; padding: 7px 10px; font-size: 12px; color: #fff; font-family: 'Consolas', monospace; outline: none; transition: border-color 0.2s; }
         .cred-input:focus { border-color: #EE7203; box-shadow: 0 0 0 2px rgba(238,114,3,0.35); }
-        .dom-selector { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
-        .dom-btn { background: #00142E; border: 1px solid #00458C; color: #cbd5e1; font-size: 11px; font-weight: 700; padding: 5px 9px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .dom-selector { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 4px; margin-bottom: 6px; }
+        .dom-btn { background: #00122B; border: 1px solid #00458C; color: #cbd5e1; font-size: 10.5px; font-weight: 700; padding: 4.5px 6px; border-radius: 5px; cursor: pointer; transition: all 0.15s; text-align: center; }
         .dom-btn:hover { border-color: #EE7203; color: #fff; }
-        .dom-btn.active { background: #EE7203; border-color: #EE7203; color: #fff; box-shadow: 0 2px 8px rgba(238,114,3,0.4); }
-        .btn-copy { background: linear-gradient(135deg, #003B7A 0%, #002B5C 100%); border: 1px solid #0056B3; color: #fff; border-radius: 6px; padding: 0 12px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+        .dom-btn.active { background: #EE7203; border-color: #EE7203; color: #fff; box-shadow: 0 2px 6px rgba(238,114,3,0.4); font-weight: 800; }
+        .btn-copy { background: linear-gradient(135deg, #003B7A 0%, #002B5C 100%); border: 1px solid #0056B3; color: #fff; border-radius: 5px; padding: 0 10px; font-size: 10.5px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
         .btn-copy:hover { background: #EE7203; border-color: #EE7203; }
-        .btn-copy.copied { background: #16a34a !important; border-color: #22c55e !important; }
-        
+        .btn-mini-action { background: #001f48; border: 1px solid #00458C; color: #cbd5e1; border-radius: 5px; padding: 0 8px; font-size: 11px; cursor: pointer; transition: all 0.2s; }
+        .btn-mini-action:hover { color: #fff; border-color: #EE7203; }
+
         /* PORTALI 1-CLICK */
-        .links-grid { display: flex; flex-direction: column; gap: 6px; }
-        .portal-divider { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px 0; }
-        .portal-divider::before, .portal-divider::after { content: ""; flex: 1; height: 1.5px; background: linear-gradient(90deg, rgba(238,114,3,0.1), #EE7203, rgba(238,114,3,0.1)); border-radius: 1px; }
-        .portal-divider span { font-size: 10px; font-weight: 800; color: #fed7aa; text-transform: uppercase; letter-spacing: 0.5px; background: #001A3A; border: 1px solid #EE7203; padding: 2px 8px; border-radius: 4px; box-shadow: 0 1px 6px rgba(238,114,3,0.25); white-space: nowrap; }
-        .portal-btn { display: flex; align-items: center; justify-content: space-between; background: #00142E; border: 1px solid #003B7A; border-radius: 8px; padding: 8.5px 12px; color: #f8fafc; text-decoration: none; font-size: 12px; font-weight: 600; transition: all 0.2s; }
-        .portal-btn:hover { background: #00224D; border-color: #EE7203; transform: translateX(3px); }
-        .portal-btn .icon { font-size: 15px; margin-right: 6px; }
-        .portal-btn .arrow { color: #EE7203; font-weight: bold; }
-        .portal-btn.highlight { border-color: #EE7203; background: rgba(238, 114, 3, 0.12); box-shadow: 0 0 10px rgba(238,114,3,0.2); }
-        
+        .portal-filter { width: 100%; background: #00122B; border: 1px solid #003B7A; border-radius: 6px; padding: 6px 10px; font-size: 11px; color: #fff; margin-bottom: 8px; outline: none; }
+        .portal-filter:focus { border-color: #EE7203; }
+        .links-grid { display: flex; flex-direction: column; gap: 4.5px; }
+        .portal-divider { display: flex; align-items: center; gap: 6px; margin: 6px 0 3px 0; }
+        .portal-divider::before, .portal-divider::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(238,114,3,0.1), #EE7203, rgba(238,114,3,0.1)); }
+        .portal-divider span { font-size: 9.5px; font-weight: 800; color: #fed7aa; text-transform: uppercase; letter-spacing: 0.4px; background: #001A3A; border: 1px solid #EE7203; padding: 1.5px 6px; border-radius: 4px; box-shadow: 0 1px 4px rgba(238,114,3,0.25); white-space: nowrap; }
+        .portal-btn { display: flex; align-items: center; justify-content: space-between; background: #00142E; border: 1px solid #003B7A; border-radius: 6px; padding: 6.5px 10px; color: #f8fafc; text-decoration: none; font-size: 11.5px; font-weight: 600; transition: all 0.15s; }
+        .portal-btn:hover { background: #00224D; border-color: #EE7203; transform: translateX(2px); }
+        .portal-btn .icon { font-size: 13px; margin-right: 5px; }
+        .portal-btn .arrow { color: #EE7203; font-weight: bold; font-size: 11px; }
+        .portal-btn.highlight { border-color: #EE7203; background: rgba(238, 114, 3, 0.12); box-shadow: 0 0 8px rgba(238,114,3,0.2); }
+
         /* CHECKLIST */
-        .checklist { list-style: none; display: flex; flex-direction: column; gap: 8px; }
-        .checklist li { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #e2e8f0; background: #00142E; padding: 8px 12px; border-radius: 6px; border: 1px solid #003B7A; }
-        .checklist input[type="checkbox"] { width: 16px; height: 16px; accent-color: #EE7203; cursor: pointer; }
-        
+        .checklist { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+        .checklist li { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: #e2e8f0; background: #00142E; padding: 6px 10px; border-radius: 6px; border: 1px solid #003B7A; }
+        .checklist input[type="checkbox"] { width: 15px; height: 15px; accent-color: #EE7203; cursor: pointer; }
+        .checklist-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+        .btn-quick { background: #001f48; border: 1px solid #00458C; color: #cbd5e1; font-size: 10.5px; font-weight: 700; padding: 5px 10px; border-radius: 5px; cursor: pointer; transition: all 0.2s; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+        .btn-quick:hover { background: #003B7A; border-color: #EE7203; color: #fff; }
+
         /* TASKS SINCRONIZZATI */
-        .bg-tasks { list-style: none; display: flex; flex-direction: column; gap: 6px; }
-        .task-item { display: flex; align-items: center; justify-content: space-between; font-size: 12px; padding: 6px 10px; border-radius: 6px; border: 1px solid transparent; transition: all 0.3s ease; }
-        .task-left { display: flex; align-items: center; gap: 8px; flex: 1; }
-        .task-icon { font-size: 13px; width: 16px; text-align: center; }
-        .task-name { color: #cbd5e1; }
-        .task-detail { color: #fed7aa; font-size: 11px; margin-left: 4px; }
-        .task-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; white-space: nowrap; }
+        .bg-tasks { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+        .task-item { display: flex; align-items: center; justify-content: space-between; font-size: 11px; padding: 5px 8px; border-radius: 5px; border: 1px solid transparent; transition: all 0.2s ease; }
+        .task-left { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+        .task-icon { font-size: 11px; width: 14px; text-align: center; flex-shrink: 0; }
+        .task-name { color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .task-detail { color: #fed7aa; font-size: 10px; margin-left: 3px; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .task-badge { font-size: 9px; font-weight: 700; padding: 1.5px 6px; border-radius: 8px; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; }
         
-        /* STATI DEI TASK */
         .task-item.pending { color: #64748b; }
         .task-item.pending .task-icon { color: #475569; }
-        .badge-pending { background: #00142E; color: #64748b; border: 1px solid #003B7A; }
+        .badge-pending { background: #00122B; color: #64748b; border: 1px solid #003B7A; }
         
-        .task-item.running { background: rgba(238, 114, 3, 0.12); border-color: #EE7203; color: #fff; font-weight: 600; box-shadow: 0 0 10px rgba(238,114,3,0.25); }
+        .task-item.running { background: rgba(238, 114, 3, 0.12); border-color: #EE7203; color: #fff; font-weight: 600; box-shadow: 0 0 8px rgba(238,114,3,0.25); }
         .task-item.running .task-name { color: #fff; font-weight: 700; }
         .badge-running { background: #EE7203; color: #fff; animation: pulse 1.5s infinite; }
         
@@ -955,17 +1003,33 @@ function Open-PannelloOperatore {
         
         .task-item.skipped { color: #94a3b8; }
         .task-item.skipped .task-icon { color: #94a3b8; }
-        .badge-skipped { background: #00142E; color: #94a3b8; border: 1px solid #003B7A; }
+        .badge-skipped { background: #00122B; color: #94a3b8; border: 1px solid #003B7A; }
 
-        .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #EE7203; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        .spinner { display: inline-block; width: 10px; height: 10px; border: 1.5px solid #EE7203; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        .footer { text-align: center; font-size: 12px; color: #64748b; margin-top: 14px; padding-top: 12px; border-top: 1px solid #002B5C; }
+        /* TOAST NOTIFICATION */
+        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px); background: #16a34a; color: #fff; font-size: 11.5px; font-weight: 700; padding: 7px 16px; border-radius: 20px; box-shadow: 0 4px 14px rgba(0,0,0,0.4); opacity: 0; pointer-events: none; transition: all 0.3s ease; z-index: 1000; }
+        .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+        .footer { text-align: center; font-size: 10.5px; color: #64748b; margin-top: 10px; padding-top: 8px; border-top: 1px solid #002B5C; }
         .footer strong { color: #cbd5e1; }
+
+        /* RESPONSIVE SPECIFICO PER SCHERMI RIDOTTI / SPLIT SCREEN */
+        @media (max-width: 900px) {
+            body { padding: 8px; }
+            .grid-view-all { grid-template-columns: 1fr; }
+            .header { padding: 10px 12px; }
+            .brand-titles h1 { font-size: 14px; }
+            .brand-titles p { display: none; }
+            .u-logo { font-size: 15px; padding: 4px 8px; }
+            .card { padding: 10px 12px; }
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- HEADER PRINCIPALE -->
         <div class="header">
             <div class="brand-box">
                 <div class="u-logo">UNIEURO</div>
@@ -974,14 +1038,27 @@ function Open-PannelloOperatore {
                     <p><span class="u-tagline">Batte. Forte. Sempre.</span> &bull; Setup Tecnico Dedicato</p>
                 </div>
             </div>
-            <div id="badgeLive" class="badge-live">&#9889; Setup in corso</div>
+            <div class="header-actions">
+                <button type="button" id="btnSoundToggle" class="btn-audio" onclick="toggleAudio()" title="Suono fine configurazione">🔔 Audio</button>
+                <div id="badgeLive" class="badge-live">&#9889; Setup in corso</div>
+            </div>
         </div>
 
-        <!-- PROGRESS CARD SINCRONIZZATA IN TEMPO REALE -->
+        <!-- MINI DASHBOARD HARDWARE E SISTEMA -->
+        <div class="hw-bar">
+            <div class="hw-item">💻 <strong>PC:</strong> <span class="hw-val">$hwModello</span></div>
+            <div class="hw-item">⚙️ <strong>CPU/RAM:</strong> <span class="hw-val">$hwCpu &bull; $hwRam</span></div>
+            <div class="hw-item">🏷️ <strong>Seriale:</strong> <span class="hw-val" id="hwSerialVal">$hwSeriale</span> <span class="hw-copy-sn" onclick="copiaSeriale()">[copia]</span></div>
+        </div>
+
+        <!-- HERO PROGRESS CARD SINCRONIZZATA IN TEMPO REALE -->
         <div class="progress-card">
             <div class="progress-header">
                 <div class="progress-title">&#9889; Avanzamento Configurazione Automatica (Zero-Touch)</div>
-                <div id="progressPercentText" class="progress-pct">5%</div>
+                <div class="progress-meta">
+                    <span id="elapsedTimerText" class="progress-timer">00:00</span>
+                    <div id="progressPercentText" class="progress-pct">5%</div>
+                </div>
             </div>
             <div class="progress-bar-bg">
                 <div id="progressBarFill" class="progress-bar-fill" style="width: 5%;"></div>
@@ -992,126 +1069,39 @@ function Open-PannelloOperatore {
             </div>
         </div>
 
+        <!-- BANNER COMPLETAMENTO CELEBRATIVO -->
         <div id="completionBanner" class="banner-complete">
             <h3>&#127881; TUTTI I LAVORI IN BACKGROUND COMPLETATI CON SUCCESSO!</h3>
             <p>Il computer &egrave; configurato, ottimizzato e aggiornato secondo gli standard Unieuro.</p>
             <a href="Scheda-Consegna-Cliente.html" target="_blank" class="btn-scheda">&#128196; Apri Scheda di Consegna Cliente</a>
         </div>
 
-        <div class="grid">
-            <div class="card">
-                <h2><span class="bar"></span> &#128273; Generatore Credenziali &amp; Account Cliente</h2>
-                
-                <!-- 1. SELETTORE DOMINIO / PROVIDER PRIMA DI TUTTO -->
-                <div class="cred-group">
-                    <div class="cred-label">1. Scegli Provider / Dominio Email:</div>
-                    <div class="dom-selector">
-                        <button type="button" class="dom-btn active" onclick="setDomain('outlook.it', 'Microsoft', this)">@outlook.it</button>
-                        <button type="button" class="dom-btn" onclick="setDomain('hotmail.com', 'Hotmail', this)">@hotmail.com</button>
-                        <button type="button" class="dom-btn" onclick="setDomain('gmail.com', 'Google', this)">@gmail.com</button>
-                        <button type="button" class="dom-btn" onclick="setDomain('proton.me', 'Proton', this)">@proton.me</button>
-                        <button type="button" class="dom-btn" onclick="setDomain('libero.it', 'Libero', this)">@libero.it</button>
-                        <button type="button" class="dom-btn" onclick="setDomain('icloud.com', 'iCloud', this)">@icloud.com</button>
-                    </div>
-                </div>
-
-                <!-- 2. COGNOME E NOME DEL CLIENTE -->
-                <div class="cred-group">
-                    <div class="cred-label">2. Dati Cliente (Cognome e Nome):</div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                        <input type="text" id="inCognome" class="cred-input" placeholder="Cognome (es. Rossi)" oninput="aggiornaCred()">
-                        <input type="text" id="inNome" class="cred-input" value="$NomeCliente" placeholder="Nome (es. Mario)" oninput="aggiornaCred()">
-                    </div>
-                </div>
-
-                <!-- 3. EMAIL RISULTANTE -->
-                <div class="cred-group">
-                    <div class="cred-label">3. Email Generata (modificabile / incollabile):</div>
-                    <div class="cred-box">
-                        <input type="text" id="inEmail" class="cred-input" value="$Email" oninput="segnaModificato()">
-                        <button class="btn-copy" onclick="copia('inEmail', this)">Copia Email</button>
-                    </div>
-                </div>
-
-                <!-- 4. PASSWORD INIZIALE -->
-                <div class="cred-group">
-                    <div class="cred-label">4. Password Iniziale Consigliata:</div>
-                    <div class="cred-box">
-                        <input type="text" id="inPass" class="cred-input" value="$Password" oninput="segnaModificato()">
-                        <button class="btn-copy" onclick="copia('inPass', this)">Copia Password</button>
-                    </div>
-                </div>
-
-                <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                    <button id="btnSalvaCred" class="btn-scheda" style="background: #EE7203; border: none; font-size: 11.5px; padding: 7px 14px; cursor: pointer;" onclick="salvaCredenziali()">&#128190; Salva per Scheda Consegna</button>
-                    <span style="font-size: 11px; color: #94a3b8;">Standard: <em>CognomeNome@dominio</em> &bull; <em>Nome123!</em></span>
-                </div>
-            </div>
-
-            <div class="card">
-                <h2><span class="bar"></span> &#127760; Portali Servizi &amp; Attivazione (1-Click)</h2>
-                <div class="links-grid">
-                    <!-- SEZIONE 1: ACCOUNT & EMAIL -->
-                    <div class="portal-divider" style="margin-top: 0;"><span>&#128100; Creazione Account &amp; Email</span></div>
-                    <a href="https://account.microsoft.com" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128100;</span> 1. Account Microsoft / Outlook</span>
-                        <span class="arrow">&rarr;</span>
-                    </a>
-                    <a href="https://accounts.google.com/signup" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128231;</span> 2. Account Google / Gmail</span>
-                        <span class="arrow">&rarr;</span>
-                    </a>
-                    <a href="https://account.proton.me/signup" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128274;</span> 3. Account Proton Mail</span>
-                        <span class="arrow">&rarr;</span>
-                    </a>
-                    <a href="https://registrazione.libero.it" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128236;</span> 4. Account Libero Mail</span>
-                        <span class="arrow">&rarr;</span>
-                    </a>
-
-                    <!-- SEZIONE 2: PRODUTTIVITA' & OFFICE (DIVISIONE TRA 4 E 5) -->
-                    <div class="portal-divider"><span>&#128230; Produttivit&agrave; &amp; Licenze Office</span></div>
-                    <a href="https://microsoft365.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128230;</span> 5. Riscatto Microsoft 365 / Office</span>
-                        <span class="arrow">&rarr;</span>
-                    </a>
-
-                    <!-- SEZIONE 3: ANTIVIRUS DA CARD (DIVISIONE TRA 5 E 6) -->
-                    <div class="portal-divider"><span>&#128737; Sicurezza &amp; Antivirus da Card</span></div>
-                    <a href="https://www.mcafee.com/activate" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128737;</span> 6. Attivazione Card McAfee</span>
-                        <span class="arrow">&rarr;</span>
-                    </a>
-                    <a href="https://www.norton.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn">
-                        <span><span class="icon">&#128737;</span> 7. Attivazione Card Norton</span>
-                        <span class="arrow">&rarr;</span>
-                    </a>
-
-                    <!-- SEZIONE 4: SERVIZIO UNIEURO (DIVISIONE TRA 7 E 8) -->
-                    <div class="portal-divider"><span>&#128274; Servizio Esclusivo Unieuro</span></div>
-                    <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" rel="noopener noreferrer" class="portal-btn highlight">
-                        <span><span class="icon">&#128274;</span> 8. Unieuro Cyber Protection</span>
-                        <span class="arrow">&rarr;</span>
-                    </a>
-                </div>
-            </div>
+        <!-- SELETTORE VISTE / TABS (PERFETTO PER SPLIT SCREEN 50%) -->
+        <div class="tab-bar">
+            <button type="button" class="tab-btn active" onclick="switchView('tab-live', this)">
+                <span>&#9889; Lavori Live</span> <span id="taskCountBadge" class="tab-badge-num">10</span>
+            </button>
+            <button type="button" class="tab-btn" onclick="switchView('tab-cred', this)">
+                <span>&#128273; Account &amp; Credenziali</span>
+            </button>
+            <button type="button" class="tab-btn" onclick="switchView('tab-portali', this)">
+                <span>&#127760; Portali 1-Click</span>
+            </button>
+            <button type="button" class="tab-btn" onclick="switchView('tab-checklist', this)">
+                <span>&#9745; Checklist &amp; Tool</span>
+            </button>
+            <button type="button" class="tab-btn" onclick="switchView('tab-all', this)">
+                <span>&#9638; Vista Completa</span>
+            </button>
         </div>
 
-        <div class="grid">
+        <!-- VISTA 1: LAVORI LIVE -->
+        <div id="view-tab-live" class="section-view active-view">
             <div class="card">
-                <h2><span class="bar"></span> &#9745; Checklist Operatore</h2>
-                <ul class="checklist">
-                    <li><input type="checkbox"> Account cliente configurato / verificato (Microsoft/Google/Proton/Libero)</li>
-                    <li><input type="checkbox"> Codice PIN Office riscattato (se acquistato con il PC)</li>
-                    <li><input type="checkbox"> Antivirus attivato con card cliente (McAfee / Norton)</li>
-                    <li><input type="checkbox"> Servizio Unieuro Cyber Protection registrato (se acquistato)</li>
-                </ul>
-            </div>
-
-            <!-- LAVORI IN BACKGROUND SINCRONIZZATI IN TEMPO REALE -->
-            <div class="card">
-                <h2><span class="bar"></span> &#9881; Lavori Automatici in Background</h2>
+                <h2>
+                    <span class="title-left"><span class="bar"></span> &#9881; Lavori Automatici in Background</span>
+                    <span style="font-size: 10px; color: #94a3b8; font-weight: normal;">Sincronizzato live con PowerShell</span>
+                </h2>
                 <ul class="bg-tasks" id="tasksContainer">
                     <!-- FASE 1: PULIZIA & SISTEMA -->
                     <div class="portal-divider" style="margin-top: 0;"><span>&#128736; 1. Pulizia &amp; Sistema</span></div>
@@ -1208,44 +1198,354 @@ function Open-PannelloOperatore {
             </div>
         </div>
 
+        <!-- VISTA 2: CREDENZIALI & ACCOUNT -->
+        <div id="view-tab-cred" class="section-view">
+            <div class="card">
+                <h2>
+                    <span class="title-left"><span class="bar"></span> &#128273; Generatore Credenziali &amp; Account Cliente</span>
+                    <span style="font-size: 10px; color: #94a3b8;">Standard Unieuro</span>
+                </h2>
+                
+                <!-- 1. SELETTORE DOMINIO / PROVIDER -->
+                <div class="cred-group">
+                    <div class="cred-label">1. Scegli Provider / Dominio Email:</div>
+                    <div class="dom-selector">
+                        <button type="button" class="dom-btn active" onclick="setDomain('outlook.it', 'Microsoft', this)">@outlook.it</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('hotmail.com', 'Hotmail', this)">@hotmail.com</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('gmail.com', 'Google', this)">@gmail.com</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('proton.me', 'Proton', this)">@proton.me</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('libero.it', 'Libero', this)">@libero.it</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('icloud.com', 'iCloud', this)">@icloud.com</button>
+                    </div>
+                </div>
+
+                <!-- 2. COGNOME E NOME -->
+                <div class="cred-group">
+                    <div class="cred-label">2. Dati Cliente:</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                        <input type="text" id="inCognome" class="cred-input" placeholder="Cognome (es. Rossi)" oninput="aggiornaCred()">
+                        <input type="text" id="inNome" class="cred-input" value="$NomeCliente" placeholder="Nome (es. Mario)" oninput="aggiornaCred()">
+                    </div>
+                </div>
+
+                <!-- 3. EMAIL RISULTANTE -->
+                <div class="cred-group">
+                    <div class="cred-label">3. Email Generata:</div>
+                    <div class="cred-box">
+                        <input type="text" id="inEmail" class="cred-input" value="$Email" oninput="segnaModificato()">
+                        <button type="button" class="btn-copy" onclick="copia('inEmail', 'Email copiata!')">&#128203; Copia</button>
+                    </div>
+                </div>
+
+                <!-- 4. PASSWORD INIZIALE -->
+                <div class="cred-group">
+                    <div class="cred-label">
+                        <span>4. Password Iniziale Consigliata:</span>
+                        <span>
+                            <button type="button" class="btn-mini-action" onclick="togglePassVis()" title="Mostra/Nascondi">&#128065;</button>
+                            <button type="button" class="btn-mini-action" onclick="generaPassCasuale()" title="Genera password sicura">&#127922;</button>
+                        </span>
+                    </div>
+                    <div class="cred-box">
+                        <input type="password" id="inPass" class="cred-input" value="$Password" oninput="segnaModificato()">
+                        <button type="button" class="btn-copy" onclick="copia('inPass', 'Password copiata!')">&#128203; Copia</button>
+                    </div>
+                </div>
+
+                <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                    <button type="button" id="btnSalvaCred" class="btn-scheda" style="background: #EE7203; border: none; font-size: 11px; padding: 6px 12px; cursor: pointer;" onclick="salvaCredenziali()">&#128190; Salva per Scheda Consegna</button>
+                    <button type="button" class="btn-quick" onclick="copiaRiepilogoCred()">&#128203; Copia Tutto per Ticket</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- VISTA 3: PORTALI 1-CLICK -->
+        <div id="view-tab-portali" class="section-view">
+            <div class="card">
+                <h2>
+                    <span class="title-left"><span class="bar"></span> &#127760; Portali Servizi &amp; Attivazione (1-Click)</span>
+                    <span style="font-size: 10px; color: #94a3b8;">Apertura istantanea</span>
+                </h2>
+                <input type="text" class="portal-filter" id="portalSearch" placeholder="&#128269; Cerca portale o servizio..." oninput="filtraPortali()">
+                
+                <div class="links-grid" id="portalLinksGrid">
+                    <!-- SEZIONE 1: ACCOUNT & EMAIL -->
+                    <div class="portal-divider" style="margin-top: 0;"><span>&#128100; Creazione Account &amp; Email</span></div>
+                    <a href="https://account.microsoft.com" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="microsoft outlook account">
+                        <span><span class="icon">&#128100;</span> 1. Account Microsoft / Outlook</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                    <a href="https://accounts.google.com/signup" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="google gmail account">
+                        <span><span class="icon">&#128231;</span> 2. Account Google / Gmail</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                    <a href="https://account.proton.me/signup" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="proton mail account">
+                        <span><span class="icon">&#128274;</span> 3. Account Proton Mail</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                    <a href="https://registrazione.libero.it" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="libero mail registrazione">
+                        <span><span class="icon">&#128236;</span> 4. Account Libero Mail</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+
+                    <!-- SEZIONE 2: PRODUTTIVITA' & OFFICE -->
+                    <div class="portal-divider"><span>&#128230; Produttivit&agrave; &amp; Licenze Office</span></div>
+                    <a href="https://microsoft365.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="office microsoft 365 setup pin">
+                        <span><span class="icon">&#128230;</span> 5. Riscatto Microsoft 365 / Office</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+
+                    <!-- SEZIONE 3: ANTIVIRUS DA CARD -->
+                    <div class="portal-divider"><span>&#128737; Sicurezza &amp; Antivirus da Card</span></div>
+                    <a href="https://www.mcafee.com/activate" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="mcafee activate antivirus card">
+                        <span><span class="icon">&#128737;</span> 6. Attivazione Card McAfee</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                    <a href="https://www.norton.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="norton setup antivirus card">
+                        <span><span class="icon">&#128737;</span> 7. Attivazione Card Norton</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+
+                    <!-- SEZIONE 4: SERVIZIO UNIEURO -->
+                    <div class="portal-divider"><span>&#128274; Servizio Esclusivo Unieuro</span></div>
+                    <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" rel="noopener noreferrer" class="portal-btn highlight" data-name="unieuro cyber protection covercare">
+                        <span><span class="icon">&#128274;</span> 8. Unieuro Cyber Protection</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- VISTA 4: CHECKLIST & STRUMENTI -->
+        <div id="view-tab-checklist" class="section-view">
+            <div class="card">
+                <h2>
+                    <span class="title-left"><span class="bar"></span> &#9745; Checklist Operatore &amp; Strumenti Rapidi</span>
+                    <span style="font-size: 10px; color: #94a3b8;">Salvataggio automatico</span>
+                </h2>
+                <ul class="checklist">
+                    <li><input type="checkbox" id="chk1" onchange="salvaChecklist()"> <label for="chk1">Account cliente configurato / verificato (Microsoft/Google/Proton/Libero)</label></li>
+                    <li><input type="checkbox" id="chk2" onchange="salvaChecklist()"> <label for="chk2">Codice PIN Office riscattato (se acquistato con il PC)</label></li>
+                    <li><input type="checkbox" id="chk3" onchange="salvaChecklist()"> <label for="chk3">Antivirus attivato con card cliente (McAfee / Norton)</label></li>
+                    <li><input type="checkbox" id="chk4" onchange="salvaChecklist()"> <label for="chk4">Servizio Unieuro Cyber Protection registrato (se acquistato)</label></li>
+                </ul>
+
+                <div class="checklist-actions">
+                    <a href="Scheda-Consegna-Cliente.html" target="_blank" class="btn-quick">&#128196; Scheda Consegna HTML</a>
+                    <button type="button" class="btn-quick" onclick="copiaRiepilogoTecnico()">&#128203; Copia Dati PC Completi</button>
+                    <button type="button" class="btn-quick" onclick="pollStatus()">&#128260; Sincronizza Ora</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- VISTA 5: VISTA COMPLETA (TUTTO A SCHERMO IN GRIGLIA) -->
+        <div id="view-tab-all" class="section-view">
+            <div id="gridAllContainer" class="grid-view-all">
+                <!-- Il contenuto viene clonato dinamicamente o visualizzato in griglia per schermi ampi -->
+            </div>
+        </div>
+
         <div class="footer">
             Piattaforma Assistenza Tecnica <strong>PC Facile</strong> &bull; Servizio <strong>Unieuro</strong> &bull; Batte. Forte. Sempre.
         </div>
     </div>
 
+    <!-- TOAST POPUP FLUTTUANTE -->
+    <div id="toastEl" class="toast">&#10003; Azione completata!</div>
+
     <script>
         var currentDomain = 'outlook.it';
         var currentProviderName = 'Microsoft';
         var manualEdit = false;
+        var audioEnabled = true;
+        var audioPlayed = false;
+        var startTime = new Date();
+
+        // TIMER TRASCORSO
+        setInterval(function() {
+            var now = new Date();
+            var diffSec = Math.floor((now - startTime) / 1000);
+            var m = Math.floor(diffSec / 60);
+            var s = diffSec % 60;
+            var el = document.getElementById('elapsedTimerText');
+            if (el) el.innerText = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+        }, 1000);
+
+        // SUONO DI COMPLETAMENTO (Web Audio API synthesis senza file esterni)
+        function playChime() {
+            if (!audioEnabled) return;
+            try {
+                var AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                var ctx = new AudioContext();
+                var notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                notes.forEach(function(freq, idx) {
+                    var osc = ctx.createOscillator();
+                    var gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(0, ctx.currentTime + idx * 0.12);
+                    gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + idx * 0.12 + 0.04);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.12 + 0.35);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(ctx.currentTime + idx * 0.12);
+                    osc.stop(ctx.currentTime + idx * 0.12 + 0.4);
+                });
+            } catch(e) {}
+        }
+
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            var btn = document.getElementById('btnSoundToggle');
+            if (btn) {
+                btn.innerHTML = audioEnabled ? '🔔 Audio' : '🔕 Muto';
+                btn.style.color = audioEnabled ? '#93c5fd' : '#64748b';
+            }
+            showToast(audioEnabled ? 'Audio notifiche attivo' : 'Audio notifiche disattivato');
+        }
+
+        function showToast(msg) {
+            var t = document.getElementById('toastEl');
+            if (!t) return;
+            t.innerText = msg;
+            t.classList.add('show');
+            setTimeout(function() { t.classList.remove('show'); }, 2200);
+        }
+
+        // GESTIONE VISTE / TABS
+        function switchView(tabId, btn) {
+            var btns = document.querySelectorAll('.tab-btn');
+            for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
+            if (btn) btn.classList.add('active');
+
+            var views = document.querySelectorAll('.section-view');
+            for (var j = 0; j < views.length; j++) views[j].classList.remove('active-view');
+
+            if (tabId === 'tab-all') {
+                var allView = document.getElementById('view-tab-all');
+                var grid = document.getElementById('gridAllContainer');
+                if (allView && grid) {
+                    grid.innerHTML = '';
+                    var liveCard = document.querySelector('#view-tab-live .card');
+                    var credCard = document.querySelector('#view-tab-cred .card');
+                    var portaliCard = document.querySelector('#view-tab-portali .card');
+                    var chkCard = document.querySelector('#view-tab-checklist .card');
+                    if (liveCard) grid.appendChild(liveCard.cloneNode(true));
+                    if (credCard) grid.appendChild(credCard.cloneNode(true));
+                    if (portaliCard) grid.appendChild(portaliCard.cloneNode(true));
+                    if (chkCard) grid.appendChild(chkCard.cloneNode(true));
+                    allView.classList.add('active-view');
+                }
+            } else {
+                var target = document.getElementById('view-' + tabId);
+                if (target) target.classList.add('active-view');
+            }
+        }
 
         function setDomain(dom, provName, btn) {
             currentDomain = dom;
             currentProviderName = provName || dom;
             var btns = document.querySelectorAll('.dom-btn');
-            for (var i = 0; i < btns.length; i++) {
-                btns[i].classList.remove('active');
-            }
+            for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
             if (btn) btn.classList.add('active');
             aggiornaCred();
         }
 
-        function segnaModificato() {
-            manualEdit = true;
+        function segnaModificato() { manualEdit = true; }
+
+        function togglePassVis() {
+            var inp = document.getElementById('inPass');
+            if (!inp) return;
+            inp.type = (inp.type === 'password' ? 'text' : 'password');
         }
 
-        function copia(id, btn) {
+        function generaPassCasuale() {
+            var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#%*';
+            var pass = '';
+            for (var i = 0; i < 10; i++) {
+                pass += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            pass += '!1';
+            var inp = document.getElementById('inPass');
+            if (inp) {
+                inp.value = pass;
+                inp.type = 'text';
+                manualEdit = true;
+                showToast('Generata password casuale sicura');
+            }
+        }
+
+        function copia(id, msg) {
             var el = document.getElementById(id);
             if (!el) return;
             navigator.clipboard.writeText(el.value).then(function() {
-                var oldText = btn.innerText;
-                btn.innerText = "Copiato!";
-                btn.classList.add("copied");
-                setTimeout(function() {
-                    btn.innerText = oldText;
-                    btn.classList.remove("copied");
-                }, 2000);
+                showToast(msg || 'Copiato negli appunti!');
             });
         }
+
+        function copiaSeriale() {
+            var sn = document.getElementById('hwSerialVal');
+            if (sn && sn.innerText) {
+                navigator.clipboard.writeText(sn.innerText.trim()).then(function() {
+                    showToast('Seriale copiato: ' + sn.innerText.trim());
+                });
+            }
+        }
+
+        function copiaRiepilogoCred() {
+            var email = document.getElementById('inEmail') ? document.getElementById('inEmail').value : '';
+            var pass = document.getElementById('inPass') ? document.getElementById('inPass').value : '';
+            var text = 'Account: ' + email + ' | Password: ' + pass + ' (Provider: ' + currentProviderName + ')';
+            navigator.clipboard.writeText(text).then(function() {
+                showToast('Dati account copiati per ticket!');
+            });
+        }
+
+        function copiaRiepilogoTecnico() {
+            var sn = document.getElementById('hwSerialVal') ? document.getElementById('hwSerialVal').innerText : '';
+            var email = document.getElementById('inEmail') ? document.getElementById('inEmail').value : '';
+            var pass = document.getElementById('inPass') ? document.getElementById('inPass').value : '';
+            var text = '--- UNIEURO PC FACILE ---\nModello: $hwModello\nSeriale: ' + sn + '\nCPU/RAM: $hwCpu - $hwRam\nAccount: ' + email + '\nPassword: ' + pass;
+            navigator.clipboard.writeText(text).then(function() {
+                showToast('Riepilogo tecnico completo copiato!');
+            });
+        }
+
+        function filtraPortali() {
+            var q = (document.getElementById('portalSearch') ? document.getElementById('portalSearch').value.toLowerCase().trim() : '');
+            var links = document.querySelectorAll('#portalLinksGrid .portal-btn');
+            for (var i = 0; i < links.length; i++) {
+                var dname = (links[i].getAttribute('data-name') || '') + ' ' + links[i].innerText.toLowerCase();
+                links[i].style.display = (q === '' || dname.indexOf(q) !== -1) ? 'flex' : 'none';
+            }
+        }
+
+        function salvaChecklist() {
+            try {
+                var st = {
+                    c1: document.getElementById('chk1') ? document.getElementById('chk1').checked : false,
+                    c2: document.getElementById('chk2') ? document.getElementById('chk2').checked : false,
+                    c3: document.getElementById('chk3') ? document.getElementById('chk3').checked : false,
+                    c4: document.getElementById('chk4') ? document.getElementById('chk4').checked : false
+                };
+                localStorage.setItem('pcfacile_checklist', JSON.stringify(st));
+            } catch(e) {}
+        }
+
+        function caricaChecklist() {
+            try {
+                var raw = localStorage.getItem('pcfacile_checklist');
+                if (raw) {
+                    var st = JSON.parse(raw);
+                    if (document.getElementById('chk1') && st.c1) document.getElementById('chk1').checked = true;
+                    if (document.getElementById('chk2') && st.c2) document.getElementById('chk2').checked = true;
+                    if (document.getElementById('chk3') && st.c3) document.getElementById('chk3').checked = true;
+                    if (document.getElementById('chk4') && st.c4) document.getElementById('chk4').checked = true;
+                }
+            } catch(e) {}
+        }
+        caricaChecklist();
 
         function aggiornaCred() {
             var cognome = (document.getElementById('inCognome') ? document.getElementById('inCognome').value.trim() : '');
@@ -1315,10 +1615,11 @@ function Open-PannelloOperatore {
             a.click();
             document.body.removeChild(a);
             
+            showToast('✓ Credenziali salvate per la Scheda!');
             var btn = document.getElementById('btnSalvaCred');
             if (btn) {
                 var old = btn.innerHTML;
-                btn.innerHTML = '&#10003; Credenziali Salvate per la Scheda!';
+                btn.innerHTML = '&#10003; Salvato!';
                 btn.style.background = '#16a34a';
                 setTimeout(function() {
                     btn.innerHTML = old;
@@ -1345,7 +1646,7 @@ function Open-PannelloOperatore {
             var detVal = data.Dettaglio || data.dettaglio;
             if (detEl && detVal) detEl.innerText = detVal;
             
-            if (data.Completato || data.completato) {
+            if (data.Completato || data.completato || pct >= 100) {
                 var badgeLive = document.getElementById('badgeLive');
                 if (badgeLive) {
                     badgeLive.className = 'badge-done';
@@ -1353,17 +1654,24 @@ function Open-PannelloOperatore {
                 }
                 var compBanner = document.getElementById('completionBanner');
                 if (compBanner) compBanner.style.display = 'block';
+
+                if (!audioPlayed) {
+                    audioPlayed = true;
+                    playChime();
+                }
             }
 
             var tasks = data.Tasks || data.tasks;
             if (tasks) {
+                var doneCount = 0;
                 for (var key in tasks) {
                     var task = tasks[key];
                     var row = document.getElementById('task-' + key);
+                    var stato = (task.Stato || task.stato || 'pending').toLowerCase();
+                    var dettaglio = task.Dettaglio || task.dettaglio || '';
+                    if (stato === 'done') doneCount++;
+                    
                     if (row) {
-                        var stato = (task.Stato || task.stato || 'pending').toLowerCase();
-                        var dettaglio = task.Dettaglio || task.dettaglio || '';
-                        
                         var iconEl = row.querySelector('.task-icon');
                         var statusBadge = row.querySelector('.task-badge');
                         var detailEl = row.querySelector('.task-detail');
@@ -1396,6 +1704,8 @@ function Open-PannelloOperatore {
                         }
                     }
                 }
+                var badgeNum = document.getElementById('taskCountBadge');
+                if (badgeNum) badgeNum.innerText = doneCount + '/10';
             }
         }
 
@@ -1424,6 +1734,7 @@ function Open-PannelloOperatore {
         Write-Info "Creazione pannello operatore non riuscita: $_"
     }
 }
+
 
 function Get-CredenzialiSalvatePannello {
     $tempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { [System.IO.Path]::GetTempPath() }
