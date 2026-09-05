@@ -1942,6 +1942,13 @@ function Stop-AppPopups {
         elseif ($Nome -like "*Discord*") { $targets += "Discord" }
         elseif ($Nome -like "*Steam*") { $targets += "Steam" }
         elseif ($Nome -like "*AIMP*") { $targets += "AIMP" }
+        elseif ($Nome -like "*Adobe*" -or $Nome -like "*Acrobat*") { $targets += @("AdobeCollabSync", "AcroCEF", "AcrobatNotificationClient") }
+        elseif ($Nome -like "*Teams*") { $targets += @("ms-teams", "Teams") }
+        elseif ($Nome -like "*AnyDesk*") { $targets += "AnyDesk" }
+        elseif ($Nome -like "*Skype*") { $targets += "SkypeApp" }
+
+        # Helper e popup molesti di background
+        $targets += @("AdobeCollabSync", "AcroCEF")
 
         if ($targets.Count -gt 0) {
             Start-Sleep -Seconds 1
@@ -1952,6 +1959,24 @@ function Stop-AppPopups {
                 }
             }
         }
+    } catch {}
+}
+
+function Enable-PreventSleep {
+    if ($Test) { return }
+    try {
+        Add-Type -TypeDefinition @"
+        using System;
+        using System.Runtime.InteropServices;
+        public class WinPower {
+            [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+            public static extern uint SetThreadExecutionState(uint esFlags);
+            public const uint ES_SYSTEM_REQUIRED = 0x00000001;
+            public const uint ES_DISPLAY_REQUIRED = 0x00000002;
+            public const uint ES_CONTINUOUS = 0x80000000;
+        }
+"@ -ErrorAction SilentlyContinue
+        [WinPower]::SetThreadExecutionState([WinPower]::ES_CONTINUOUS -bor [WinPower]::ES_SYSTEM_REQUIRED -bor [WinPower]::ES_DISPLAY_REQUIRED) | Out-Null
     } catch {}
 }
 
@@ -4315,6 +4340,7 @@ if ($RunReale) {
 # =============================================================================
 if ($RunReale) {
     try {
+        Enable-PreventSleep
         $edgePol = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
         if (-not (Test-Path $edgePol)) { New-Item -Path $edgePol -Force | Out-Null }
         Set-ItemProperty -Path $edgePol -Name 'HideFirstRunExperience'        -Value 1 -Type DWord -ErrorAction SilentlyContinue
@@ -4329,7 +4355,18 @@ if ($RunReale) {
         Set-ItemProperty -Path $edgePol -Name 'HubsSidebarEnabled'            -Value 0 -Type DWord -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $edgePol -Name 'ShowMicrosoftRewards'          -Value 0 -Type DWord -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $edgePol -Name 'EdgeShoppingAssistantEnabled'  -Value 0 -Type DWord -ErrorAction SilentlyContinue
-        Write-OK "Schermate iniziali di Edge disattivate."
+
+        # Disattivazione popup di benvenuto / Scoobe Windows ("Completiamo la configurazione del tuo dispositivo")
+        $userProfileKey = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\UserProfileEngagement'
+        if (-not (Test-Path $userProfileKey)) { New-Item -Path $userProfileKey -Force | Out-Null }
+        Set-ItemProperty -Path $userProfileKey -Name 'ScoobeSystemSettingEnabled' -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+        $cdmKey = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
+        if (-not (Test-Path $cdmKey)) { New-Item -Path $cdmKey -Force | Out-Null }
+        Set-ItemProperty -Path $cdmKey -Name 'SubscribedContent-310093Enabled' -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmKey -Name 'SubscribedContent-338389Enabled' -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+        Write-OK "Schermate iniziali di Edge e notifiche di benvenuto disattivate."
     } catch {}
 }
 

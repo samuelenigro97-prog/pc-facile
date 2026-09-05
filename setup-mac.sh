@@ -10,6 +10,17 @@
 
 SCRIPT_VERSION="2.0 (2026-09-05)"
 
+# ---- Variabili ambiente non interattive & anti-sleep ------------------------
+export NONINTERACTIVE=1
+export HOMEBREW_NO_AUTO_UPDATE=1
+export HOMEBREW_NO_ENV_HINTS=1
+export HOMEBREW_NO_INSTALL_CLEANUP=1
+
+# Prevenzione stop/sleep del Mac durante il setup
+if command -v caffeinate >/dev/null 2>&1 && [[ "$1" != "--test" && "$1" != "-t" ]]; then
+  caffeinate -dimsu -w $$ >/dev/null 2>&1 &
+fi
+
 # ---- Modalita': -Test / -Diagnostica / -Veloce / -IA -------------------------
 MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST | AGENTE_IA
 case "$1" in
@@ -678,11 +689,20 @@ if [[ -n "$PROFILO" ]] && $RUN_REALE && command -v brew >/dev/null 2>&1; then
         if [[ " $profili " == *" $PROFILO "* ]]; then
             info "Installazione $nome in corso..."
             if brew install --cask "$cask" >/dev/null 2>&1; then
+                # Rimuove flag quarantena Gatekeeper per evitare popup di conferma al primo avvio
+                xattr -d -r com.apple.quarantine "/Applications/$nome.app" 2>/dev/null || true
+                # Chiude eventuali splash screen avviati in automatico post-install
+                pkill -f -i "$nome" 2>/dev/null || true
                 ok "$nome installato."
                 INSTALLATE+=("$nome")
             fi
         fi
     done
+    # Pulizia popup residui noti
+    pkill -f -i "Spotify" 2>/dev/null || true
+    pkill -f -i "Discord" 2>/dev/null || true
+    pkill -f -i "Zoom" 2>/dev/null || true
+    pkill -f -i "Steam" 2>/dev/null || true
     add_report "App profilo $PROFILO (${#INSTALLATE} installate)" "OK"
 fi
 
