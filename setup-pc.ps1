@@ -1313,12 +1313,15 @@ function Open-PannelloOperatore {
                     </div>
                 </div>
 
-                <!-- 2. COGNOME E NOME -->
+                <!-- 2. COGNOME, NOME E TELEFONO -->
                 <div class="cred-group">
                     <div class="cred-label">2. Dati Cliente:</div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px;">
                         <input type="text" id="inCognome" class="cred-input" placeholder="Cognome (es. Rossi)" oninput="aggiornaCred()">
                         <input type="text" id="inNome" class="cred-input" value="$NomeCliente" placeholder="Nome (es. Mario)" oninput="aggiornaCred()">
+                    </div>
+                    <div style="display: grid; grid-template-columns: 1fr; gap: 6px;">
+                        <input type="tel" id="inTelefono" class="cred-input" placeholder="Cellulare / Telefono (es. 3331234567)" oninput="segnaModificato()">
                     </div>
                 </div>
 
@@ -1704,13 +1707,17 @@ function Open-PannelloOperatore {
             var pass = document.getElementById('inPass').value.trim();
             var cognome = (document.getElementById('inCognome') ? document.getElementById('inCognome').value.trim() : '');
             var nome = (document.getElementById('inNome') ? document.getElementById('inNome').value.trim() : '');
+            var telefono = (document.getElementById('inTelefono') ? document.getElementById('inTelefono').value.trim() : '');
             var cliente = (cognome + ' ' + nome).trim() || nome || cognome || 'Utente';
             
             var payload = {
                 Email: email,
                 Password: pass,
                 Provider: currentProviderName,
-                Cliente: cliente
+                Cliente: cliente,
+                Nome: nome,
+                Cognome: cognome,
+                Telefono: telefono
             };
             
             var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -1881,6 +1888,15 @@ function Get-CredenzialiSalvatePannello {
                     if (-not $Global:nomeCliente -or $Global:nomeCliente -eq 'telef' -or $Global:nomeCliente -eq 'Utente' -or $Global:nomeCliente -eq 'Cliente' -or ($oemNames -contains $Global:nomeCliente.ToUpper())) {
                         $Global:nomeCliente = $content.Cliente
                     }
+                }
+                if ($content.Telefono) {
+                    $Global:telefonoCliente = $content.Telefono
+                }
+                if ($content.Nome) {
+                    $Global:nomeProprioCliente = $content.Nome
+                }
+                if ($content.Cognome) {
+                    $Global:cognomeCliente = $content.Cognome
                 }
                 return $true
             } catch {}
@@ -2942,17 +2958,54 @@ function Invoke-BrowserAutoSignup {
     Write-Host "============================================================" -ForegroundColor DarkYellow
     Write-Host ""
 
-    $resp = Attendi-Risposta "Premi INVIO appena sei nella casella di posta per proseguire con il setup (o 'S' per saltare)"
+    $resp = Attendi-Risposta "Premi INVIO appena sei nella casella di posta per passare alla protezione (o 'S' per saltare)"
     if ($resp -match "^[Ss]") {
         Write-Info "Creazione account Proton Mail saltata dall'operatore."
         Add-Report "Account Proton Mail" "SALTATO"
     } else {
         Write-OK "Account Proton Mail configurato con successo per: $emailProton"
         Add-Report "Account Proton Mail ($emailProton)" "OK"
+        $Global:credMsAccount = $emailProton
+        $Global:credMsPassword = $passGenerata
+    }
+
+    # 2. CATENA REGISTRAZIONE SERVIZIO UNIEURO CYBER PROTECTION (COVERCARE)
+    $tel = if ($Global:telefonoCliente) { $Global:telefonoCliente } else { "" }
+    if (-not $tel) {
+        $tIn = (Attendi-Risposta "Numero di Telefono/Cellulare Cliente per Cyber Protection (es. 3331234567, INVIO per saltare)").Trim()
+        if ($tIn) { $tel = $tIn; $Global:telefonoCliente = $tIn }
+    }
+
+    Write-Host ""
+    Write-Titolo "REGISTRAZIONE UNIEURO CYBER PROTECTION (COVERCARE)"
+    Write-Host "Dati pronti per la registrazione del servizio con l'email appena creata:" -ForegroundColor White
+    Write-Host "  - Nome / Cognome : $NomeCliente" -ForegroundColor Cyan
+    Write-Host "  - Email Cliente  : $emailProton" -ForegroundColor Cyan
+    Write-Host "  - Cellulare      : $(if ($tel) { $tel } else { 'Non specificato' })" -ForegroundColor Cyan
+    Write-Host "  - Password       : $passGenerata" -ForegroundColor Yellow
+    Write-Host ""
+
+    Write-Info "Apertura portale Unieuro Cyber Protection..."
+    Start-Process "https://unieuro-cyber-protection.covercare.it"
+
+    Beep-Attesa
+    Write-Host "============================================================" -ForegroundColor DarkYellow
+    Write-Host " [REGISTRAZIONE CYBER PROTECTION - DATI PRONTI]" -ForegroundColor Green
+    Write-Host " Inserisci i dati a lato e il codice PIN/Card grattato." -ForegroundColor White
+    Write-Host "============================================================" -ForegroundColor DarkYellow
+    Write-Host ""
+
+    $respCyber = Attendi-Risposta "Premi INVIO appena registrato Cyber Protection (o 'S' per saltare)"
+    if ($respCyber -match "^[Ss]") {
+        Write-Info "Cyber Protection saltato dall'operatore."
+        Add-Report "Unieuro Cyber Protection" "SALTATO"
+    } else {
+        Write-OK "Unieuro Cyber Protection registrato con successo per $NomeCliente!"
+        Add-Report "Unieuro Cyber Protection ($emailProton)" "OK"
     }
 
     Beep-Completato
-    Write-OK "Account pronto: il setup parallelo delle applicazioni e ottimizzazioni prosegue ora a pieno ritmo!"
+    Write-OK "Tutti gli account e le protezioni sono pronti: il setup prosegue in parallelo a piena velocita'!"
 }
 
 # =============================================================================

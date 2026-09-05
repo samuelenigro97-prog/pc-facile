@@ -442,7 +442,7 @@ open_pannello_mac() {
                     <button type="button" class="dom-btn" style="background:#334155; color:#cbd5e1; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;" onclick="setDomMac('outlook.it', 'Microsoft', this)">@outlook.it</button>
                 </div>
 
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:8px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;">
                     <div>
                         <label style="font-size:11px; color:#93c5fd;">Cognome:</label>
                         <input type="text" class="cred-input" id="inCognome" placeholder="es. Rossi" oninput="aggiornaCredMac()">
@@ -451,6 +451,11 @@ open_pannello_mac() {
                         <label style="font-size:11px; color:#93c5fd;">Nome:</label>
                         <input type="text" class="cred-input" id="inNome" placeholder="es. Mario" oninput="aggiornaCredMac()">
                     </div>
+                </div>
+
+                <div style="margin-bottom:8px;">
+                    <label style="font-size:11px; color:#93c5fd;">Cellulare / Telefono:</label>
+                    <input type="tel" class="cred-input" id="inTelefono" placeholder="es. 3331234567">
                 </div>
 
                 <label style="font-size:11px; color:#93c5fd;">Email Generata:</label>
@@ -521,7 +526,8 @@ open_pannello_mac() {
             var pass = document.getElementById('inPass').value.trim();
             var c = (document.getElementById('inCognome') ? document.getElementById('inCognome').value.trim() : '');
             var n = (document.getElementById('inNome') ? document.getElementById('inNome').value.trim() : '');
-            var payload = { Email: email, Password: pass, Provider: currentProv, Cliente: (c + ' ' + n).trim() || 'Utente' };
+            var t = (document.getElementById('inTelefono') ? document.getElementById('inTelefono').value.trim() : '');
+            var payload = { Email: email, Password: pass, Provider: currentProv, Cliente: (c + ' ' + n).trim() || 'Utente', Nome: n, Cognome: c, Telefono: t };
             var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
             var a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
@@ -612,7 +618,7 @@ invoke_auto_signup_mac() {
     print -r -- "${C_INFO}  ============================================================${C_RST}"
     print -r -- ""
 
-    beep_attesa; print -n -- "   Premi INVIO appena sei nella casella di posta (o 'S' per saltare): "; read -r r_ok
+    beep_attesa; print -n -- "   Premi INVIO appena sei nella casella di posta per passare alla protezione (o 'S' per saltare): "; read -r r_ok
     if [[ "$r_ok" == [Ss]* ]]; then
         info "Creazione account Proton Mail saltata dall'operatore."
         add_report "Account Proton Mail" "SALTATO"
@@ -621,8 +627,28 @@ invoke_auto_signup_mac() {
         add_report "Account Proton Mail ($email_proton)" "OK"
     fi
 
+    # 2. Registrazione Unieuro Cyber Protection su Mac
+    titolo "REGISTRAZIONE UNIEURO CYBER PROTECTION (MAC)"
+    print -r -- "   ${C_TXT}Dati cliente pronti per l'attivazione Cyber Protection:${C_RST}"
+    print -r -- "     ${C_CYAN}- Nome / Cognome :${C_RST} $nome_c"
+    print -r -- "     ${C_CYAN}- Email Creata   :${C_RST} $email_proton"
+    print -r -- "     ${C_INFO}- Password       :${C_RST} $pass_gen"
+    print -r -- ""
+    info "Apertura portale Unieuro Cyber Protection in Safari..."
+    open "https://unieuro-cyber-protection.covercare.it" 2>/dev/null
+
     printf '\a'
-    ok "Account pronto: il setup parallelo delle applicazioni e del Mac prosegue ora a pieno ritmo!"
+    beep_attesa; print -n -- "   Premi INVIO appena registrato Cyber Protection (o 'S' per saltare): "; read -r r_cyb
+    if [[ "$r_cyb" == [Ss]* ]]; then
+        info "Cyber Protection saltato dall'operatore."
+        add_report "Unieuro Cyber Protection" "SALTATO"
+    else
+        ok "Unieuro Cyber Protection registrato con successo per $nome_c ($email_proton)!"
+        add_report "Unieuro Cyber Protection ($email_proton)" "OK"
+    fi
+
+    printf '\a'
+    ok "Account e protezioni pronti: il setup parallelo delle applicazioni e del Mac prosegue a pieno ritmo!"
 }
 
 # Alias compatibilita'
