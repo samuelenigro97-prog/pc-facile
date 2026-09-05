@@ -5161,14 +5161,14 @@ per averlo sempre a disposizione in caso di necessita'.
         $f += ""
         $f += "============================================================"
 
-        # Nome file "carino" per il cliente (non piu' Riepilogo-PC_data).
-        $nomeFile = if ($nomeCliente) { "Il tuo nuovo PC - $nomeCliente" } else { "Il tuo nuovo PC" }
-        $nomeFile = ($nomeFile -replace '[\\/:*?"<>|]', '').Trim()
-        $riepFile = Join-Path (Get-DesktopDir) ("$nomeFile.txt")
-        $f | Set-Content -Path $riepFile -Encoding UTF8
-        Write-OK "Riepilogo salvato sul Desktop: $riepFile"
+        # Il riepilogo tecnico testuale viene archiviato nei log di sistema (senza intasare il Desktop con file .txt grezzi)
+        try {
+            $logDir = Join-Path $env:ProgramData "PCFacile\log"
+            if (-not (Test-Path $logDir)) { New-Item -Path $logDir -ItemType Directory -Force | Out-Null }
+            $f | Set-Content -Path (Join-Path $logDir "riepilogo-tecnico.txt") -Encoding UTF8
+        } catch {}
 
-        # Scheda di Consegna Cliente HTML stampabile con grafica moderna
+        # Scheda di Consegna Cliente HTML stampabile con grafica moderna Unieuro (unico documento di consegna)
         try {
             $htmlFile = Join-Path (Get-DesktopDir) ("Scheda-Consegna-Cliente.html")
             $appInstallate = @($Report | Where-Object { $_.Voce -like '*installazione*' -and $_.Esito -eq 'OK' } | ForEach-Object { ($_.Voce -replace ' \(installazione\)', '' -replace ' \(installazione offline\)', '').Trim() })
@@ -5177,16 +5177,31 @@ per averlo sempre a disposizione in caso di necessita'.
             if (-not $appItems) { $appItems = "<div class='app-badge'>&#10003; <strong>Applicazioni base configurate</strong></div>" }
 
             $credBox = ""
-            if ($credGenerataEmail -or $credGenerataPass) {
+            if ($credMsAccount -or $credMsPassword) {
                 $credBox = @"
-                <div class='card'>
-                    <h3>&#128273; Credenziali di Primo Accesso</h3>
-                    <table class='info-table'>
-                        $(if ($credGenerataEmail) { "<tr><td>Email:</td><td><strong>$credGenerataEmail</strong></td></tr>" })
-                        $(if ($credGenerataPass) { "<tr><td>Password provvisoria:</td><td><code>$credGenerataPass</code> <em>(da cambiare al primo accesso)</em></td></tr>" })
-                        <tr><td>Account PC:</td><td>$env:USERNAME</td></tr>
-                    </table>
-                </div>
+            <div class='card card-cred'>
+                <h3>&#128273; Credenziali di Primo Accesso &bull; $provNome</h3>
+                <table class='info-table'>
+                    <tr><td style='width: 32%; font-weight: 600;'>Email / Utente:</td><td><strong style='font-size: 14px; color: #00122B;'>$credMsAccount</strong></td></tr>
+                    <tr><td style='font-weight: 600;'>Password iniziale:</td><td><code style='font-size: 14px; font-weight: bold; background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 4px;'>$credMsPassword</code> <em style='color: #64748b; font-size: 11px; margin-left: 8px;'>(da personalizzare al primo accesso)</em></td></tr>
+                    <tr><td style='font-weight: 600;'>Account Windows:</td><td><code>$env:USERNAME</code></td></tr>
+                    <tr><td style='font-weight: 600;'>Servizi inclusi:</td><td>Windows 11, Office / Microsoft 365, Antivirus &bull; Card PIN annotato</td></tr>
+                </table>
+            </div>
+"@
+            }
+
+            $bitlockerBox = ""
+            if ($bitlocker -and $bitlocker.RecoveryKey) {
+                $bitlockerBox = @"
+            <div class='card card-bitlocker'>
+                <h3>&#128274; Chiave di Ripristino BitLocker (Protezione Disco)</h3>
+                <table class='info-table'>
+                    <tr><td style='width: 32%; font-weight: 600;'>Identificatore (ID):</td><td><code>$($bitlocker.KeyId)</code></td></tr>
+                    <tr><td style='font-weight: 600;'>Chiave di Ripristino:</td><td><code style='font-size: 13px; font-weight: bold; background: #dcfce7; color: #14532d; padding: 4px 8px; border-radius: 4px; letter-spacing: 1px;'>$($bitlocker.RecoveryKey)</code></td></tr>
+                    <tr><td colspan='2' style='font-size: 11px; color: #475569; padding-top: 4px;'><em>Conservare questo codice o scattare una foto con lo smartphone. Serve per sbloccare l'accesso al disco in caso di reset o manutenzione straordinaria.</em></td></tr>
+                </table>
+            </div>
 "@
             }
 
@@ -5197,42 +5212,58 @@ per averlo sempre a disposizione in caso di necessita'.
     <meta charset="UTF-8">
     <title>Scheda Consegna PC - $nomeCliente</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
-        body { background: #f1f5f9; color: #1e293b; padding: 24px; }
-        .sheet { max-width: 800px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.08); overflow: hidden; }
-        .header { background: linear-gradient(135deg, #0A0E24 0%, #1a2552 100%); color: #fff; padding: 24px 30px; border-bottom: 4px solid #EE7203; display: flex; justify-content: space-between; align-items: center; }
-        .header h1 { font-size: 22px; font-weight: 700; color: #fff; }
-        .header p { font-size: 13px; color: #94a3b8; }
-        .badge-brand { background: #EE7203; color: #fff; font-weight: 700; font-size: 13px; padding: 6px 12px; border-radius: 6px; }
-        .body { padding: 28px; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px; }
-        .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; }
-        .card h3 { font-size: 15px; color: #0A0E24; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
-        .info-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .info-table td { padding: 4px 0; }
-        .info-table td:first-child { width: 45%; color: #64748b; font-weight: 500; }
-        .app-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-        .app-badge { background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
-        .app-badge strong { color: #0f172a; }
-        .tips-list { font-size: 13px; color: #475569; padding-left: 18px; line-height: 1.6; }
-        .footer { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64748b; }
-        .btn-print { background: #EE7203; color: #fff; border: none; font-weight: 700; font-size: 13px; padding: 8px 18px; border-radius: 6px; cursor: pointer; }
-        @media print { body { background: #fff; padding: 0; } .sheet { box-shadow: none; max-width: 100%; } .no-print { display: none !important; } }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+        body { background: #f1f5f9; color: #1e293b; padding: 24px; font-size: 13px; line-height: 1.5; }
+        .sheet { max-width: 820px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); overflow: hidden; border: 1px solid #e2e8f0; }
+        .header { background: linear-gradient(135deg, #00122B 0%, #002B5C 100%); color: #fff; padding: 22px 28px; border-bottom: 4px solid #EE7203; display: flex; justify-content: space-between; align-items: center; }
+        .header-brand { display: flex; align-items: center; gap: 14px; }
+        .brand-logo { background: #EE7203; color: #fff; font-weight: 900; font-size: 18px; letter-spacing: 1.5px; padding: 6px 12px; border-radius: 6px; }
+        .header h1 { font-size: 20px; font-weight: 700; color: #fff; }
+        .header p { font-size: 12px; color: #cbd5e1; }
+        .badge-brand { background: #EE7203; color: #fff; font-weight: 700; font-size: 12px; padding: 6px 12px; border-radius: 6px; }
+        .body { padding: 24px 28px; display: flex; flex-direction: column; gap: 16px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; }
+        .card-cred { background: #fffaf5; border: 1.5px solid #EE7203; }
+        .card-cred h3 { color: #EE7203; border-bottom: 1px solid #fed7aa; }
+        .card-bitlocker { background: #f0fdf4; border: 1.5px solid #22c55e; }
+        .card-bitlocker h3 { color: #166534; border-bottom: 1px solid #bbf7d0; }
+        .card h3 { font-size: 14px; color: #00122B; margin-bottom: 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+        .info-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        .info-table td { padding: 3px 0; }
+        .info-table td:first-child { width: 42%; color: #64748b; font-weight: 500; }
+        .app-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+        .app-badge { background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 5px 9px; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; color: #1e293b; }
+        .app-badge strong { color: #00122B; }
+        .tips-list { font-size: 12px; color: #475569; padding-left: 18px; line-height: 1.6; }
+        .footer { background: #f8fafc; border-top: 1px solid #e2e8f0; padding: 14px 28px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64748b; }
+        .btn-print { background: #EE7203; color: #fff; border: none; font-weight: 700; font-size: 13px; padding: 8px 18px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 6px rgba(238,114,3,0.3); }
+        .btn-print:hover { background: #d96300; }
+        @media print {
+            @page { size: A4 portrait; margin: 10mm; }
+            body { background: #fff; padding: 0; font-size: 11.5px; }
+            .sheet { box-shadow: none; max-width: 100%; border: none; }
+            .header { padding: 16px 20px; }
+            .body { padding: 16px 20px; gap: 12px; }
+            .card { padding: 12px; }
+            .no-print { display: none !important; }
+        }
     </style>
 </head>
 <body>
     <div class="sheet">
         <div class="header">
-            <div style="display: flex; align-items: center; gap: 14px;">
-                <div style="background: #EE7203; color: #fff; font-weight: 900; font-size: 18px; letter-spacing: 1.5px; padding: 6px 12px; border-radius: 6px;">UNIEURO</div>
+            <div class="header-brand">
+                <div class="brand-logo">UNIEURO</div>
                 <div>
                     <h1>Scheda di Consegna e Configurazione PC</h1>
-                    <p>Assistenza Tecnica &bull; <em style="color: #EE7203;">Batte. Forte. Sempre.</em></p>
+                    <p>Assistenza Tecnica &bull; <em style="color: #EE7203; font-weight: 600;">Batte. Forte. Sempre.</em></p>
                 </div>
             </div>
             <div class="badge-brand">PC FACILE v$SCRIPT_VERSION</div>
         </div>
         <div class="body">
+            $credBox
             <div class="grid">
                 <div class="card">
                     <h3>&#128100; Dati Cliente &amp; Garanzia</h3>
@@ -5259,24 +5290,24 @@ per averlo sempre a disposizione in caso di necessita'.
                     </table>
                 </div>
             </div>
-            $credBox
-            <div class="card" style="margin-bottom: 20px;">
+            $bitlockerBox
+            <div class="card">
                 <h3>&#128230; Programmi e Utility Installate</h3>
                 <div class="app-grid">$appItems</div>
             </div>
             <div class="card">
                 <h3>&#128161; Consigli e Istruzioni per l'Uso</h3>
                 <ul class="tips-list">
-                    <li><strong>Wi-Fi:</strong> All'accensione a casa, seleziona la tua rete Wi-Fi in basso a destra ed inserisci la password.</li>
-                    <li><strong>Sicurezza:</strong> Se &egrave; stata creata una password provvisoria, modificala al primo accesso in <em>Impostazioni &gt; Account</em>.</li>
-                    $(if ($bitlocker -and $bitlocker.RecoveryKey) { "<li><strong>BitLocker:</strong> La chiave di sicurezza del disco &egrave; stata salvata sul Desktop nel file <code>NON CANCELLARE - Chiave di Ripristino BitLocker.txt</code>.</li>" })
-                    <li><strong>Teleassistenza:</strong> AnyDesk e TeamViewer sono pronti sul desktop in caso di necessit&agrave; di supporto da remoto.</li>
+                    <li><strong>Connessione Wi-Fi:</strong> All'accensione a casa, seleziona la tua rete Wi-Fi in basso a destra ed inserisci la password di casa.</li>
+                    <li><strong>Sicurezza Credenziali:</strong> Se &egrave; stata creata una password provvisoria, modificala al primo accesso in <em>Impostazioni &gt; Account</em>.</li>
+                    $(if ($bitlocker -and $bitlocker.RecoveryKey) { "<li><strong>BitLocker:</strong> La chiave di sicurezza del disco &egrave; stata registrata in questa scheda e sul Desktop.</li>" })
+                    <li><strong>Teleassistenza:</strong> AnyDesk e TeamViewer sono configurati e pronti sul desktop in caso di necessit&agrave; di supporto da remoto.</li>
                 </ul>
             </div>
         </div>
         <div class="footer">
-            <div>Generato automaticamente da <strong>PC Facile</strong> per il cliente.</div>
-            <button class="btn-print no-print" onclick="window.print()">&#128438; Stampa Scheda</button>
+            <div>Documento di consegna ufficiale generato automaticamente per il cliente da <strong>PC Facile</strong>.</div>
+            <button class="btn-print no-print" onclick="window.print()">&#128438; Stampa / Salva in PDF</button>
         </div>
     </div>
 </body>
@@ -5284,6 +5315,7 @@ per averlo sempre a disposizione in caso di necessita'.
 "@
             $htmlDoc | Set-Content -Path $htmlFile -Encoding UTF8
             Write-OK "Scheda di consegna HTML salvata: $htmlFile"
+            try { Start-Process $htmlFile } catch {}
         } catch {}
 
         # ---------------------------------------------------------------------
