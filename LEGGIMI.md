@@ -50,31 +50,15 @@ https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps
 **Doppio click su `PC Facile.bat`.** Fa tutto da solo:
 - chiede i privilegi di amministratore (UAC → *Sì*)
 - scarica ed esegue l'ultima versione da GitHub (con fallback offline su chiavetta)
-- avvia con ExecutionPolicy Bypass e mostra il **Menu Iniziale**:
+- avvia con ExecutionPolicy Bypass ed esegue la **Configurazione Automatica Parallela**:
+  1. **PARTE SUBITO**: senza pause o questionari, la console inizia subito la pulizia bloatware/AV trial, lingua italiana, ottimizzazioni, installazione app e update driver.
+  2. **NEL FRATTEMPO LAVORI TU**: apre in parallelo nel browser il **Pannello Operatore Tecnico** con:
+     - 🔑 Credenziali cliente generate con pulsanti **Copia Email** e **Copia Password** a 1 click.
+     - 🌐 Accesso rapido ai portali: Account Microsoft, Riscatto Office 365 (`microsoft365.com/setup`), Attivazione McAfee/Norton e Unieuro Cyber Protection.
+     - 📋 Checklist per non dimenticare nessun passaggio card/cliente.
+  3. **CONSEGNA PRONTA**: genera sul Desktop la **Scheda Consegna Cliente HTML**, il promemoria **`NON CANCELLARE - Chiave di Ripristino BitLocker.txt`** e suona a lavoro ultimato.
 
-```text
-  [E] ESPRESSO (Automatico 1-Click)  <-- PREDEFINITO (INVIO)
-      Fa TUTTO da solo alla massima velocita' senza interruzioni:
-      pulizia bloatware/AV trial, lingua italiana, ottimizzazioni privacy,
-      app Base (Chrome, 7-Zip, VLC, Adobe, AnyDesk), update Windows e driver,
-      e genera la Scheda Consegna Cliente su Desktop.
-
-  [M] MANUALE (Guidato passo-passo)
-      Personalizzazione completa: nome cliente, account Microsoft/Locale,
-      profili app dedicati (Base/Ufficio/Gaming/ecc), Office e Antivirus.
-
-  [P] PREPARA USB OFFLINE (Scarica programmi sulla chiavetta)
-      Scarica tutti gli installer (.exe/.msi) nella cartella 'installers'.
-      I prossimi PC si installeranno al 100% OFFLINE e super veloci!
-
-  [B] TRASFERIMENTO DATI (Migrazione da vecchio PC / USB)
-      Copia rapida di Desktop, Documenti, Immagini, Download, Video e Preferiti
-      da un hard disk esterno o chiavetta USB nel nuovo profilo utente.
-
-  [D] Diagnostica  |  [T] Test simulazione  |  [Q] Esci
-```
-
-> **Consiglio per il banco:** La prima volta che crei la chiavetta USB, avvia con **[P] Prepara USB Offline**: scaricherà tutti i programmi (Chrome, Firefox, VLC, Adobe Reader, 7-Zip, AnyDesk, TeamViewer, Zoom, LibreOffice, tool rimozione AV) direttamente nella cartella `installers` della USB. Così i successivi PC dei clienti si installeranno al **100% OFFLINE** e in pochi minuti!
+> **Consiglio per il banco:** La prima volta che crei la chiavetta USB, avvia con il parametro `-PreparaUSB` (o da menu con `-Menu`): scaricherà tutti i programmi (Chrome, VLC, Adobe Reader, 7-Zip, AnyDesk, Zoom, LibreOffice, tool rimozione AV) direttamente nella cartella `installers` della USB. Così i successivi PC dei clienti si installeranno al **100% OFFLINE** e in pochissimi minuti!
 
 ---
 
@@ -83,11 +67,11 @@ https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps
 Apri **Windows PowerShell** come Amministratore e usa questi comandi:
 
 ```powershell
-# MENU INTERATTIVO (Standard)
+# CONFIGURAZIONE AUTOMATICA PARALLELA (Standard / Default)
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1)))
 
-# MODALITA' ESPRESSO 1-CLICK (tutto automatico da solo)
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1))) -Espresso
+# MENU AVANZATO UTILITY (scelta manuale tra opzioni)
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1))) -Menu
 
 # TRASFERIMENTO DATI DA VECCHIO PC / DISCO USB
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1))) -Migrazione

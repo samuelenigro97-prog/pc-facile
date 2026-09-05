@@ -16,10 +16,12 @@ BeforeAll {
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:SetupPath, [ref]$null, [ref]$null)
 
     $script:FunzioniTestate = @(
+        'Write-OK', 'Write-Info', 'Write-Errore',
         'New-PasswordCliente', 'New-EmailCliente',
         'Test-NomeSimile', 'Test-LnkJunk', 'Test-Indietro',
         'Get-OfflineDirs', 'Find-OfflineInstaller', 'Select-DestinazioneUSB',
-        'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus'
+        'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus',
+        'Open-PannelloOperatore'
     )
     foreach ($nome in $script:FunzioniTestate) {
         $fn = $ast.FindAll({
@@ -213,6 +215,23 @@ Describe 'Get-WindowsActivationStatus' {
         $act | Should -Not -BeNullOrEmpty
         $act.StatoBreve | Should -Not -BeNullOrEmpty
         $act.Messaggio | Should -Not -BeNullOrEmpty
+    }
+}
+
+Describe 'Open-PannelloOperatore' {
+    It 'genera correttamente il file Pannello-Operatore.html con i portali e le credenziali' {
+        $testPannello = Join-Path ([System.IO.Path]::GetTempPath()) "Pannello-Operatore.html"
+        Open-PannelloOperatore -NomeCliente "Mario Rossi" -Email "rossimario@outlook.it" -Password "Mario123!"
+        Test-Path $testPannello | Should -BeTrue
+        $content = Get-Content $testPannello -Raw
+        $content | Should -Match "Pannello Operatore Tecnico"
+        $content | Should -Match "rossimario@outlook.it"
+        $content | Should -Match "Mario123!"
+        $content | Should -Match "account\.microsoft\.com"
+        $content | Should -Match "microsoft365\.com/setup"
+        $content | Should -Match "mcafee\.com/activate"
+        $content | Should -Match "norton\.com/setup"
+        $content | Should -Match "unieuro-cyber-protection\.covercare\.it"
     }
 }
 

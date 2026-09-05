@@ -574,6 +574,225 @@ function Set-PreventSleep {
     } catch {}
 }
 
+function Clear-TempCache {
+    Write-Info "Pulizia file temporanei e cache di installazione..."
+    try {
+        $dirs = @($env:TEMP, "$env:WINDIR\Temp", "$env:LOCALAPPDATA\Temp")
+        foreach ($d in $dirs) {
+            if ($d -and (Test-Path $d)) {
+                Get-ChildItem -Path $d -Recurse -Force -ErrorAction SilentlyContinue |
+                    Where-Object { -not $_.PSIsContainer } |
+                    Remove-Item -Force -ErrorAction SilentlyContinue
+            }
+        }
+        Write-OK "File temporanei e cache ripuliti con successo."
+        Add-Report "Pulizia file temporanei e cache" "OK"
+    } catch {
+        Add-Report "Pulizia file temporanei e cache" "SALTATO"
+    }
+}
+
+function Open-PannelloOperatore {
+    param(
+        [string]$NomeCliente = "",
+        [string]$Email = "",
+        [string]$Password = ""
+    )
+    if (-not $Email -and $NomeCliente) { $Email = New-EmailCliente -Base $NomeCliente }
+    elseif (-not $Email) { $Email = "cliente@outlook.it" }
+    if (-not $Password -and $NomeCliente) { $Password = New-PasswordCliente -Base $NomeCliente }
+    elseif (-not $Password) { $Password = "Cliente123!" }
+
+    $tempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { [System.IO.Path]::GetTempPath() }
+    $pannelloFile = Join-Path $tempDir "Pannello-Operatore.html"
+    try {
+        $html = @"
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>PC Facile - Pannello Operatore Tecnico</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+        body { background: #0A0E24; color: #f8fafc; padding: 24px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 12px; padding: 24px 30px; border-bottom: 4px solid #EE7203; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        .header h1 { font-size: 22px; color: #fff; font-weight: 700; }
+        .header p { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+        .badge { background: #EE7203; color: #fff; font-weight: 700; font-size: 12px; padding: 6px 14px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 0.9; } 50% { opacity: 1; transform: scale(1.03); } 100% { opacity: 0.9; } }
+        .status-alert { background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; border-radius: 10px; padding: 16px 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 14px; }
+        .status-alert .icon { font-size: 24px; color: #22c55e; }
+        .status-alert .text { font-size: 14px; color: #86efac; line-height: 1.4; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+        .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .card h2 { font-size: 16px; color: #f1f5f9; margin-bottom: 14px; border-bottom: 1px solid #334155; padding-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+        .cred-group { margin-bottom: 12px; }
+        .cred-label { font-size: 12px; color: #94a3b8; margin-bottom: 4px; font-weight: 600; text-transform: uppercase; }
+        .cred-box { display: flex; gap: 8px; }
+        .cred-input { flex: 1; background: #0f172a; border: 1px solid #475569; border-radius: 6px; padding: 10px 12px; font-size: 14px; color: #fff; font-family: monospace; outline: none; }
+        .cred-input:focus { border-color: #EE7203; }
+        .btn-copy { background: #334155; border: 1px solid #64748b; color: #fff; border-radius: 6px; padding: 0 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+        .btn-copy:hover { background: #475569; border-color: #94a3b8; }
+        .btn-copy.copied { background: #16a34a; border-color: #22c55e; }
+        .links-grid { display: flex; flex-direction: column; gap: 10px; }
+        .portal-btn { display: flex; align-items: center; justify-content: space-between; background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px 16px; color: #f8fafc; text-decoration: none; font-size: 14px; font-weight: 600; transition: all 0.2s; }
+        .portal-btn:hover { background: #1a2236; border-color: #EE7203; transform: translateX(3px); }
+        .portal-btn .icon { font-size: 18px; margin-right: 10px; }
+        .portal-btn .arrow { color: #EE7203; font-weight: bold; }
+        .checklist { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+        .checklist li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #cbd5e1; background: #0f172a; padding: 10px 14px; border-radius: 6px; border: 1px solid #334155; }
+        .checklist input[type="checkbox"] { width: 16px; height: 16px; accent-color: #EE7203; cursor: pointer; }
+        .bg-tasks { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+        .bg-tasks li { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #94a3b8; }
+        .bg-tasks li .check { color: #22c55e; font-weight: bold; }
+        .footer { text-align: center; font-size: 12px; color: #64748b; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>Pannello Operatore Tecnico</h1>
+                <p>PC Facile &bull; Assistenza &amp; Configurazione Parallela</p>
+            </div>
+            <div class="badge">&#9889; Setup in corso</div>
+        </div>
+
+        <div class="status-alert">
+            <div class="icon">&#10003;</div>
+            <div class="text">
+                <strong>La configurazione automatica del PC &egrave; gi&agrave; partita a massima velocit&agrave;!</strong><br>
+                Mentre la console installa le app, ripulisce il sistema e aggiorna i driver, usa questo pannello per completare le registrazioni e i riscatti card del cliente.
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>&#128273; Credenziali Consigliate Cliente</h2>
+                <div class="cred-group">
+                    <div class="cred-label">Nome Cliente / Riferimento</div>
+                    <div class="cred-box">
+                        <input type="text" id="inNome" class="cred-input" value="$NomeCliente" placeholder="Mario Rossi" oninput="aggiornaCred()">
+                    </div>
+                </div>
+                <div class="cred-group">
+                    <div class="cred-label">Email Suggerita</div>
+                    <div class="cred-box">
+                        <input type="text" id="inEmail" class="cred-input" value="$Email" readonly>
+                        <button class="btn-copy" onclick="copia('inEmail', this)">Copia Email</button>
+                    </div>
+                </div>
+                <div class="cred-group">
+                    <div class="cred-label">Password Consigliata</div>
+                    <div class="cred-box">
+                        <input type="text" id="inPass" class="cred-input" value="$Password" readonly>
+                        <button class="btn-copy" onclick="copia('inPass', this)">Copia Password</button>
+                    </div>
+                </div>
+                <p style="font-size: 11px; color: #64748b; margin-top: 8px;">
+                    Password conforme ai requisiti Microsoft (maiuscola, minuscola, numero, simbolo).
+                </p>
+            </div>
+
+            <div class="card">
+                <h2>&#127760; Portali di Registrazione &amp; Attivazione (1-Click)</h2>
+                <div class="links-grid">
+                    <a href="https://account.microsoft.com" target="_blank" rel="noopener noreferrer" class="portal-btn">
+                        <span><span class="icon">&#128100;</span> 1. Account Microsoft / Outlook</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                    <a href="https://microsoft365.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn">
+                        <span><span class="icon">&#128230;</span> 2. Riscatto Microsoft 365 / Office</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                    <a href="https://www.mcafee.com/activate" target="_blank" rel="noopener noreferrer" class="portal-btn">
+                        <span><span class="icon">&#128737;</span> 3. Attivazione McAfee Antivirus</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                    <a href="https://www.norton.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn">
+                        <span><span class="icon">&#128737;</span> 4. Attivazione Norton Antivirus</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                    <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" rel="noopener noreferrer" class="portal-btn">
+                        <span><span class="icon">&#128274;</span> 5. Unieuro Cyber Protection</span>
+                        <span class="arrow">&rarr;</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>&#9745; Checklist Operatore</h2>
+                <ul class="checklist">
+                    <li><input type="checkbox"> Account Microsoft del cliente configurato / verificato</li>
+                    <li><input type="checkbox"> Codice PIN Office riscattato (se acquistato dal cliente)</li>
+                    <li><input type="checkbox"> Antivirus attivato con card cliente (se acquistato)</li>
+                    <li><input type="checkbox"> Cyber Protection registrata (se acquistata)</li>
+                </ul>
+            </div>
+
+            <div class="card">
+                <h2>&#9881; Lavori in Corso in Background</h2>
+                <ul class="bg-tasks">
+                    <li><span class="check">&#10003;</span> Rimozione Bloatware OEM e antivirus di prova</li>
+                    <li><span class="check">&#10003;</span> Forzatura lingua e regione Italiana (it-IT)</li>
+                    <li><span class="check">&#10003;</span> Creazione punto di ripristino di sicurezza</li>
+                    <li><span class="check">&#10003;</span> Installazione app Base (Chrome, 7-Zip, VLC, Adobe, AnyDesk...)</li>
+                    <li><span class="check">&#10003;</span> Creazione icone Office Word/Excel sul Desktop</li>
+                    <li><span class="check">&#10003;</span> Aggiornamenti di sicurezza e driver video/hardware</li>
+                    <li><span class="check">&#10003;</span> Diagnostica SMART disco, batteria e licenza Windows</li>
+                    <li><span class="check">&#10003;</span> Salvataggio chiave BitLocker (NON CANCELLARE)</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="footer">
+            Generato automaticamente da PC Facile per l'assistenza tecnica.
+        </div>
+    </div>
+
+    <script>
+        function copia(id, btn) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            navigator.clipboard.writeText(el.value).then(function() {
+                var oldText = btn.innerText;
+                btn.innerText = "Copiato!";
+                btn.classList.add("copied");
+                setTimeout(function() {
+                    btn.innerText = oldText;
+                    btn.classList.remove("copied");
+                }, 2000);
+            });
+        }
+
+        function aggiornaCred() {
+            var nome = document.getElementById('inNome').value.trim();
+            if (!nome) {
+                document.getElementById('inEmail').value = 'cliente@outlook.it';
+                document.getElementById('inPass').value = 'Cliente123!';
+                return;
+            }
+            var pulito = nome.toLowerCase().replace(/[^a-z0-9]/g, '');
+            document.getElementById('inEmail').value = pulito + '@outlook.it';
+            var prima = nome.split(' ')[0];
+            var cap = prima.charAt(0).toUpperCase() + prima.slice(1).toLowerCase();
+            document.getElementById('inPass').value = cap + '123!';
+        }
+    </script>
+</body>
+</html>
+"@
+        $html | Set-Content -Path $pannelloFile -Encoding UTF8
+        try { Start-Process $pannelloFile } catch {}
+        Write-OK "Pannello Operatore aperto nel browser: gestisci account, Office e antivirus in parallelo."
+    } catch {
+        Write-Info "Creazione pannello operatore non riuscita: $_"
+    }
+}
+
 # =============================================================================
 # GESTIONE OFFLINE INSTALLERS & PREPARAZIONE USB
 # =============================================================================
@@ -1350,10 +1569,10 @@ if ($Test -or $Diagnostica) {
     function Pausa { }
 }
 
-$Global:ModoEspresso = $false
+$Global:ModoEspresso = $true
+$Espresso = $true
 
-# Se nessun parametro esplicito e' stato fornito da CLI, mostro il MENU INIZIALE:
-if (-not $Test -and -not $Diagnostica -and -not $Espresso -and -not $Manuale -and -not $PreparaUSB -and -not $Migrazione) {
+if ($Menu) {
     try { Clear-Host } catch {}
     $larg = 64
     $titoloB = "PC FACILE   -   versione $SCRIPT_VERSION"
@@ -1363,44 +1582,42 @@ if (-not $Test -and -not $Diagnostica -and -not $Espresso -and -not $Manuale -an
     Write-Host ("  " + [char]0x2551 + (" " * $padSx) + $titoloB + (" " * $padDx) + [char]0x2551) -ForegroundColor $THEME_TXT
     Write-Host ("$AON  " + [char]0x255A + (([string][char]0x2550) * $larg) + [char]0x255D + "$AOFF") -ForegroundColor $THEME_COL
     Write-Host ""
-    Write-Host "  Scegli come procedere:" -ForegroundColor White
+    Write-Host "  Menu Avanzato Utility:" -ForegroundColor White
     Write-Host ""
-    Write-Host "  [E] ESPRESSO (Automatico 1-Click)" -ForegroundColor Green -NoNewline
-    Write-Host "   <-- PREDEFINITO (premi INVIO)" -ForegroundColor Yellow
-    Write-Host "      Fa TUTTO da solo alla massima velocita' senza interruzioni:" -ForegroundColor Gray
-    Write-Host "      - Pulisce bloatware OEM e disinstalla antivirus di prova" -ForegroundColor Gray
-    Write-Host "      - Ottimizza Windows (privacy, prestazioni, impostazioni, Edge)" -ForegroundColor Gray
-    Write-Host "      - Installa app Base (Chrome, 7-Zip, VLC, Adobe Reader, AnyDesk)" -ForegroundColor Gray
-    Write-Host "      - Scarica e installa aggiornamenti Windows e driver" -ForegroundColor Gray
-    Write-Host "      - Genera la Scheda Consegna Cliente su Desktop" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  [M] MANUALE (Guidato passo-passo)" -ForegroundColor White
-    Write-Host "      Personalizzazione completa: scelta account Microsoft/Locale," -ForegroundColor Gray
-    Write-Host "      scelta profilo app (Base/Ufficio/Gaming/ecc), Office e Antivirus." -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  [P] PREPARA USB OFFLINE (Scarica programmi sulla chiavetta)" -ForegroundColor Cyan
-    Write-Host "      Scarica tutti gli installer (.exe/.msi) nella cartella 'installers'." -ForegroundColor Gray
-    Write-Host "      I prossimi PC si installeranno al 100% OFFLINE e super veloci!" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  [B] TRASFERIMENTO DATI (Migrazione da vecchio PC / USB)" -ForegroundColor Magenta
-    Write-Host "      Copia Desktop, Documenti, Immagini e Preferiti da un'unita' esterna." -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  [D] Diagnostica (Verifica sistema e pacchetti senza modifiche)" -ForegroundColor DarkGray
-    Write-Host "  [T] Test (Simulazione rapida a vuoto)" -ForegroundColor DarkGray
+    Write-Host "  [1] CONFIGURAZIONE AUTOMATICA PARALLELA (Default)" -ForegroundColor Green
+    Write-Host "  [2] PREPARA USB OFFLINE (Scarica programmi sulla chiavetta)" -ForegroundColor Cyan
+    Write-Host "  [3] TRASFERIMENTO DATI (Migrazione da vecchio PC / USB)" -ForegroundColor Magenta
+    Write-Host "  [4] Diagnostica (Verifica sistema e pacchetti senza modifiche)" -ForegroundColor DarkGray
+    Write-Host "  [5] Test (Simulazione rapida a vuoto)" -ForegroundColor DarkGray
     Write-Host "  [Q] Esci" -ForegroundColor DarkGray
     Write-Host ""
-
-    $sceltaMenu = (Attendi-Risposta "Scegli modalita' [E/M/P/B/D/T/Q] (INVIO = Espresso)").Trim().ToUpper()
-
-    switch -Regex ($sceltaMenu) {
-        "^P" { $PreparaUSB = $true }
-        "^B" { $Migrazione = $true }
-        "^M" { $Manuale = $true; $Global:ModoEspresso = $false }
-        "^D" { $Diagnostica = $true }
-        "^T" { $Test = $true }
-        "^Q" { Write-Host "Uscita."; return }
+    $sceltaMenu = (Attendi-Risposta "Scegli opzione [1-5 / Q] (default = 1)").Trim().ToUpper()
+    switch ($sceltaMenu) {
+        "2" { $PreparaUSB = $true; $Global:ModoEspresso = $false }
+        "P" { $PreparaUSB = $true; $Global:ModoEspresso = $false }
+        "3" { $Migrazione = $true; $Global:ModoEspresso = $false }
+        "B" { $Migrazione = $true; $Global:ModoEspresso = $false }
+        "4" { $Diagnostica = $true; $Global:ModoEspresso = $false }
+        "D" { $Diagnostica = $true; $Global:ModoEspresso = $false }
+        "5" { $Test = $true; $Global:ModoEspresso = $false }
+        "T" { $Test = $true; $Global:ModoEspresso = $false }
+        "Q" { Write-Host "Uscita."; return }
         default { $Espresso = $true; $Global:ModoEspresso = $true }
     }
+} else {
+    try { Clear-Host } catch {}
+    $larg = 64
+    $titoloB = "PC FACILE   -   versione $SCRIPT_VERSION"
+    $padSx = [int](($larg - $titoloB.Length) / 2)
+    $padDx = $larg - $padSx - $titoloB.Length
+    Write-Host ("$AON  " + [char]0x2554 + (([string][char]0x2550) * $larg) + [char]0x2557 + "$AOFF") -ForegroundColor $THEME_COL
+    Write-Host ("  " + [char]0x2551 + (" " * $padSx) + $titoloB + (" " * $padDx) + [char]0x2551) -ForegroundColor $THEME_TXT
+    Write-Host ("$AON  " + [char]0x255A + (([string][char]0x2550) * $larg) + [char]0x255D + "$AOFF") -ForegroundColor $THEME_COL
+    Write-Host ""
+    Write-Host "  CONFIGURAZIONE AUTOMATICA AVVIATA A MASSIMA VELOCITA'!" -ForegroundColor Green
+    Write-Host "  Tutte le ottimizzazioni, pulizie e installazioni sono partite in tempo reale." -ForegroundColor White
+    Write-Host "  Pannello Operatore aperto nel browser per gestire account, Office e antivirus." -ForegroundColor Cyan
+    Write-Host ""
 }
 
 if ($Espresso) {
@@ -1428,6 +1645,7 @@ if (-not $Test -and -not $Diagnostica) {
 $RunReale = (-not $Test -and -not $Diagnostica)
 if ($RunReale) {
     Set-PreventSleep $true
+    Open-PannelloOperatore -NomeCliente $NomeCliente
 }
 
 # =============================================================================
@@ -2425,26 +2643,38 @@ if ($RunReale) {
             Write-Host "  Ultimo passo completato : $($st.FaseNome)" -ForegroundColor White
             if ($st.NomeCliente) { Write-Host "  Cliente                 : $($st.NomeCliente)" -ForegroundColor White }
             Write-Host ""
-            $rRip = Attendi-Risposta "Riprendere da dove eri arrivato? (S = riprendi / N = ricomincia da capo)"
-            if ($rRip -match '^[Ss]') {
+            if ($Global:ModoEspresso) {
+                Write-OK "Ripresa automatica attiva: i passi gia' completati verranno saltati."
                 $Global:FaseRipresa = [int]$st.Fase
                 if ($st.NomeCliente)  { $nomeCliente    = [string]$st.NomeCliente }
                 if ($st.CredAccount)  { $credMsAccount  = [string]$st.CredAccount }
                 if ($st.CredPassword) { $credMsPassword = [string]$st.CredPassword }
                 if ($st.PSObject.Properties.Name -contains 'CredProvider' -and $st.CredProvider) { $Global:credProvider = [string]$st.CredProvider }
                 if ($st.PSObject.Properties.Name -contains 'CredDominio'  -and $st.CredDominio)  { $Global:credDominio  = [string]$st.CredDominio }
-                # Ripresa FINE del passo App: se la sessione si e' chiusa a meta'
-                # dell'installazione app, recupero profilo + piano + app gia' fatte,
-                # cosi' non richiedo il profilo e riparto dall'app esatta rimasta.
                 if ($st.PSObject.Properties.Name -contains 'AppProfilo' -and $st.AppProfilo) {
                     $Global:AppProfiloRipresa = [string]$st.AppProfilo
                     $Global:AppListaRipresa   = @($st.AppLista)
                     $Global:AppFatteRipresa   = @($st.AppFatte)
                 }
-                Write-OK "Riprendo: i passi gia' completati verranno saltati."
             } else {
-                Remove-Item $Global:StatoFile -Force -ErrorAction SilentlyContinue
-                Write-Info "Si ricomincia da capo."
+                $rRip = Attendi-Risposta "Riprendere da dove eri arrivato? (S = riprendi / N = ricomincia da capo)"
+                if ($rRip -match '^[Ss]') {
+                    $Global:FaseRipresa = [int]$st.Fase
+                    if ($st.NomeCliente)  { $nomeCliente    = [string]$st.NomeCliente }
+                    if ($st.CredAccount)  { $credMsAccount  = [string]$st.CredAccount }
+                    if ($st.CredPassword) { $credMsPassword = [string]$st.CredPassword }
+                    if ($st.PSObject.Properties.Name -contains 'CredProvider' -and $st.CredProvider) { $Global:credProvider = [string]$st.CredProvider }
+                    if ($st.PSObject.Properties.Name -contains 'CredDominio'  -and $st.CredDominio)  { $Global:credDominio  = [string]$st.CredDominio }
+                    if ($st.PSObject.Properties.Name -contains 'AppProfilo' -and $st.AppProfilo) {
+                        $Global:AppProfiloRipresa = [string]$st.AppProfilo
+                        $Global:AppListaRipresa   = @($st.AppLista)
+                        $Global:AppFatteRipresa   = @($st.AppFatte)
+                    }
+                    Write-OK "Riprendo: i passi gia' completati verranno saltati."
+                } else {
+                    Remove-Item $Global:StatoFile -Force -ErrorAction SilentlyContinue
+                    Write-Info "Si ricomincia da capo."
+                }
             }
         }
     } catch {}
@@ -2458,15 +2688,17 @@ if ($RunReale) {
     if (-not (Test-Rete)) {
         Write-Titolo "ATTENZIONE: Internet non collegato"
         Write-Errore "Il PC NON risulta connesso a Internet."
-        Write-Host "Serve per: lingua italiana (pacchetto da scaricare), installazione app," -ForegroundColor White
-        Write-Host "aggiornamenti e driver. Collega il WiFi o il cavo di rete PRIMA di continuare." -ForegroundColor White
+        Write-Host "I pacchetti offline presenti su chiavetta verranno installati comunque." -ForegroundColor Yellow
+        Write-Host "Per lingua e aggiornamenti online, connetti il Wi-Fi appena possibile." -ForegroundColor White
         Write-Host ""
-        do {
-            $rNet = Attendi-Risposta "Collega Internet e premi INVIO per riprovare  (oppure S = prosegui senza)"
-            if ($rNet -match '^[Ss]') { break }
-        } while (-not (Test-Rete))
+        if (-not $Global:ModoEspresso) {
+            do {
+                $rNet = Attendi-Risposta "Collega Internet e premi INVIO per riprovare  (oppure S = prosegui senza)"
+                if ($rNet -match '^[Ss]') { break }
+            } while (-not (Test-Rete))
+        }
         if (Test-Rete) { Write-OK "Connessione a Internet OK." }
-        else { Write-Info "Proseguo SENZA Internet: lingua, app e aggiornamenti potrebbero saltare." }
+        else { Write-Info "Proseguo in modalita' autonoma (priorita' pacchetti offline USB)." }
     } else {
         Write-OK "Connessione a Internet OK."
     }
@@ -2482,14 +2714,11 @@ if ($RunReale) {
     if ($avAttivi.Count -gt 0) {
         Write-Titolo "ATTENZIONE: Antivirus attivo rilevato"
         Write-Errore "Presente: $(($avAttivi.Nome | Select-Object -Unique) -join ', ')."
-        Write-Host "Un antivirus attivo puo' BLOCCARE questo script (quarantena) quando prova a" -ForegroundColor White
-        Write-Host "togliere gli AV di prova. Se succede, lingua/pulizia/driver NON vengono fatti." -ForegroundColor White
+        Write-Host "Un antivirus attivo puo' bloccare lo script: se compare un avviso, seleziona 'Consenti'." -ForegroundColor Yellow
         Write-Host ""
-        Write-Host "PRIMA di continuare, fai UNA di queste:" -ForegroundColor Yellow
-        Write-Host "  - aggiungi la chiavetta/cartella alle ESCLUSIONI dell'antivirus, oppure" -ForegroundColor White
-        Write-Host "  - tieni pronto a dare ALLOW/CONSENTI se compare 'Threat blocked'." -ForegroundColor White
-        Write-Host ""
-        [void](Attendi-Risposta "Quando sei pronto premi INVIO per continuare")
+        if (-not $Global:ModoEspresso) {
+            [void](Attendi-Risposta "Quando sei pronto premi INVIO per continuare")
+        }
     }
 }
 
@@ -2542,9 +2771,12 @@ Write-Info "Nome visualizzato attuale: $(if ($nomeAttuale) { $nomeAttuale } else
 Write-Host ""
 Write-Info "Nome PC attuale: $env:COMPUTERNAME"
 Write-Host ""
-$nomeCliente = (Attendi-Risposta "Nome del cliente (account E nome PC) - INVIO per saltare").Trim()
 
-if ($nomeCliente -ne "") {
+if (-not $nomeCliente -and -not $Global:ModoEspresso) {
+    $nomeCliente = (Attendi-Risposta "Nome del cliente (account E nome PC) - INVIO per saltare").Trim()
+}
+
+if ($nomeCliente -and $nomeCliente -ne "") {
     $nomeOk = $false
     # 1) Metodo moderno (modulo LocalAccounts, disponibile solo in PowerShell 64-bit)
     try {
@@ -2581,8 +2813,8 @@ if ($nomeCliente -ne "") {
         }
     }
 } else {
-    Write-Info "Nome non modificato (account e PC invariati)."
-    Add-Report "Nome cliente" "SALTATO"
+    Write-Info "Nome account e PC mantenuti ($env:USERNAME / $env:COMPUTERNAME)."
+    Add-Report "Nome cliente" "MANTENUTO ($env:USERNAME)"
 }
 
 Save-Fase 1 "Nome cliente e PC"
@@ -2601,8 +2833,12 @@ else {
 Write-Titolo "Account / Email cliente"
 
 if ($Global:ModoEspresso) {
-    Write-OK "Modalita' Espresso: mantenuto account utente corrente (nessuna schermata di login web)."
-    Add-Report "Account cliente" "LOCALE (Espresso)"
+    $basePerNome = if ($nomeCliente) { $nomeCliente } else { $env:USERNAME }
+    $credMsAccount  = New-EmailCliente -Base $basePerNome -Dominio "outlook.it"
+    $credMsPassword = New-PasswordCliente -Base $basePerNome
+    Write-OK "Account cliente gestito in parallelo dal Pannello Operatore aperto nel browser."
+    Write-Info "Credenziali suggerite per il riepilogo: $credMsAccount / $credMsPassword"
+    Add-Report "Account cliente" "Pannello Operatore (browser)"
 } else {
     Write-Host "Crea/accedi ORA all'account del cliente. Scegli quale aprire:" -ForegroundColor White
     Write-Host "  1) Microsoft   (consigliato: serve per Office e antivirus)" -ForegroundColor White
