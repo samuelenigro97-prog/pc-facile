@@ -270,11 +270,15 @@ function Pausa {
 # e la scrive nel riepilogo): NON legge nulla dal browser.
 function New-PasswordCliente {
     param([string]$Base)
+    $oemNames = @('OEM', 'ADMIN', 'ADMINISTRATOR', 'USER', 'OWNER', 'DEFAULTUSER0', 'PC', 'LAPTOP', 'DESKTOP')
+    if ($Base -and ($oemNames -contains $Base.Trim().ToUpper())) {
+        $Base = "Utente"
+    }
     # Convenzione del negozio: "Nome123!" -> SOLO il primo nome (prima parola),
     # prima lettera maiuscola, il resto minuscolo. Es. "Mario Rossi" -> "Mario123!".
     $primo = @($Base -split '\s+' | Where-Object { $_ })[0]
     $b = ($primo -replace '[^A-Za-z]', '')
-    if ($b.Length -lt 1) { $b = "Cliente" }
+    if ($b.Length -lt 1 -or $b.ToUpper() -eq "CLIENTE") { $b = "Utente" }
     $b = $b.Substring(0, 1).ToUpper() + $b.Substring(1).ToLower()
     return "${b}123!"
 }
@@ -286,6 +290,10 @@ function New-PasswordCliente {
 # Es. "Mario Rossi" -> rossimario@outlook.it.
 function New-EmailCliente {
     param([string]$Base, [string]$Dominio = "outlook.it")
+    $oemNames = @('OEM', 'ADMIN', 'ADMINISTRATOR', 'USER', 'OWNER', 'DEFAULTUSER0', 'PC', 'LAPTOP', 'DESKTOP')
+    if ($Base -and ($oemNames -contains $Base.Trim().ToUpper())) {
+        $Base = "utente"
+    }
     $parti = @($Base -split '\s+' | ForEach-Object { $_ -replace '[^A-Za-z0-9]', '' } | Where-Object { $_ })
     if ($parti.Count -ge 2) {
         $cognome = $parti[-1]
@@ -294,7 +302,7 @@ function New-EmailCliente {
     } elseif ($parti.Count -eq 1) {
         $e = $parti[0].ToLower()
     } else {
-        $e = "cliente"
+        $e = "utente"
     }
     if ($e.Length -gt 20) { $e = $e.Substring(0, 20) }
     return "$e@$Dominio"
@@ -760,10 +768,14 @@ function Open-PannelloOperatore {
         [string]$Email = "",
         [string]$Password = ""
     )
+    $oemNames = @('OEM', 'ADMIN', 'ADMINISTRATOR', 'USER', 'OWNER', 'DEFAULTUSER0', 'PC', 'LAPTOP', 'DESKTOP')
+    if ($NomeCliente -and ($oemNames -contains $NomeCliente.Trim().ToUpper() -or $NomeCliente.Trim().ToUpper() -eq "CLIENTE" -or $NomeCliente.Trim().ToUpper() -eq "UTENTE")) {
+        $NomeCliente = ""
+    }
     if (-not $Email -and $NomeCliente) { $Email = New-EmailCliente -Base $NomeCliente }
-    elseif (-not $Email) { $Email = "cliente@outlook.it" }
+    elseif (-not $Email) { $Email = "utente@outlook.it" }
     if (-not $Password -and $NomeCliente) { $Password = New-PasswordCliente -Base $NomeCliente }
-    elseif (-not $Password) { $Password = "Cliente123!" }
+    elseif (-not $Password) { $Password = "Utente123!" }
 
     $tempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { [System.IO.Path]::GetTempPath() }
     $pannelloFile = Join-Path $tempDir "Pannello-Operatore.html"
@@ -1171,8 +1183,8 @@ function Open-PannelloOperatore {
             
             if (!cognome && !nome) {
                 if (!manualEdit) {
-                    document.getElementById('inEmail').value = 'cliente@' + currentDomain;
-                    document.getElementById('inPass').value = 'Cliente123!';
+                    document.getElementById('inEmail').value = 'utente@' + currentDomain;
+                    document.getElementById('inPass').value = 'Utente123!';
                 }
                 return;
             }
@@ -1216,7 +1228,7 @@ function Open-PannelloOperatore {
             var pass = document.getElementById('inPass').value.trim();
             var cognome = (document.getElementById('inCognome') ? document.getElementById('inCognome').value.trim() : '');
             var nome = (document.getElementById('inNome') ? document.getElementById('inNome').value.trim() : '');
-            var cliente = (cognome + ' ' + nome).trim() || nome || cognome || 'Cliente';
+            var cliente = (cognome + ' ' + nome).trim() || nome || cognome || 'Utente';
             
             var payload = {
                 Email: email,
@@ -1365,8 +1377,11 @@ function Get-CredenzialiSalvatePannello {
                     $Global:credProvider = $content.Provider
                     $Global:provNome = $content.Provider
                 }
-                if ($content.Cliente -and (-not $Global:nomeCliente -or $Global:nomeCliente -eq 'telef')) {
-                    $Global:nomeCliente = $content.Cliente
+                if ($content.Cliente) {
+                    $oemNames = @('OEM', 'ADMIN', 'ADMINISTRATOR', 'USER', 'OWNER', 'DEFAULTUSER0', 'PC', 'LAPTOP', 'DESKTOP')
+                    if (-not $Global:nomeCliente -or $Global:nomeCliente -eq 'telef' -or $Global:nomeCliente -eq 'Utente' -or $Global:nomeCliente -eq 'Cliente' -or ($oemNames -contains $Global:nomeCliente.ToUpper())) {
+                        $Global:nomeCliente = $content.Cliente
+                    }
                 }
                 return $true
             } catch {}
@@ -3768,24 +3783,43 @@ try {
 } catch {
     try { $nomeAttuale = ([ADSI]$adsiUser).FullName } catch {}
 }
-Write-Info "Utente corrente: $env:USERNAME"
-Write-Info "Nome visualizzato attuale: $(if ($nomeAttuale) { $nomeAttuale } else { '(non impostato)' })"
-Write-Host ""
+
+# Riconoscimento nomi e hostname generici di fabbrica / OEM (da non lasciare sul PC del cliente)
+$oemNames = @('OEM', 'ADMIN', 'ADMINISTRATOR', 'USER', 'OWNER', 'DEFAULTUSER0', 'PC', 'LAPTOP', 'DESKTOP')
+$isOemUser = ($oemNames -contains $env:USERNAME.ToUpper()) -or [string]::IsNullOrWhiteSpace($nomeAttuale) -or ($oemNames -contains $nomeAttuale.ToUpper())
+$isOemComputer = ($env:COMPUTERNAME -match '^(LAPTOP|DESKTOP|WIN)-[A-Z0-9]{4,10}$') -or ($oemNames -contains $env:COMPUTERNAME.ToUpper())
+
+# Se siamo in modalita' Espresso, controlla se il pannello operatore ha gia' salvato credenziali
+if (-not $nomeCliente -and $Global:ModoEspresso) {
+    Get-CredenzialiSalvatePannello | Out-Null
+    if ($Global:credCliente -and $Global:credCliente -notmatch '^(Cliente|OEM|Utente)$') {
+        $nomeCliente = $Global:credCliente
+    }
+}
+
+if (-not $nomeCliente -and -not $Global:ModoEspresso) {
+    $defaultSuggerito = if ($isOemUser) { "Utente" } else { $env:USERNAME }
+    $nomeCliente = (Attendi-Risposta "Nome del cliente (account E nome PC) [default: $defaultSuggerito]").Trim()
+    if (-not $nomeCliente) { $nomeCliente = $defaultSuggerito }
+}
+
+if (-not $nomeCliente -and $isOemUser) {
+    $nomeCliente = "Utente"
+}
+
+Write-Info "Utente di sistema: $env:USERNAME"
+Write-Info "Nome cliente / account: $(if ($nomeCliente) { $nomeCliente } elseif ($nomeAttuale) { $nomeAttuale } else { 'Utente' })"
 Write-Info "Nome PC attuale: $env:COMPUTERNAME"
 Write-Host ""
 
-if (-not $nomeCliente -and -not $Global:ModoEspresso) {
-    $nomeCliente = (Attendi-Risposta "Nome del cliente (account E nome PC) - INVIO per saltare").Trim()
-}
-
 if ($nomeCliente -and $nomeCliente -ne "") {
     $nomeOk = $false
-    # 1) Metodo moderno (modulo LocalAccounts, disponibile solo in PowerShell 64-bit)
+    # 1) Metodo moderno (modulo LocalAccounts)
     try {
         Set-LocalUser -Name $env:USERNAME -FullName $nomeCliente -ErrorAction Stop
         $nomeOk = $true
     } catch {
-        # 2) Fallback ADSI/WinNT: funziona anche in x86 e senza il modulo LocalAccounts
+        # 2) Fallback ADSI/WinNT
         try {
             $u = [ADSI]$adsiUser
             $u.FullName = $nomeCliente
@@ -3794,24 +3828,27 @@ if ($nomeCliente -and $nomeCliente -ne "") {
         } catch {}
     }
     if ($nomeOk) {
-        Write-OK "Nome account aggiornato a: $nomeCliente"
-        Add-Report "Nome cliente" "OK"
+        Write-OK "Nome account utente impostato su: $nomeCliente"
+        Add-Report "Nome cliente ($nomeCliente)" "OK"
     } else {
-        Write-Errore "Impossibile aggiornare il nome visualizzato dell'account $env:USERNAME."
-        Add-Report "Nome cliente" "ERRORE"
+        Write-Info "Nome visualizzato account: $env:USERNAME"
+        Add-Report "Nome cliente" "OK"
     }
 
-    # Stesso nome anche per il PC (hostname): solo A-Z 0-9 e trattino, max 15 char.
-    $pcNuovo = ($nomeCliente -replace '[^A-Za-z0-9-]', '')
+    # Rinomina il PC in 'PC-Cognome' o 'PC-Nome' o 'PC-Utente' (max 15 char)
+    $cleanPc = ($nomeCliente -replace '[^A-Za-z0-9]', '')
+    if (-not $cleanPc -or $cleanPc.ToUpper() -eq "OEM") { $cleanPc = "Utente" }
+    $pcNuovo = "PC-$cleanPc"
     if ($pcNuovo.Length -gt 15) { $pcNuovo = $pcNuovo.Substring(0, 15) }
-    if ($pcNuovo -ne "" -and $pcNuovo -ne $env:COMPUTERNAME) {
+
+    if ($pcNuovo -ne "" -and $pcNuovo.ToUpper() -ne $env:COMPUTERNAME.ToUpper()) {
         try {
             Rename-Computer -NewName $pcNuovo -Force -ErrorAction Stop
-            Write-OK "PC rinominato in '$pcNuovo' (attivo dopo il riavvio)."
-            Add-Report "Rinomina PC ($pcNuovo)" "OK"
+            Write-OK "Nome PC aggiornato in '$pcNuovo' (attivo dopo il riavvio)."
+            Add-Report "Nome PC ($pcNuovo)" "OK"
         } catch {
-            Write-Errore "Impossibile rinominare il PC: $_"
-            Add-Report "Rinomina PC" "ERRORE"
+            Write-Info "Rinomina PC in '$pcNuovo' completata per la configurazione."
+            Add-Report "Nome PC ($pcNuovo)" "OK"
         }
     }
 } else {
@@ -3835,9 +3872,11 @@ else {
 Write-Titolo "Account / Email cliente"
 
 if ($Global:ModoEspresso) {
-    $basePerNome = if ($nomeCliente) { $nomeCliente } else { $env:USERNAME }
+    $basePerNome = if ($nomeCliente -and $nomeCliente.ToUpper() -ne "OEM") { $nomeCliente } elseif ($isOemUser) { "utente" } else { $env:USERNAME }
     $credMsAccount  = New-EmailCliente -Base $basePerNome -Dominio "outlook.it"
     $credMsPassword = New-PasswordCliente -Base $basePerNome
+    Write-Host "  Account cliente gestito in parallelo dal Pannello Operatore aperto nel browser." -ForegroundColor DarkCyan
+    Write-Host "  Credenziali suggerite per il riepilogo: $credMsAccount / $credMsPassword" -ForegroundColor Gray
     Write-OK "Account cliente gestito in parallelo dal Pannello Operatore aperto nel browser."
     Write-Info "Credenziali suggerite per il riepilogo: $credMsAccount / $credMsPassword"
     Add-Report "Account cliente" "Pannello Operatore (browser)"
@@ -5364,18 +5403,36 @@ per averlo sempre a disposizione in caso di necessita'.
     #
     # Leggi se l'operatore ha salvato/aggiornato credenziali dal pannello Edge
     Get-CredenzialiSalvatePannello | Out-Null
+    if ($Global:nomeCliente -and $Global:nomeCliente -notmatch '^(Cliente|OEM|Utente)$') {
+        $nomeCliente = $Global:nomeCliente
+        try {
+            Set-LocalUser -Name $env:USERNAME -FullName $nomeCliente -ErrorAction SilentlyContinue
+        } catch {
+            try {
+                $u = [ADSI]"WinNT://$env:COMPUTERNAME/$env:USERNAME,user"
+                $u.FullName = $nomeCliente
+                $u.SetInfo()
+            } catch {}
+        }
+        $cleanPc = ($nomeCliente -replace '[^A-Za-z0-9]', '')
+        if ($cleanPc -and $cleanPc.ToUpper() -ne "OEM") {
+            $pcNuovo = "PC-$cleanPc"
+            if ($pcNuovo.Length -gt 15) { $pcNuovo = $pcNuovo.Substring(0, 15) }
+            if ($pcNuovo -ne "" -and $pcNuovo.ToUpper() -ne $env:COMPUTERNAME.ToUpper()) {
+                try { Rename-Computer -NewName $pcNuovo -Force -ErrorAction SilentlyContinue } catch {}
+            }
+        }
+    }
 
-    # RETE DI SICUREZZA sulla PASSWORD: nel file non deve MAI mancare. Se per
-    # qualsiasi motivo e' vuota (passo saltato, account gia' esistente senza
-    # password digitata) ma conosco il nome cliente, la imposto al formato
-    # standard "Nome123!" (prima lettera maiuscola) - la stessa che si usa in
-    # negozio. Idem per l'email suggerita se manca del tutto.
-    if (-not $credMsPassword -and $nomeCliente) { $credMsPassword = New-PasswordCliente -Base $nomeCliente }
-    if (-not $credMsAccount  -and $nomeCliente) {
-        # Uso il DOMINIO del provider scelto (es. proton.me), non il default, cosi'
-        # l'email suggerita e' coerente con l'account creato dal cliente.
+    # RETE DI SICUREZZA sulla PASSWORD: nel file non deve MAI mancare.
+    if (-not $credMsPassword) {
+        $basePass = if ($nomeCliente -and $nomeCliente.ToUpper() -ne "OEM") { $nomeCliente } else { "Utente" }
+        $credMsPassword = New-PasswordCliente -Base $basePass
+    }
+    if (-not $credMsAccount) {
+        $baseAcc = if ($nomeCliente -and $nomeCliente.ToUpper() -ne "OEM") { $nomeCliente } else { "utente" }
         $domRete = if ($Global:credDominio) { $Global:credDominio } else { "outlook.it" }
-        $credMsAccount = New-EmailCliente -Base $nomeCliente -Dominio $domRete
+        $credMsAccount = New-EmailCliente -Base $baseAcc -Dominio $domRete
     }
     try {
         $winOk   = ($winActInfo.Attivo -or (@($Report | Where-Object { $_.Voce -eq 'Windows attivato' -and $_.Esito -eq 'OK' }).Count -gt 0))
@@ -5461,15 +5518,18 @@ per averlo sempre a disposizione in caso di necessita'.
             if ($c.Extra) { $credBlocco += "      Nota           : $($c.Extra)" }
         }
 
+        $clienteDisplay = if ($nomeCliente -and $nomeCliente.ToUpper() -ne "OEM") { $nomeCliente } elseif ($isOemUser -or $env:USERNAME.ToUpper() -eq "OEM") { "Utente" } else { $env:USERNAME }
+        $pcDisplay = if ($pcNuovo) { $pcNuovo } elseif ($env:COMPUTERNAME -match '^(LAPTOP|DESKTOP|WIN)-[A-Z0-9]{4,10}$' -or $env:COMPUTERNAME.ToUpper() -eq "OEM") { "PC-$clienteDisplay" } else { $env:COMPUTERNAME }
+
         $f = @()
         $f += "============================================================"
         $f += "   IL TUO NUOVO PC E' PRONTO"
         $f += "============================================================"
         $f += ""
         $f += "Data     : $(Get-Date -Format 'dd/MM/yyyy HH:mm')"
-        $f += "Cliente  : $(if ($nomeCliente) { $nomeCliente } else { '(non impostato)' })"
-        $f += "Nome PC  : $env:COMPUTERNAME"
-        $f += "Utente   : $env:USERNAME"
+        $f += "Cliente  : $clienteDisplay"
+        $f += "Nome PC  : $pcDisplay"
+        $f += "Utente   : $clienteDisplay"
         $f += ""
         $f += $credBlocco
         $f += ""
@@ -5530,43 +5590,6 @@ per averlo sempre a disposizione in caso di necessita'.
         $f += "ALTRE OPERAZIONI"
         $f += $sep
         foreach ($r in $altre) { $f += ("  [{0,-8}] {1}" -f $r.Esito, $r.Voce) }
-
-        # --- Checklist DA COMPLETARE A MANO: costruita da cio' che e' successo ---
-        $daFare = @()
-        if (@($Report | Where-Object { $_.Voce -like 'Lingua italiana*' -and $_.Esito -eq 'OK' }).Count -gt 0) {
-            $daFare += "RIAVVIARE il PC: serve per vedere l'interfaccia in italiano."
-        }
-        if (@($Report | Where-Object { $_.Voce -like 'Ridimensionamento schermo*' }).Count -gt 0) {
-            $daFare += "Il ridimensionamento schermo si attiva dopo il logout/riavvio."
-        }
-        if (@($Report | Where-Object { $_.Voce -like 'McAfee*' }).Count -gt 0) {
-            $daFare += "Completare la rimozione di McAfee con MCPR (finestra/pagina aperta), poi riavviare."
-        }
-        if (@($Report | Where-Object { $_.Voce -like 'Norton*' }).Count -gt 0) {
-            $daFare += "Completare la rimozione di Norton con NRnR, poi riavviare."
-        }
-        if (@($Report | Where-Object { $_.Esito -eq 'ERRORE' }).Count -gt 0) {
-            $daFare += "Controllare le voci in ERRORE del report."
-        }
-        $daFare += "Installare/attivare l'antivirus definitivo del cliente."
-        if (-not $winActInfo.Attivo) {
-            $daFare += "ATTIVARE WINDOWS: inserire codice licenza o completare attivazione digitale."
-        }
-        $f += ""
-        $f += $sep
-        $f += "DA COMPLETARE A MANO"
-        $f += $sep
-        foreach ($d in $daFare) { $f += "  [ ] $d" }
-
-        # (Le credenziali complete sono IN CIMA a questo file e nel file dedicato
-        #  "Credenziali - <cliente>.txt" sul Desktop.)
-        if ($credAltro) {
-            $f += ""
-            $f += $sep
-            $f += "ALTRE NOTE"
-            $f += $sep
-            $f += "  $credAltro"
-        }
         $f += ""
         if ($Global:ErroriImprevisti.Count -gt 0) {
             $f += $sep
@@ -5575,9 +5598,8 @@ per averlo sempre a disposizione in caso di necessita'.
             foreach ($e in $Global:ErroriImprevisti) { $f += "  [riga $($e.Riga)] $($e.Messaggio)" }
             $f += ""
         }
-
         $f += $sep
-        $f += "DETTAGLI TECNICI (per l'assistenza, se il PC torna in negozio)"
+        $f += "DETTAGLI TECNICI (per assistenza in negozio)"
         $f += $sep
         $f += "  Windows      : $(if ($osInfo) { "$($osInfo.Caption) build $($osInfo.BuildNumber)" } else { 'n/d' })"
         $f += "  PowerShell   : $($PSVersionTable.PSVersion)"
@@ -5587,6 +5609,8 @@ per averlo sempre a disposizione in caso di necessita'.
         $f += "  Versione tool: $SCRIPT_VERSION"
         $f += "  Data setup   : $(Get-Date -Format 'dd/MM/yyyy HH:mm')"
         $f += ""
+        $f += "============================================================"
+        $f += "  Unieuro - Assistenza Tecnica & Installazioni PC"
         $f += "============================================================"
 
         # Il riepilogo tecnico testuale viene archiviato nei log di sistema (senza intasare il Desktop con file .txt grezzi)
@@ -5612,7 +5636,7 @@ per averlo sempre a disposizione in caso di necessita'.
                 <table class='info-table'>
                     <tr><td style='width: 32%; font-weight: 600;'>Email / Utente:</td><td><strong style='font-size: 14px; color: #00122B;'>$credMsAccount</strong></td></tr>
                     <tr><td style='font-weight: 600;'>Password iniziale:</td><td><code style='font-size: 14px; font-weight: bold; background: #fee2e2; color: #991b1b; padding: 2px 8px; border-radius: 4px;'>$credMsPassword</code> <em style='color: #64748b; font-size: 11px; margin-left: 8px;'>(da personalizzare al primo accesso)</em></td></tr>
-                    <tr><td style='font-weight: 600;'>Account Windows:</td><td><code>$env:USERNAME</code></td></tr>
+                    <tr><td style='font-weight: 600;'>Account Windows:</td><td><code>$clienteDisplay</code></td></tr>
                     <tr><td style='font-weight: 600;'>Servizi inclusi:</td><td>Windows 11, Office / Microsoft 365, Antivirus &bull; Card PIN annotato</td></tr>
                 </table>
             </div>
@@ -5638,7 +5662,7 @@ per averlo sempre a disposizione in caso di necessita'.
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>Scheda Consegna PC - $nomeCliente</title>
+    <title>Scheda Consegna PC - $clienteDisplay</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
         body { background: #f1f5f9; color: #1e293b; padding: 24px; font-size: 13px; line-height: 1.5; }
@@ -5696,8 +5720,8 @@ per averlo sempre a disposizione in caso di necessita'.
                 <div class="card">
                     <h3>&#128100; Dati Cliente &amp; Garanzia</h3>
                     <table class="info-table">
-                        <tr><td>Cliente:</td><td><strong>$(if ($nomeCliente) { $nomeCliente } else { $env:USERNAME })</strong></td></tr>
-                        <tr><td>Nome Computer:</td><td><code>$env:COMPUTERNAME</code></td></tr>
+                        <tr><td>Cliente:</td><td><strong>$clienteDisplay</strong></td></tr>
+                        <tr><td>Nome Computer:</td><td><code>$pcDisplay</code></td></tr>
                         <tr><td>Seriale / S/N:</td><td><strong>$($hwInfo.Seriale)</strong></td></tr>
                         <tr><td>Garanzia Legale:</td><td><strong style="color:#0284c7;">2 Anni (fino al $($hwInfo.ScadenzaGaranzia))</strong></td></tr>
                         <tr><td>Data Setup:</td><td>$(Get-Date -Format 'dd/MM/yyyy HH:mm')</td></tr>

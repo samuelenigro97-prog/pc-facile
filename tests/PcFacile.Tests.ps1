@@ -59,8 +59,9 @@ Describe 'New-PasswordCliente' {
         New-PasswordCliente -Base 'Mario Rossi' | Should -BeExactly 'Mario123!'
         New-PasswordCliente -Base 'de luca'     | Should -BeExactly 'De123!'
     }
-    It 'usa "Cliente" se il nome e'' vuoto' {
-        New-PasswordCliente -Base '' | Should -BeExactly 'Cliente123!'
+    It 'usa "Utente123!" se il nome e'' vuoto o OEM' {
+        New-PasswordCliente -Base ''    | Should -BeExactly 'Utente123!'
+        New-PasswordCliente -Base 'OEM' | Should -BeExactly 'Utente123!'
     }
     It 'soddisfa i requisiti Microsoft (maiuscola, minuscola, cifra, simbolo)' {
         $pw = New-PasswordCliente -Base 'Bianchi'
@@ -85,8 +86,9 @@ Describe 'New-EmailCliente' {
     It 'rispetta il dominio del provider scelto' {
         New-EmailCliente -Base 'Rossi' -Dominio 'gmail.com' | Should -BeExactly 'rossi@gmail.com'
     }
-    It 'usa "cliente" se il nome e'' vuoto' {
-        New-EmailCliente -Base '' | Should -BeExactly 'cliente@outlook.it'
+    It 'usa "utente" se il nome e'' vuoto o OEM' {
+        New-EmailCliente -Base ''    | Should -BeExactly 'utente@outlook.it'
+        New-EmailCliente -Base 'OEM' | Should -BeExactly 'utente@outlook.it'
     }
 }
 
