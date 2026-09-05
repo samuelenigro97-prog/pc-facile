@@ -1456,6 +1456,29 @@ function Get-OfflineDirs {
     return $existing
 }
 
+function Stop-AppPopups {
+    param([string]$Nome)
+    if ($Test) { return }
+    try {
+        $targets = @()
+        if ($Nome -like "*Spotify*") { $targets += "Spotify" }
+        elseif ($Nome -like "*Zoom*") { $targets += "Zoom" }
+        elseif ($Nome -like "*Discord*") { $targets += "Discord" }
+        elseif ($Nome -like "*Steam*") { $targets += "Steam" }
+        elseif ($Nome -like "*AIMP*") { $targets += "AIMP" }
+
+        if ($targets.Count -gt 0) {
+            Start-Sleep -Seconds 1
+            foreach ($t in $targets) {
+                $procs = Get-Process -Name $t -ErrorAction SilentlyContinue
+                if ($procs) {
+                    $procs | Stop-Process -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+    } catch {}
+}
+
 function Find-OfflineInstaller {
     param(
         [string]$WingetId,
@@ -1470,10 +1493,10 @@ function Find-OfflineInstaller {
         "VideoLAN.VLC"                     = @("*vlc*win64.exe", "*vlc*.exe", "*vlc*.msi")
         "Adobe.Acrobat.Reader.64-bit"      = @("*AcroRdr*.exe", "*Acrobat*Reader*.exe", "*AdbeRdr*.exe", "*AcroRdr*it_IT*.exe", "*Acro*.msi")
         "SumatraPDF.SumatraPDF"            = @("*SumatraPDF*.exe", "*SumatraPDF*.msi")
-        "7zip.7zip"                        = @("*7z*x64.exe", "*7z*x64.msi", "*7z*.exe", "*7z*.msi")
+        "7zip.7zip"                        = @("*7z*x64.msi", "*7z*.msi", "*7z*x64.exe", "*7z*.exe")
         "AnyDesk.AnyDesk"                  = @("*AnyDesk*.exe")
         "TeamViewer.TeamViewer"            = @("*TeamViewer*Setup*.exe", "*TeamViewer*.exe", "*TeamViewer*.msi")
-        "Zoom.Zoom"                        = @("*ZoomInstaller*.exe", "*Zoom*.msi", "*Zoom*.exe")
+        "Zoom.Zoom"                        = @("*Zoom*.msi", "*ZoomInstaller*.exe", "*Zoom*.exe")
         "TheDocumentFoundation.LibreOffice"= @("*LibreOffice*x86-64.msi", "*LibreOffice*.msi", "*LibreOffice*.exe")
         "Apache.OpenOffice"                = @("*Apache*OpenOffice*.exe", "*OpenOffice*.exe", "*OpenOffice*.msi")
         "Spotify.Spotify"                  = @("*Spotify*Full*Setup*.exe", "*Spotify*Setup*.exe", "*Spotify*.exe", "*Spotify*.msixbundle")
@@ -1499,10 +1522,10 @@ function Find-OfflineInstaller {
         "VLC"                              = @("*vlc*win64.exe", "*vlc*.exe", "*vlc*.msi")
         "Adobe Acrobat Reader"             = @("*AcroRdr*.exe", "*Acrobat*Reader*.exe", "*AdbeRdr*.exe", "*AcroRdr*it_IT*.exe", "*Acro*.msi")
         "Sumatra PDF"                      = @("*SumatraPDF*.exe", "*SumatraPDF*.msi")
-        "7-Zip"                            = @("*7z*x64.exe", "*7z*x64.msi", "*7z*.exe", "*7z*.msi")
+        "7-Zip"                            = @("*7z*x64.msi", "*7z*.msi", "*7z*x64.exe", "*7z*.exe")
         "AnyDesk"                          = @("*AnyDesk*.exe")
         "TeamViewer"                       = @("*TeamViewer*Setup*.exe", "*TeamViewer*.exe", "*TeamViewer*.msi")
-        "Zoom"                             = @("*ZoomInstaller*.exe", "*Zoom*.msi", "*Zoom*.exe")
+        "Zoom"                             = @("*Zoom*.msi", "*ZoomInstaller*.exe", "*Zoom*.exe")
         "LibreOffice"                      = @("*LibreOffice*x86-64.msi", "*LibreOffice*.msi", "*LibreOffice*.exe")
         "OpenOffice"                       = @("*Apache*OpenOffice*.exe", "*OpenOffice*.exe", "*OpenOffice*.msi")
         "Spotify"                          = @("*Spotify*Full*Setup*.exe", "*Spotify*Setup*.exe", "*Spotify*.exe", "*Spotify*.msixbundle")
@@ -1523,22 +1546,26 @@ function Find-OfflineInstaller {
     if ($Nome -and $patterns.ContainsKey($Nome)) { $searchList += $patterns[$Nome] }
     if ($Nome -and $namePatterns.ContainsKey($Nome)) { $searchList += $namePatterns[$Nome] }
     if ($WingetId) {
-        $searchList += "*$WingetId*.exe"
         $searchList += "*$WingetId*.msi"
+        $searchList += "*$WingetId*.exe"
     }
     if ($Nome) {
         $cleanNome = ($Nome -replace '[^a-zA-Z0-9]','*')
-        $searchList += "*$cleanNome*.exe"
         $searchList += "*$cleanNome*.msi"
+        $searchList += "*$cleanNome*.exe"
     }
+
+    # Preferisci pacchetti .msi prima di .exe per massima affidabilità silent
+    $orderedSearchList = @($searchList | Sort-Object { if ($_ -like "*.msi") { 0 } else { 1 } })
 
     foreach ($d in $dirs) {
         if (-not (Test-Path -LiteralPath $d)) { continue }
         try {
             $files = @(Get-ChildItem -LiteralPath $d -File -ErrorAction SilentlyContinue)
             if ($files.Count -eq 0) { continue }
-            foreach ($p in $searchList) {
-                $matched = $files | Where-Object { $_.Name -like $p } | Select-Object -First 1
+            foreach ($p in $orderedSearchList) {
+                # Controllo dimensione minima (>= 100 KB) per scartare file parziali, vuoti o non validi
+                $matched = $files | Where-Object { $_.Name -like $p -and $_.Length -ge 102400 } | Select-Object -First 1
                 if ($matched) { return $matched.FullName }
             }
         } catch {}
@@ -1554,15 +1581,36 @@ function Install-OfflinePackage {
     if ($Test) { Write-OK "TEST: installazione offline simulata per $Nome ($FilePath)"; return $true }
     Write-Info "Installazione offline da USB in corso: $Nome ($FilePath)..."
     try {
+        if (-not (Test-Path -LiteralPath $FilePath)) {
+            Write-Info "File offline non trovato: $FilePath. Procedo con Winget..."
+            return $false
+        }
+        $fItem = Get-Item -LiteralPath $FilePath -ErrorAction SilentlyContinue
+        if ($fItem -and $fItem.Length -lt 102400) {
+            Write-Info "File offline $FilePath troppo piccolo ($($fItem.Length) bytes, possibile download corrotto). Procedo con Winget..."
+            return $false
+        }
+
         $ext = [System.IO.Path]::GetExtension($FilePath).ToLower()
         $workDir = Split-Path -Path $FilePath -Parent
         if (-not $workDir -or -not (Test-Path -LiteralPath $workDir)) { $workDir = $env:TEMP }
         $proc = $null
         if ($ext -eq '.msi') {
-            $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/i `"$FilePath`" /qn /norestart" -WorkingDirectory $workDir -Wait -PassThru -ErrorAction Stop
+            $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/i `"$FilePath`" /qn /norestart" -WorkingDirectory $workDir -PassThru -ErrorAction Stop
+            $timer = 0
+            while (-not $proc.HasExited -and $timer -lt 120) {
+                Start-Sleep -Seconds 2
+                $timer += 2
+            }
+            if (-not $proc.HasExited) {
+                try { $proc.Kill() } catch {}
+                Write-Info "Installazione MSI per $Nome ha superato il timeout (120s). Procedo con Winget..."
+                return $false
+            }
         } elseif ($ext -eq '.msixbundle' -or $ext -eq '.appxbundle' -or $ext -eq '.msix' -or $ext -eq '.appx') {
             Add-AppxPackage -Path $FilePath -ErrorAction Stop
             Write-OK "$Nome installato con successo da pacchetto offline Appx/MSIX!"
+            Stop-AppPopups -Nome $Nome
             return $true
         } elseif ($FilePath -like "*Spotify*" -or $Nome -eq "Spotify") {
             # Spotify blocca l'installazione se avviato direttamente da Amministratore (Token elevato).
@@ -1599,6 +1647,7 @@ function Install-OfflinePackage {
             $spotLocal = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\Spotify.exe"
             if ((Test-Path $spotExe) -or (Test-Path $spotLocal) -or (Get-Process "Spotify" -ErrorAction SilentlyContinue)) {
                 Write-OK "$Nome installato con successo da cache offline USB!"
+                Stop-AppPopups -Nome $Nome
                 return $true
             } else {
                 Write-Info "Installazione offline standard di Spotify non rilevata. Procedo con fallback..."
@@ -1622,10 +1671,21 @@ function Install-OfflinePackage {
             elseif ($FilePath -like "*Intel*") { $arg = "/quiet /norestart" }
             elseif ($FilePath -like "*vc_redist*" -or $FilePath -like "*vcredist*") { $arg = "/install /quiet /norestart" }
 
-            $proc = Start-Process -FilePath $FilePath -ArgumentList $arg -WorkingDirectory $workDir -Wait -PassThru -ErrorAction Stop
+            $proc = Start-Process -FilePath $FilePath -ArgumentList $arg -WorkingDirectory $workDir -PassThru -ErrorAction Stop
+            $timer = 0
+            while (-not $proc.HasExited -and $timer -lt 90) {
+                Start-Sleep -Seconds 2
+                $timer += 2
+            }
+            if (-not $proc.HasExited) {
+                try { $proc.Kill() } catch {}
+                Write-Info "Processo di installazione offline per $Nome ha superato il tempo massimo (90s). Procedo con Winget..."
+                return $false
+            }
         }
         if ($proc -and ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010 -or $proc.ExitCode -eq 1641)) {
             Write-OK "$Nome installato con successo da cache offline USB!"
+            Stop-AppPopups -Nome $Nome
             return $true
         } else {
             $code = if ($proc) { $proc.ExitCode } else { "sconosciuto" }
@@ -1894,13 +1954,14 @@ function Invoke-PreparaUSBOffline {
             Categoria = "Base"
         },
         @{
-            Nome      = "7-Zip (64-bit)"
-            File      = "7z-x64.exe"
+            Nome      = "7-Zip (64-bit MSI)"
+            File      = "7z-x64.msi"
             Urls      = @(
-                "https://www.7-zip.org/a/7z2408-x64.exe",
-                "https://www.7-zip.org/a/7z2301-x64.exe"
+                "https://www.7-zip.org/a/7z2409-x64.msi",
+                "https://www.7-zip.org/a/7z2408-x64.msi",
+                "https://www.7-zip.org/a/7z2301-x64.msi"
             )
-            MinSizeKB = 1000
+            MinSizeKB = 1500
             Categoria = "Base"
         },
         @{
@@ -1922,12 +1983,13 @@ function Invoke-PreparaUSBOffline {
             Categoria = "Completo"
         },
         @{
-            Nome      = "Zoom Desktop Client Full"
-            File      = "ZoomInstallerFull.exe"
+            Nome      = "Zoom Desktop Client Full (MSI)"
+            File      = "ZoomInstallerFull.msi"
             Urls      = @(
-                "https://zoom.us/client/latest/ZoomInstallerFull.exe"
+                "https://zoom.us/client/latest/ZoomInstallerFull.msi",
+                "https://zoom.us/client/latest/ZoomInstaller.msi"
             )
-            MinSizeKB = 40000
+            MinSizeKB = 30000
             Categoria = "Completo"
         },
         @{
@@ -3054,6 +3116,7 @@ function Remove-IconeDoppieDesktop {
 function Add-IconaDesktop {
     param([string]$Nome, [string[]]$LnkPrima = @())
     if (-not $RunReale) { return }
+    Stop-AppPopups -Nome $Nome
     try {
         $desktop = Get-DesktopDir
 

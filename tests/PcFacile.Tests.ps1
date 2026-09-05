@@ -19,7 +19,7 @@ BeforeAll {
         'Write-OK', 'Write-Info', 'Write-Errore', 'Add-Report',
         'New-PasswordCliente', 'New-EmailCliente',
         'Test-NomeSimile', 'Test-LnkJunk', 'Test-Indietro',
-        'Get-OfflineDirs', 'Find-OfflineInstaller', 'Install-OfflinePackage', 'Select-DestinazioneUSB',
+        'Get-OfflineDirs', 'Find-OfflineInstaller', 'Install-OfflinePackage', 'Stop-AppPopups', 'Select-DestinazioneUSB',
         'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus',
         'Get-SystemHardwareDetails', 'Install-VisualCRuntime',
         'Update-PannelloStatus', 'Open-PannelloOperatore', 'Get-CredenzialiSalvatePannello',
@@ -143,13 +143,17 @@ Describe 'Find-OfflineInstaller' {
         New-Item -Path $script:tempInstDir -ItemType Directory -Force | Out-Null
         $Global:TargetDir = $script:tempTestDir
 
-        New-Item -Path (Join-Path $script:tempInstDir "ChromeStandaloneSetup64.exe") -ItemType File -Force | Out-Null
-        New-Item -Path (Join-Path $script:tempInstDir "7z2408-x64.exe") -ItemType File -Force | Out-Null
-        New-Item -Path (Join-Path $script:tempInstDir "NRnR.exe") -ItemType File -Force | Out-Null
-        New-Item -Path (Join-Path $script:tempInstDir "MCPR.exe") -ItemType File -Force | Out-Null
-        New-Item -Path (Join-Path $script:tempInstDir "vc_redist.x64.exe") -ItemType File -Force | Out-Null
-        New-Item -Path (Join-Path $script:tempInstDir "vc_redist.x86.exe") -ItemType File -Force | Out-Null
-        New-Item -Path (Join-Path $script:tempInstDir "SpotifyFullSetup.exe") -ItemType File -Force | Out-Null
+        $dummyBytes = [byte[]]::new(153600) # 150 KB
+        [System.IO.File]::WriteAllBytes((Join-Path $script:tempInstDir "ChromeStandaloneSetup64.exe"), $dummyBytes)
+        [System.IO.File]::WriteAllBytes((Join-Path $script:tempInstDir "7z2408-x64.exe"), $dummyBytes)
+        [System.IO.File]::WriteAllBytes((Join-Path $script:tempInstDir "NRnR.exe"), $dummyBytes)
+        [System.IO.File]::WriteAllBytes((Join-Path $script:tempInstDir "MCPR.exe"), $dummyBytes)
+        [System.IO.File]::WriteAllBytes((Join-Path $script:tempInstDir "vc_redist.x64.exe"), $dummyBytes)
+        [System.IO.File]::WriteAllBytes((Join-Path $script:tempInstDir "vc_redist.x86.exe"), $dummyBytes)
+        [System.IO.File]::WriteAllBytes((Join-Path $script:tempInstDir "SpotifyFullSetup.exe"), $dummyBytes)
+        
+        # File corrotto/troppo piccolo (< 100 KB)
+        [System.IO.File]::WriteAllBytes((Join-Path $script:tempInstDir "CorruptedApp_Setup.exe"), [byte[]]::new(512))
     }
 
     AfterAll {
@@ -197,6 +201,11 @@ Describe 'Find-OfflineInstaller' {
         $vc86 | Should -Match 'vc_redist\.x86\.exe$'
     }
 
+    It 'scarta file offline corrotti o vuoti (< 100 KB)' {
+        $found = Find-OfflineInstaller -WingetId 'CorruptedApp' -Nome 'CorruptedApp'
+        $found | Should -BeNullOrEmpty
+    }
+
     It 'restituisce null se il pacchetto non esiste' {
         $found = Find-OfflineInstaller -WingetId 'NonEsistente.App' -Nome 'AppFantasma'
         $found | Should -BeNullOrEmpty
@@ -208,6 +217,15 @@ Describe 'Install-OfflinePackage' {
         $Global:Test = $true
         $res = Install-OfflinePackage -FilePath "/fake/path/SpotifyFullSetup.exe" -Nome "Spotify"
         $res | Should -BeTrue
+        $Global:Test = $false
+    }
+}
+
+Describe 'Stop-AppPopups' {
+    It 'gestisce le chiamate senza errori in modalita test' {
+        $Global:Test = $true
+        { Stop-AppPopups -Nome "Spotify" } | Should -Not -Throw
+        { Stop-AppPopups -Nome "Zoom" } | Should -Not -Throw
         $Global:Test = $false
     }
 }
