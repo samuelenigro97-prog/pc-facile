@@ -106,6 +106,74 @@ CATALOGO=(
   "Discord|discord|GAMING"
 )
 
+# ---- Ricerca installer offline (.dmg / .pkg / .app) su USB o cartella locale --
+get_offline_dirs_mac() {
+  typeset -a dirs
+  local script_dir="${0:a:h}"
+  [[ -d "$script_dir/Installers/Mac" ]] && dirs+=("$script_dir/Installers/Mac")
+  [[ -d "$script_dir/Installers" ]] && dirs+=("$script_dir/Installers")
+  [[ -d "$script_dir/installers" ]] && dirs+=("$script_dir/installers")
+  for v in /Volumes/*; do
+    [[ -d "$v/Installers/Mac" ]] && dirs+=("$v/Installers/Mac")
+    [[ -d "$v/Installers" ]] && dirs+=("$v/Installers")
+    [[ -d "$v/installers" ]] && dirs+=("$v/installers")
+  done
+  print -r -- "${dirs[@]}"
+}
+
+installa_offline_app_mac() {
+  local nome="$1"
+  local dirs=($(get_offline_dirs_mac))
+  [[ ${#dirs} -eq 0 ]] && return 1
+
+  local pattern=""
+  case "$nome" in
+    *Chrome*)      pattern="*Chrome*.dmg *googlechrome*.dmg *Chrome*.pkg" ;;
+    *VLC*)         pattern="*vlc*.dmg" ;;
+    *Adobe*)       pattern="*Acro*.dmg *Acro*.pkg *Reader*.dmg" ;;
+    *Unarchiver*)  pattern="*TheUnarchiver*.dmg *unarchiver*.dmg *Unarchiver*.zip" ;;
+    *WhatsApp*)    pattern="*WhatsApp*.dmg *WhatsApp*.zip" ;;
+    *AnyDesk*)     pattern="*AnyDesk*.dmg *anydesk*.dmg" ;;
+    *TeamViewer*)  pattern="*TeamViewer*.dmg *TeamViewer*.pkg" ;;
+    *Spotify*)     pattern="*Spotify*.dmg *Spotify*.zip" ;;
+    *Firefox*)     pattern="*Firefox*.dmg" ;;
+    *LibreOffice*) pattern="*LibreOffice*.dmg" ;;
+    *GIMP*)        pattern="*gimp*.dmg" ;;
+    *Zoom*)        pattern="*zoom*.pkg *Zoom*.dmg" ;;
+    *Steam*)       pattern="*steam*.dmg" ;;
+    *Discord*)     pattern="*discord*.dmg" ;;
+  esac
+  [[ -z "$pattern" ]] && return 1
+
+  for d in "${dirs[@]}"; do
+    for p in ${(s: :)pattern}; do
+      for f in $d/$~p(N); do
+        if [[ -f "$f" ]]; then
+          info "Trovato installer offline per $nome: ${f:t}"
+          if [[ "$f" == *.dmg ]]; then
+            local mnt="/tmp/pcfacile_mnt_$$"
+            mkdir -p "$mnt"
+            if hdiutil attach -nobrowse -quiet -mountpoint "$mnt" "$f" 2>/dev/null; then
+              local app="$(find "$mnt" -maxdepth 2 -name "*.app" 2>/dev/null | head -1)"
+              if [[ -n "$app" ]]; then
+                cp -R "$app" /Applications/ 2>/dev/null
+                xattr -d -r com.apple.quarantine "/Applications/${app:t}" 2>/dev/null || true
+              fi
+              hdiutil detach "$mnt" -quiet -force 2>/dev/null || true
+              rm -rf "$mnt" 2>/dev/null
+              return 0
+            fi
+            rm -rf "$mnt" 2>/dev/null
+          elif [[ "$f" == *.pkg ]]; then
+            sudo installer -pkg "$f" -target / 2>/dev/null && return 0
+          fi
+        fi
+      done
+    done
+  done
+  return 1
+}
+
 # =============================================================================
 # HARDWARE, BATTERIA E STATO DISCO (FUNZIONI HELPER)
 # =============================================================================
@@ -683,18 +751,28 @@ print -r -- "   S) Salta"
 chiedi_sempre "Scelta profilo app (1-3 o S):"; prof="$REPLY"
 PROFILO=""
 case "$prof" in 1) PROFILO="BASE";; 2) PROFILO="UFFICIO";; 3) PROFILO="GAMING";; esac
-if [[ -n "$PROFILO" ]] && $RUN_REALE && command -v brew >/dev/null 2>&1; then
+if [[ -n "$PROFILO" ]] && $RUN_REALE; then
     for riga in "${CATALOGO[@]}"; do
         nome="${${(s:|:)riga}[1]}"; cask="${${(s:|:)riga}[2]}"; profili="${${(s:|:)riga}[3]}"
         if [[ " $profili " == *" $PROFILO "* ]]; then
             info "Installazione $nome in corso..."
-            if brew install --cask "$cask" >/dev/null 2>&1; then
-                # Rimuove flag quarantena Gatekeeper per evitare popup di conferma al primo avvio
-                xattr -d -r com.apple.quarantine "/Applications/$nome.app" 2>/dev/null || true
-                # Chiude eventuali splash screen avviati in automatico post-install
-                pkill -f -i "$nome" 2>/dev/null || true
-                ok "$nome installato."
+            # 1. Tentativo di installazione offline diretta da memoria USB (.dmg/.pkg)
+            if installa_offline_app_mac "$nome"; then
+                ok "$nome installato con successo da cache offline USB!"
                 INSTALLATE+=("$nome")
+                continue
+            fi
+
+            # 2. Fallback su Homebrew se connesso e offline non presente
+            if command -v brew >/dev/null 2>&1; then
+                if brew install --cask "$cask" >/dev/null 2>&1; then
+                    # Rimuove flag quarantena Gatekeeper per evitare popup di conferma al primo avvio
+                    xattr -d -r com.apple.quarantine "/Applications/$nome.app" 2>/dev/null || true
+                    # Chiude eventuali splash screen avviati in automatico post-install
+                    pkill -f -i "$nome" 2>/dev/null || true
+                    ok "$nome installato tramite Homebrew."
+                    INSTALLATE+=("$nome")
+                fi
             fi
         fi
     done
