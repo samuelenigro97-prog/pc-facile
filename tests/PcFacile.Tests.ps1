@@ -16,12 +16,12 @@ BeforeAll {
     $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:SetupPath, [ref]$null, [ref]$null)
 
     $script:FunzioniTestate = @(
-        'Write-OK', 'Write-Info', 'Write-Errore', 'Add-Report',
+        'Write-Titolo', 'Write-OK', 'Write-Info', 'Write-Errore', 'Add-Report',
         'New-PasswordCliente', 'New-EmailCliente',
         'Test-NomeSimile', 'Test-LnkJunk', 'Test-Indietro',
         'Get-OfflineDirs', 'Find-OfflineInstaller', 'Install-OfflinePackage', 'Stop-AppPopups', 'Select-DestinazioneUSB',
-        'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus',
-        'Get-SystemHardwareDetails', 'Install-VisualCRuntime',
+        'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus', 'Get-BitLockerRecovery',
+        'Get-SystemHardwareDetails', 'Invoke-PcFacileDiagnostics', 'Install-VisualCRuntime',
         'Update-PannelloStatus', 'Open-PannelloOperatore', 'Set-SplitScreenLayout', 'Get-CredenzialiSalvatePannello',
         'Enable-SilentElevation', 'Restore-SilentElevation',
         'New-WlanProfileXml', 'Connect-AutoWiFi', 'Save-StoreWiFiProfile'
@@ -400,3 +400,15 @@ Describe 'Set-SplitScreenLayout' {
         $Global:Test = $false
     }
 }
+
+Describe 'Invoke-PcFacileDiagnostics' {
+    It 'esegue senza errori e restituisce i dati diagnostici hardware, batteria e disco' {
+        $diag = Invoke-PcFacileDiagnostics
+        $diag | Should -Not -BeNullOrEmpty
+        $diag.Hardware | Should -Not -BeNullOrEmpty
+        $diag.Disco | Should -Not -BeNullOrEmpty
+        $diag.Batteria | Should -Not -BeNullOrEmpty
+        $diag.Windows | Should -Not -BeNullOrEmpty
+    }
+}
+

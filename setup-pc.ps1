@@ -661,6 +661,97 @@ function Get-SystemHardwareDetails {
     return [pscustomobject]$details
 }
 
+function Invoke-PcFacileDiagnostics {
+    param([switch]$MostraDettagli)
+    
+    Write-Titolo "CHECK SALUTE & DIAGNOSTICA HARDWARE PC FACILE"
+    Write-Host "Esecuzione test completi su disco SSD, batteria, licenza e driver..." -ForegroundColor Gray
+    Write-Host ""
+    
+    $hw      = Get-SystemHardwareDetails
+    $storage = Get-StorageHealthInfo
+    $battery = Get-BatteryHealthInfo
+    $winAct  = Get-WindowsActivationStatus
+    $bitlock = Get-BitLockerRecovery -Volume $env:SystemDrive
+    
+    # Controllo Driver con problemi (Device Manager Sentinel)
+    $driverProblematici = @()
+    try {
+        if (Get-Command Get-PnpDevice -ErrorAction SilentlyContinue) {
+            $driverProblematici = @(Get-PnpDevice -Status Error, Degraded -ErrorAction SilentlyContinue |
+                                    Where-Object { $_.FriendlyName -and $_.Class -ne 'LegacyDriver' })
+        }
+    } catch {}
+
+    # Controllo Spazio Disco
+    $freeGB = 0
+    try {
+        $drv = Get-PSDrive ($env:SystemDrive.TrimEnd(':')) -ErrorAction SilentlyContinue
+        if ($drv) { $freeGB = [math]::Round($drv.Free / 1GB, 1) }
+    } catch {}
+
+    # Output formattato a schermo
+    Write-Host "------------------------------------------------------------" -ForegroundColor DarkCyan
+    Write-Host " 1. DISPOSITIVO & SPECIFICHE PRINCIPALI" -ForegroundColor White
+    Write-Host "    Modello PC       : " -NoNewline; Write-Host "$($hw.Produttore) $($hw.Modello)" -ForegroundColor Cyan
+    Write-Host "    Seriale (S/N)    : " -NoNewline; Write-Host "$($hw.Seriale)" -ForegroundColor Yellow
+    Write-Host "    Processore (CPU) : $($hw.Cpu)"
+    Write-Host "    Memoria RAM      : $($hw.RamGB) GB"
+    Write-Host "    Scheda Video     : $($hw.Gpu)"
+    Write-Host "    Garanzia Legale  : Fino al $($hw.ScadenzaGaranzia) (2 Anni)"
+    Write-Host ""
+
+    Write-Host " 2. SALUTE DISCO & MEMORIA DI MASSA (SMART)" -ForegroundColor White
+    $diskColor = if ($storage.Salute -match 'Healthy|Buono|OK') { 'Green' } else { 'Red' }
+    Write-Host "    Stato Disco / SSD: " -NoNewline; Write-Host "$($storage.StatoCompleto)" -ForegroundColor $diskColor
+    if ($storage.Temperatura) { Write-Host "    Temperatura SSD  : $($storage.Temperatura)" }
+    Write-Host "    Spazio Libero C: : $freeGB GB disponibili"
+    Write-Host ""
+
+    Write-Host " 3. STATO BATTERIA & ALIMENTAZIONE" -ForegroundColor White
+    if ($battery.Presente) {
+        $battColor = if ($battery.Percentuale -ge 80) { 'Green' } elseif ($battery.Percentuale -ge 65) { 'Yellow' } else { 'Red' }
+        Write-Host "    Salute Batteria  : " -NoNewline; Write-Host "$($battery.Salute)" -ForegroundColor $battColor
+        Write-Host "    Livello Carica   : $($battery.StatoCarica)"
+    } else {
+        Write-Host "    Tipo Computer    : PC Desktop / Fisso (Senza batteria)" -ForegroundColor Gray
+    }
+    Write-Host ""
+
+    Write-Host " 4. SISTEMA OPERATIVO & SICUREZZA" -ForegroundColor White
+    $winColor = if ($winAct.Attivo) { 'Green' } else { 'Red' }
+    Write-Host "    Licenza Windows  : " -NoNewline; Write-Host "$($winAct.StatoBreve)" -ForegroundColor $winColor
+    
+    $bitColor = if ($bitlock.Esito -eq 'OK') { 'Green' } else { 'Yellow' }
+    Write-Host "    BitLocker Disco  : " -NoNewline; Write-Host "$($bitlock.Stato)" -ForegroundColor $bitColor
+    if ($bitlock.RecoveryKey) {
+        Write-Host "    Chiave BitLocker : $($bitlock.RecoveryKey)" -ForegroundColor DarkGreen
+    }
+    Write-Host ""
+
+    Write-Host " 5. CONTROLLO GESTIONE DISPOSITIVI (DRIVER)" -ForegroundColor White
+    if ($driverProblematici.Count -gt 0) {
+        Write-Host "    [ATTENZIONE] Rilevati $($driverProblematici.Count) dispositivi con errori di driver:" -ForegroundColor Red
+        foreach ($d in $driverProblematici) {
+            Write-Host "      - $($d.FriendlyName) (Classe: $($d.Class), Stato: $($d.Status))" -ForegroundColor Red
+        }
+    } else {
+        Write-Host "    [OK] Tutti i dispositivi e i driver hardware risultano operativi." -ForegroundColor Green
+    }
+    Write-Host "------------------------------------------------------------" -ForegroundColor DarkCyan
+
+    $diagObj = [ordered]@{
+        Hardware     = $hw
+        Disco        = $storage
+        SpazioLibero = $freeGB
+        Batteria     = $battery
+        Windows      = $winAct
+        BitLocker    = $bitlock
+        DriverErrori = $driverProblematici
+    }
+    return [pscustomobject]$diagObj
+}
+
 function Set-PreventSleep {
     param([bool]$Enable = $true)
     try {
@@ -6259,27 +6350,44 @@ if ($RunReale -and $Global:JobWinUpdate) {
     }
 }
 
-# RIAVVIO FINALE: sempre proposto (e sempre CHIESTO, anche nel flusso automatico).
-# Serve per applicare del tutto lingua italiana, barra, impostazioni nuovi utenti.
+# MENU DI CHIUSURA: Check Salute PC oppure Riavvio
 if ($RunReale) {
     Set-PreventSleep $false
-    $linguaOk = @($Report | Where-Object { $_.Voce -like "Lingua italiana (it-IT*" -and $_.Esito -eq "OK" }).Count -gt 0
-    Write-Titolo "ULTIMO PASSO: RIAVVIO"
-    Write-Host "Ho finito TUTTO (pulizia, lingua, app, aggiornamenti, driver, antivirus)." -ForegroundColor White
-    Write-Host "Manca solo UN riavvio, l'ultimo, per rendere effettivo il lavoro:" -ForegroundColor White
-    if ($linguaOk) {
-        Write-Host "  - fa comparire l'interfaccia in ITALIANO (menu, barra, schermata di accesso)" -ForegroundColor White
-    }
-    Write-Host "  - applica barra, regione e impostazioni per i nuovi utenti" -ForegroundColor White
-    Write-Host "Dopo questo riavvio il PC e' PRONTO da consegnare: non serve riaprire PC Facile." -ForegroundColor White
+    Write-Titolo "COMPLETAMENTO PC FACILE"
+    Write-Host "Configurazione e ottimizzazione completate con successo!" -ForegroundColor Green
     Write-Host ""
-    $riavvia = Attendi-Risposta "Riavvio ADESSO il PC? (S = riavvia ora / N = riavvio io dopo)"
-    if ($riavvia -match "^[Ss]") {
-        Write-Info "Riavvio in corso..."
-        Restart-Computer -Force
-    } else {
-        Write-Errore "RICORDATI di RIAVVIARE il PC prima di consegnarlo: senza riavvio la lingua e alcune impostazioni non si vedono."
-    }
+    
+    $linguaOk = @($Report | Where-Object { $_.Voce -like "Lingua italiana (it-IT*" -and $_.Esito -eq "OK" }).Count -gt 0
+    
+    do {
+        Write-Host "Scegli come procedere:" -ForegroundColor White
+        Write-Host "  1) Esegui Check Completo Salute PC (SSD SMART, Batteria, Licenza, Driver, BitLocker)" -ForegroundColor Cyan
+        Write-Host "  2) Riavvia il PC adesso (Consigliato per rendere attive tutte le modifiche)" -ForegroundColor Green
+        Write-Host "  3) Esci senza riavviare (Riavvio manuale in seguito)" -ForegroundColor Yellow
+        Write-Host ""
+
+        $sceltaFine = Attendi-Risposta "Scelta (1-3)"
+        switch ($sceltaFine) {
+            "1" {
+                Invoke-PcFacileDiagnostics -MostraDettagli | Out-Null
+                Write-Host ""
+            }
+            "2" {
+                Write-Info "Riavvio del PC in corso..."
+                Restart-Computer -Force
+                break
+            }
+            "3" {
+                if ($linguaOk) {
+                    Write-Info "Ricordati di riavviare prima di consegnare il PC per applicare lingua e nuove impostazioni."
+                }
+                break
+            }
+            default {
+                Write-Info "Opzione non valida. Inserisci 1, 2 o 3."
+            }
+        }
+    } while ($sceltaFine -ne "2" -and $sceltaFine -ne "3")
 }
 
 Write-Host ""
@@ -6287,3 +6395,4 @@ Beep-Completato   # melodia "tutto finito" (utile se ti sei allontanato)
 Write-Host "${AON}Buon lavoro!$AOFF" -ForegroundColor $THEME_COL
 # Niente Pausa qui: l'unico "premi un tasto" e' quello finale del launcher .bat
 # ("Operazione terminata"), cosi' non si preme INVIO due volte.
+
