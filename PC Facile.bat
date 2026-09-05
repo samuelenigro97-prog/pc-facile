@@ -8,17 +8,23 @@ REM  - Parte SEMPRE con ExecutionPolicy Bypass (niente errori di blocco)
 REM  - Scarica l'ultima versione da GitHub con fallback offline su USB
 REM ============================================================
 
-REM --- 1. Elevazione immediata ad amministratore (1 solo popup UAC) ---
+REM --- 1. Elevazione immediata ad amministratore (UN SOLO prompt UAC) ---
+if /i "%~1"=="elevated" (
+    shift
+    goto :elevato
+)
+if /i "%~1"=="run" (
+    shift
+    goto :elevato
+)
+
 net session >nul 2>&1
 if %errorlevel% neq 0 (
     powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -ArgumentList 'elevated %*' -Verb RunAs"
     (goto) 2>nul & exit
 )
 
-REM Consuma l'argomento sentinel se rilanciato da elevazione
-if /i "%~1"=="elevated" shift
-if /i "%~1"=="run" shift
-
+:elevato
 set "USER_ARGS=%1 %2 %3 %4 %5 %6 %7 %8 %9"
 set "USER_ARGS=%USER_ARGS:   = %"
 set "USER_ARGS=%USER_ARGS:  = %"
