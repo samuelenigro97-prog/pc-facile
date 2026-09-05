@@ -996,7 +996,7 @@ function Find-OfflineInstaller {
         "Zoom.Zoom"                        = @("*ZoomInstaller*.exe", "*Zoom*.msi", "*Zoom*.exe")
         "TheDocumentFoundation.LibreOffice"= @("*LibreOffice*x86-64.msi", "*LibreOffice*.msi", "*LibreOffice*.exe")
         "Apache.OpenOffice"                = @("*Apache*OpenOffice*.exe", "*OpenOffice*.exe", "*OpenOffice*.msi")
-        "Spotify.Spotify"                  = @("*Spotify*Setup*.exe", "*Spotify*.exe", "*Spotify*.msixbundle")
+        "Spotify.Spotify"                  = @("*Spotify*Full*Setup*.exe", "*Spotify*Setup*.exe", "*Spotify*.exe", "*Spotify*.msixbundle")
         "9NKSQGP7F2NH"                     = @("*WhatsApp*.exe", "*WhatsApp*.msixbundle", "*WhatsApp*.appxbundle")
         "GIMP.GIMP"                        = @("*gimp*setup*.exe", "*gimp*.exe", "*gimp*.msi")
         "Valve.Steam"                      = @("*SteamSetup*.exe", "*Steam*.exe")
@@ -1025,7 +1025,7 @@ function Find-OfflineInstaller {
         "Zoom"                             = @("*ZoomInstaller*.exe", "*Zoom*.msi", "*Zoom*.exe")
         "LibreOffice"                      = @("*LibreOffice*x86-64.msi", "*LibreOffice*.msi", "*LibreOffice*.exe")
         "OpenOffice"                       = @("*Apache*OpenOffice*.exe", "*OpenOffice*.exe", "*OpenOffice*.msi")
-        "Spotify"                          = @("*Spotify*Setup*.exe", "*Spotify*.exe", "*Spotify*.msixbundle")
+        "Spotify"                          = @("*Spotify*Full*Setup*.exe", "*Spotify*Setup*.exe", "*Spotify*.exe", "*Spotify*.msixbundle")
         "WhatsApp"                         = @("*WhatsApp*.exe", "*WhatsApp*.msixbundle", "*WhatsApp*.appxbundle")
         "GIMP"                             = @("*gimp*setup*.exe", "*gimp*.exe", "*gimp*.msi")
         "Steam"                            = @("*SteamSetup*.exe", "*Steam*.exe")
@@ -1082,6 +1082,46 @@ function Install-OfflinePackage {
             Add-AppxPackage -Path $FilePath -ErrorAction Stop
             Write-OK "$Nome installato con successo da pacchetto offline Appx/MSIX!"
             return $true
+        } elseif ($FilePath -like "*Spotify*" -or $Nome -eq "Spotify") {
+            # Spotify blocca l'installazione se avviato direttamente da Amministratore (Token elevato).
+            # Lo avviamo nel contesto utente standard (Medium Integrity) tramite Scheduled Task limitata o runas.
+            $taskName = "PCFacile_Spotify_$([Math]::Abs((Get-Random) % 10000))"
+            try {
+                if (Get-Command New-ScheduledTaskAction -ErrorAction SilentlyContinue) {
+                    $action = New-ScheduledTaskAction -Execute $FilePath -Argument "/silent"
+                    $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+                    Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Force -ErrorAction Stop | Out-Null
+                    Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
+                    
+                    $t = 0
+                    Start-Sleep -Seconds 3
+                    while ((Get-Process -Name "*SpotifySetup*" -ErrorAction SilentlyContinue) -and $t -lt 60) {
+                        Start-Sleep -Seconds 2
+                        $t += 2
+                    }
+                    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+                } else {
+                    & schtasks.exe /create /tn $taskName /tr "`"$FilePath`" /silent" /sc ONCE /st 00:00 /ru "$env:USERNAME" /rl LIMITED /f 2>$null | Out-Null
+                    & schtasks.exe /run /tn $taskName 2>$null | Out-Null
+                    Start-Sleep -Seconds 8
+                    & schtasks.exe /delete /tn $taskName /f 2>$null | Out-Null
+                }
+            } catch {
+                try {
+                    Start-Process -FilePath "runas.exe" -ArgumentList "/trustlevel:0x20000 `"`"$FilePath`" /silent`"" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
+                } catch {}
+            }
+
+            # Verifica se Spotify e' installato nel profilo utente
+            $spotExe = Join-Path $env:APPDATA "Spotify\Spotify.exe"
+            $spotLocal = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\Spotify.exe"
+            if ((Test-Path $spotExe) -or (Test-Path $spotLocal) -or (Get-Process "Spotify" -ErrorAction SilentlyContinue)) {
+                Write-OK "$Nome installato con successo da cache offline USB!"
+                return $true
+            } else {
+                Write-Info "Installazione offline standard di Spotify non rilevata. Procedo con fallback..."
+                return $false
+            }
         } else {
             $arg = "/S"
             if ($FilePath -like "*Chrome*") { $arg = "/silent /install" }
@@ -1095,7 +1135,6 @@ function Install-OfflinePackage {
             elseif ($FilePath -like "*Zoom*") { $arg = "/silent" }
             elseif ($FilePath -like "*LibreOffice*" -or $FilePath -like "*OpenOffice*") { $arg = "/S" }
             elseif ($FilePath -like "*aimp*") { $arg = "/AUTO" }
-            elseif ($FilePath -like "*Spotify*") { $arg = "/silent" }
             elseif ($FilePath -like "*gimp*") { $arg = "/VERYSILENT /NORESTART /ALLUSERS" }
             elseif ($FilePath -like "*Steam*") { $arg = "/S" }
             elseif ($FilePath -like "*Intel*") { $arg = "/quiet /norestart" }
@@ -1462,11 +1501,12 @@ function Invoke-PreparaUSBOffline {
         },
         @{
             Nome      = "Spotify"
-            File      = "SpotifySetup.exe"
+            File      = "SpotifyFullSetup.exe"
             Urls      = @(
+                "https://download.scdn.co/SpotifyFullSetup.exe",
                 "https://download.scdn.co/SpotifySetup.exe"
             )
-            MinSizeKB = 1000
+            MinSizeKB = 20000
             Categoria = "Completo"
         },
         @{
@@ -2757,6 +2797,28 @@ function Installa-Pacchetto {
         Add-Report "$Nome (installazione)" "OK"
         Add-IconaDesktop -Nome $Nome -LnkPrima $lnkPrima
         return
+    }
+
+    # Fallback speciale per Spotify: se l'installer Win32 fallisce per elevazione token admin,
+    # proviamo l'installazione del pacchetto Store MSIX ufficiale (ID 9NCBCSZSJRSB)
+    if (($Nome -eq "Spotify" -or $WingetId -eq "Spotify.Spotify") -and -not $Global:UltimaInstallOk) {
+        Write-Info "Tentativo di installazione Spotify via Microsoft Store (MSIX)..."
+        $storeCode = Invoke-WingetConBarra -Nome "Spotify (Microsoft Store)" -WingetArgs @('install', '--exact', '--id', '9NCBCSZSJRSB', '--source', 'msstore', '--silent', '--accept-package-agreements', '--accept-source-agreements')
+        if ($successo -contains $storeCode -or $giaInstallato -contains $storeCode) {
+            Write-OK "Spotify installato con successo da Microsoft Store."
+            Add-Report "Spotify (installazione)" "OK"
+            Add-IconaDesktop -Nome "Spotify" -LnkPrima $lnkPrima
+            $Global:UltimaInstallOk = $true
+            return
+        }
+        winget list --exact --id '9NCBCSZSJRSB' --accept-source-agreements 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-OK "Spotify risulta installato da Store (verificato)."
+            Add-Report "Spotify (installazione)" "OK"
+            Add-IconaDesktop -Nome "Spotify" -LnkPrima $lnkPrima
+            $Global:UltimaInstallOk = $true
+            return
+        }
     }
 
     Write-Errore "$Nome NON installato dopo $tentativiFatti tentativi."

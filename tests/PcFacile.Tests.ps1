@@ -19,7 +19,7 @@ BeforeAll {
         'Write-OK', 'Write-Info', 'Write-Errore', 'Add-Report',
         'New-PasswordCliente', 'New-EmailCliente',
         'Test-NomeSimile', 'Test-LnkJunk', 'Test-Indietro',
-        'Get-OfflineDirs', 'Find-OfflineInstaller', 'Select-DestinazioneUSB',
+        'Get-OfflineDirs', 'Find-OfflineInstaller', 'Install-OfflinePackage', 'Select-DestinazioneUSB',
         'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus',
         'Get-SystemHardwareDetails', 'Install-VisualCRuntime',
         'Open-PannelloOperatore'
@@ -148,6 +148,7 @@ Describe 'Find-OfflineInstaller' {
         New-Item -Path (Join-Path $script:tempInstDir "MCPR.exe") -ItemType File -Force | Out-Null
         New-Item -Path (Join-Path $script:tempInstDir "vc_redist.x64.exe") -ItemType File -Force | Out-Null
         New-Item -Path (Join-Path $script:tempInstDir "vc_redist.x86.exe") -ItemType File -Force | Out-Null
+        New-Item -Path (Join-Path $script:tempInstDir "SpotifyFullSetup.exe") -ItemType File -Force | Out-Null
     }
 
     AfterAll {
@@ -167,6 +168,12 @@ Describe 'Find-OfflineInstaller' {
         $found = Find-OfflineInstaller -WingetId '7zip.7zip' -Nome '7-Zip'
         $found | Should -Not -BeNullOrEmpty
         $found | Should -Match '7z2408-x64\.exe$'
+    }
+
+    It 'trova Spotify per Nome o WingetId' {
+        $found = Find-OfflineInstaller -WingetId 'Spotify.Spotify' -Nome 'Spotify'
+        $found | Should -Not -BeNullOrEmpty
+        $found | Should -Match 'SpotifyFullSetup\.exe$'
     }
 
     It 'trova i tool rimozione NRnR e MCPR' {
@@ -192,6 +199,15 @@ Describe 'Find-OfflineInstaller' {
     It 'restituisce null se il pacchetto non esiste' {
         $found = Find-OfflineInstaller -WingetId 'NonEsistente.App' -Nome 'AppFantasma'
         $found | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Install-OfflinePackage' {
+    It 'completa con successo in modalita simulata/test' {
+        $Global:Test = $true
+        $res = Install-OfflinePackage -FilePath "/fake/path/SpotifyFullSetup.exe" -Nome "Spotify"
+        $res | Should -BeTrue
+        $Global:Test = $false
     }
 }
 
