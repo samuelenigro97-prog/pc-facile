@@ -677,7 +677,6 @@ function Invoke-PreparaUSBOffline {
             Nome      = "Google Chrome (64-bit Standalone)"
             File      = "ChromeStandaloneSetup64.exe"
             Urls      = @(
-                "https://dl.google.com/chrome/install/standalone/service/ChromeStandaloneSetup64.exe",
                 "https://dl.google.com/tag/s/appguid%3D%7B8A69D345-D564-463C-AFF5-1A09E5037969%7D%26iid%3D%7B00000000-0000-0000-0000-000000000000%7D%26lang%3Dit%26browser%3D4%26usagestats%3D0%26appname%3DGoogle%2520Chrome%26needsadmin%3Dprefers%26ap%3Dx64-stable-statsdef_1/chrome/install/ChromeStandaloneSetup64.exe"
             )
             MinSizeKB = 50000
@@ -696,9 +695,8 @@ function Invoke-PreparaUSBOffline {
             Nome      = "VLC Media Player (64-bit)"
             File      = "vlc-win64.exe"
             Urls      = @(
-                "https://get.videolan.org/vlc/last/win64/vlc-3.0.21-win64.exe",
-                "https://download.videolan.org/pub/videolan/vlc/3.0.21/win64/vlc-3.0.21-win64.exe",
-                "https://get.videolan.org/vlc/3.0.20/win64/vlc-3.0.20-win64.exe"
+                "https://download.videolan.org/pub/videolan/vlc/last/win64/vlc-3.0.21-win64.exe",
+                "https://get.videolan.org/vlc/3.0.21/win64/vlc-3.0.21-win64.exe"
             )
             MinSizeKB = 35000
             Categoria = "Base"
@@ -707,7 +705,8 @@ function Invoke-PreparaUSBOffline {
             Nome      = "Adobe Acrobat Reader (64-bit Italiano)"
             File      = "AcroRdrDCx64_it_IT.exe"
             Urls      = @(
-                "https://ardownload2.adobe.com/pub/adobe/reader/win/AcrobatDC/2400220965/AcroRdrDCx642400220965_it_IT.exe"
+                "https://ardownload2.adobe.com/pub/adobe/acrobat/win/AcrobatDC/2500120744/AcroRdrDCx642500120744_MUI.exe",
+                "https://ardownload2.adobe.com/pub/adobe/acrobat/win/AcrobatDC/2400420243/AcroRdrDCx642400420243_MUI.exe"
             )
             MinSizeKB = 150000
             Categoria = "Base"
@@ -753,7 +752,9 @@ function Invoke-PreparaUSBOffline {
             Nome      = "AIMP Audio Player"
             File      = "aimp.exe"
             Urls      = @(
-                "https://aimp.ru/files/aimp_latest.exe"
+                "https://aimp.ru/?do=download.file&id=3",
+                "https://aimp.ru/files/desktop/builds/aimp_5.40.2726_w64.exe",
+                "https://aimp.ru/?do=download.file&id=4"
             )
             MinSizeKB = 10000
             Categoria = "Completo"
@@ -762,8 +763,9 @@ function Invoke-PreparaUSBOffline {
             Nome      = "LibreOffice (64-bit Italiano)"
             File      = "LibreOffice_Win_x86-64.msi"
             Urls      = @(
-                "https://download.documentfoundation.org/libreoffice/stable/24.8.0/win/x86_64/LibreOffice_24.8.0_Win_x86-64.msi",
-                "https://download.documentfoundation.org/libreoffice/stable/24.2.5/win/x86_64/LibreOffice_24.2.5_Win_x86-64.msi"
+                "https://download.documentfoundation.org/libreoffice/stable/26.8.0/win/x86_64/LibreOffice_26.8.0_Win_x86-64.msi",
+                "https://download.documentfoundation.org/libreoffice/stable/26.2.6/win/x86_64/LibreOffice_26.2.6_Win_x86-64.msi",
+                "https://download.documentfoundation.org/libreoffice/stable/25.8.7/win/x86_64/LibreOffice_25.8.7_Win_x86-64.msi"
             )
             MinSizeKB = 250000
             Categoria = "Completo"
@@ -791,7 +793,8 @@ function Invoke-PreparaUSBOffline {
             Nome      = "Sumatra PDF (64-bit)"
             File      = "SumatraPDF-install.exe"
             Urls      = @(
-                "https://www.sumatrapdfreader.org/dl/SumatraPDF-3.5.2-64-install.exe"
+                "https://www.sumatrapdfreader.org/dl/rel/3.6.1/SumatraPDF-3.6.1-64-install.exe",
+                "https://files2.sumatrapdfreader.org/software/sumatrapdf/rel/3.6.1/SumatraPDF-3.6.1-64-install.exe"
             )
             MinSizeKB = 7000
             Categoria = "Completo"
@@ -836,7 +839,8 @@ function Invoke-PreparaUSBOffline {
             Nome      = "qBittorrent (64-bit)"
             File      = "qbittorrent_setup.exe"
             Urls      = @(
-                "https://download.qbittorrent.org/qbittorrent_5.0.0_x64_setup.exe"
+                "https://downloads.sourceforge.net/project/qbittorrent/qbittorrent-win32/qbittorrent-5.0.0/qbittorrent_5.0.0_x64_setup.exe",
+                "https://sourceforge.net/projects/qbittorrent/files/latest/download"
             )
             MinSizeKB = 30000
             Categoria = "Completo"
@@ -894,25 +898,29 @@ function Invoke-PreparaUSBOffline {
             Write-Info "Download da: $url"
             try {
                 $wc = New-Object System.Net.WebClient
-                $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
                 $wc.DownloadFile($url, $destPath)
                 $wc.Dispose()
-
-                if (Test-Path $destPath) {
-                    $len = (Get-Item $destPath).Length
-                    if (($len / 1KB) -ge $pkg.MinSizeKB) {
-                        $mb = [Math]::Round($len / 1MB, 1)
-                        Write-OK "Scaricato con successo: $($pkg.File) ($mb MB)"
-                        $ok = $true
-                        $riusciti++
-                        break
-                    } else {
-                        Write-Info "File scaricato troppo piccolo ($len bytes), riprovo..."
-                        Remove-Item $destPath -Force -ErrorAction SilentlyContinue
-                    }
-                }
             } catch {
-                Write-Info "Errore da questa sorgente ($($_.Exception.Message)), provo alternativa..."
+                try {
+                    Invoke-WebRequest -Uri $url -OutFile $destPath -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -UseBasicParsing -ErrorAction Stop
+                } catch {
+                    Write-Info "Errore da questa sorgente ($($_.Exception.Message)), provo alternativa..."
+                }
+            }
+
+            if (Test-Path $destPath) {
+                $len = (Get-Item $destPath).Length
+                if (($len / 1KB) -ge $pkg.MinSizeKB) {
+                    $mb = [Math]::Round($len / 1MB, 1)
+                    Write-OK "Scaricato con successo: $($pkg.File) ($mb MB)"
+                    $ok = $true
+                    $riusciti++
+                    break
+                } else {
+                    Write-Info "File scaricato troppo piccolo ($len bytes), riprovo..."
+                    Remove-Item $destPath -Force -ErrorAction SilentlyContinue
+                }
             }
         }
 
