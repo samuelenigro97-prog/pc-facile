@@ -1,0 +1,5 @@
+# Configurazione Wi-Fi Negozio Unieuro
+# Connessione automatica al Wi-Fi all'inserimento della chiavetta USB
+
+SSID=UNIEURO_EXPO
+PASSWORD=W1f1@Un13uro
