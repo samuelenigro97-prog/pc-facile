@@ -20,8 +20,8 @@ if /i "%~1"=="run" (
 
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -ArgumentList 'elevated %*' -Verb RunAs"
-    (goto) 2>nul & exit
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -ArgumentList 'elevated %*' -Verb RunAs" >nul 2>&1
+    exit /b 0
 )
 
 :elevato
