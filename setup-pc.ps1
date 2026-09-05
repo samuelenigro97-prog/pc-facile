@@ -2838,27 +2838,27 @@ function Invoke-MigrazioneDati {
 }
 
 # =============================================================================
-# MODULO AGENTE IA & AUTOMAZIONE BROWSER
+# MODULO AGENTE IA & AUTOMAZIONE BROWSER (PROTON MAIL & SERVIZI)
 # =============================================================================
 function Invoke-AiAgentAutoSignup {
     [CmdletBinding()]
     param(
         [string]$NomeCliente = "Utente",
-        [string]$Servizio = "TUTTI",
+        [string]$Servizio = "Proton",
         [switch]$Test
     )
 
-    Write-Titolo "AGENTE IA - CREAZIONE ACCOUNT & ATTIVAZIONI"
-    Write-Host "Automazione intelligente per la compilazione moduli e registrazione account." -ForegroundColor White
-    Write-Host "L'agente si ferma e suona un avviso solo quando rileva codici OTP/SMS/Card." -ForegroundColor Yellow
+    Write-Titolo "AGENTE IA - CREAZIONE ACCOUNT PROTON MAIL & ATTIVAZIONI"
+    Write-Host "Automazione intelligente per la registrazione rapida account Proton Mail." -ForegroundColor White
+    Write-Host "L'agente apre il form e suona un avviso solo quando rileva codici OTP/SMS/Card." -ForegroundColor Yellow
     Write-Host ""
 
     if ($Test) {
-        Write-OK "TEST: Agente IA simulato con successo su tutti i servizi."
-        Add-Report "Agente IA Creazione Account" "OK"
+        Write-OK "TEST: Agente IA simulato con successo su Proton Mail e servizi."
+        Add-Report "Agente IA (Proton Mail)" "OK"
         return [PSCustomObject]@{
             Stato = "Completato"
-            ServiziTestati = @("Microsoft", "Google", "Office365", "Antivirus")
+            ServiziTestati = @("Proton", "Microsoft", "Google", "Office365", "Antivirus")
         }
     }
 
@@ -2879,81 +2879,42 @@ function Invoke-AiAgentAutoSignup {
         Write-Info "OpenCode non rilevato: uso il motore integrato di assistenza browser Unieuro."
     }
 
-    $emailGenerata = New-EmailCliente -Base $NomeCliente -Dominio "outlook.it"
-    $passGenerata  = New-PasswordCliente -Base $NomeCliente
+    $emailProton  = New-EmailCliente -Base $NomeCliente -Dominio "proton.me"
+    $passGenerata = New-PasswordCliente -Base $NomeCliente
 
-    $servizi = @(
-        @{ Id = "1"; Nome = "Account Microsoft / Outlook"; Url = "https://account.microsoft.com"; Field = $emailGenerata },
-        @{ Id = "2"; Nome = "Account Google / Gmail"; Url = "https://accounts.google.com/signup"; Field = (New-EmailCliente -Base $NomeCliente -Dominio "gmail.com") },
-        @{ Id = "3"; Nome = "Account Proton Mail"; Url = "https://account.proton.me/signup"; Field = (New-EmailCliente -Base $NomeCliente -Dominio "proton.me") },
-        @{ Id = "4"; Nome = "Account Libero Mail"; Url = "https://registrazione.libero.it"; Field = (New-EmailCliente -Base $NomeCliente -Dominio "libero.it") },
-        @{ Id = "5"; Nome = "Riscatto Licenza Microsoft 365 / Office"; Url = "https://microsoft365.com/setup"; Field = $emailGenerata },
-        @{ Id = "6"; Nome = "Attivazione Card McAfee"; Url = "https://www.mcafee.com/activate"; Field = $emailGenerata },
-        @{ Id = "7"; Nome = "Attivazione Card Norton"; Url = "https://www.norton.com/setup"; Field = $emailGenerata },
-        @{ Id = "8"; Nome = "Unieuro Cyber Protection"; Url = "https://unieuro-cyber-protection.covercare.it"; Field = $NomeCliente }
-    )
-
-    Write-Host "Servizi disponibili per compilazione automatica:" -ForegroundColor White
-    foreach ($s in $servizi) {
-        Write-Host "  [$($s.Id)] $($s.Nome)" -ForegroundColor Cyan
-    }
-    Write-Host "  [A] Tutti i servizi in sequenza" -ForegroundColor Green
-    Write-Host "  [Q] Torna al menu principale" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Titolo "CREAZIONE ACCOUNT PROTON MAIL (RAPIDO)"
+    Write-Host "Credenziali generate per il cliente ($NomeCliente):" -ForegroundColor White
+    Write-Host "  - Email/Account : $emailProton" -ForegroundColor Cyan
+    Write-Host "  - Password      : $passGenerata" -ForegroundColor Yellow
     Write-Host ""
 
-    $sceltaServ = (Attendi-Risposta "Scegli servizio da automatizzare [1-8 / A / Q] (default = 1)").Trim().ToUpper()
-    if ($sceltaServ -eq "Q") { return }
+    try { Set-Clipboard -Value "$emailProton" -ErrorAction SilentlyContinue } catch {}
+    Write-Info "Email $emailProton copiata negli appunti (Ctrl+V per incollare)."
+    Write-Info "Apertura modulo di registrazione Proton Mail..."
+    Start-Process "https://account.proton.me/signup"
 
-    $daEseguire = @()
-    if ($sceltaServ -eq "A" -or $sceltaServ -eq "ALL" -or [string]::IsNullOrWhiteSpace($sceltaServ)) {
-        if ($sceltaServ -eq "A" -or $sceltaServ -eq "ALL") {
-            $daEseguire = $servizi
-        } else {
-            $daEseguire = @($servizi[0])
-        }
+    Beep-Attesa
+    Write-Host ""
+    Write-Host "============================================================" -ForegroundColor DarkYellow
+    Write-Host " [AGENTE IA IN ATTESA PROTON MAIL]" -ForegroundColor Green
+    Write-Host " 1. Incolla l'indirizzo email e la password nel modulo aperto a lato." -ForegroundColor White
+    Write-Host " 2. Se Proton Mail richiede una verifica (SMS / CAPTCHA / Email alternativa):" -ForegroundColor Yellow
+    Write-Host "    -> Fai inserire il codice al cliente." -ForegroundColor Yellow
+    Write-Host "============================================================" -ForegroundColor DarkYellow
+    Write-Host ""
+
+    $resp = Attendi-Risposta "Premi INVIO appena l'account Proton Mail e' creato per proseguire con il setup (o 'S' per saltare)"
+    if ($resp -match "^[Ss]") {
+        Write-Info "Creazione account Proton Mail saltata dall'operatore."
+        Add-Report "Account Proton Mail (Agente IA)" "SALTATO"
     } else {
-        $trovato = $servizi | Where-Object { $_.Id -eq $sceltaServ }
-        if ($trovato) { $daEseguire = @($trovato) } else { $daEseguire = @($servizi[0]) }
-    }
-
-    foreach ($srv in $daEseguire) {
-        Write-Host ""
-        Write-Titolo "AGENTE IA: $($srv.Nome.ToUpper())"
-        Write-Host "Credenziali generate per il cliente ($NomeCliente):" -ForegroundColor White
-        Write-Host "  - Email/Account : $($srv.Field)" -ForegroundColor Cyan
-        Write-Host "  - Password      : $passGenerata" -ForegroundColor Yellow
-        Write-Host ""
-
-        # Copia email/dato negli appunti per agevolare l'incolla immediato
-        try { Set-Clipboard -Value "$($srv.Field)" -ErrorAction SilentlyContinue } catch {}
-        Write-Info "Email/Valore copiato negli appunti per incollare subito (Ctrl+V)."
-        
-        Write-Info "Apertura portale $($srv.Nome)..."
-        Start-Process "$($srv.Url)"
-        
-        # Segnale sonoro e avviso per codice OTP
-        Beep-Attesa
-        Write-Host ""
-        Write-Host "============================================================" -ForegroundColor DarkYellow
-        Write-Host " [AGENTE IA IN ATTESA]" -ForegroundColor Green
-        Write-Host " Compila il modulo nel browser aperto a lato." -ForegroundColor White
-        Write-Host " Quando il sito richiede il CODICE (SMS / OTP / PIN Card / CAPTCHA):" -ForegroundColor Yellow
-        Write-Host " -> Inserisci il codice fornito dal cliente." -ForegroundColor Yellow
-        Write-Host "============================================================" -ForegroundColor DarkYellow
-        Write-Host ""
-
-        $resp = Attendi-Risposta "Premi INVIO appena l'attivazione/OTP e' completata (oppure digita 'S' per saltare)"
-        if ($resp -match "^[Ss]") {
-            Write-Info "Servizio $($srv.Nome) saltato dall'operatore."
-            Add-Report "$($srv.Nome) (Agente IA)" "SALTATO"
-        } else {
-            Write-OK "Registrazione/attivazione completata per: $($srv.Nome)"
-            Add-Report "$($srv.Nome) (Agente IA)" "OK"
-        }
+        Write-OK "Account Proton Mail configurato con successo per: $emailProton"
+        Add-Report "Account Proton Mail ($emailProton)" "OK"
     }
 
     Beep-Completato
-    Write-OK "Sessione Agente IA completata con successo!"
+    Write-OK "Account pronto: il setup parallelo delle applicazioni e ottimizzazioni prosegue ora a pieno ritmo!"
 }
 
 # =============================================================================
@@ -2976,11 +2937,9 @@ $Global:ModoEspresso = $true
 $Espresso = $true
 
 if ($AgenteIA) {
-    Invoke-AiAgentAutoSignup -NomeCliente $NomeCliente -Test:$Test
-    if (-not $Test) {
-        $sceltaCont = Attendi-Risposta "Vuoi proseguire anche con l'ottimizzazione e i programmi del PC? (S/N, default = S)"
-        if ($sceltaCont -match "^[Nn]") { return }
-    }
+    Invoke-AiAgentAutoSignup -NomeCliente $NomeCliente -Servizio "Proton" -Test:$Test
+    $Espresso = $true
+    $Global:ModoEspresso = $true
 }
 
 if ($Menu) {
@@ -2997,26 +2956,21 @@ if ($Menu) {
     Write-Host ""
     Write-Host "  [1] MODALITA' SEMI-AUTOMATICA (Standard Unieuro - Consigliata)" -ForegroundColor Green
     Write-Host "      -> Setup parallelo a massima velocita' + Pannello Operatore 50% con portali 1-Click" -ForegroundColor DarkGray
-    Write-Host "  [2] MODALITA' AUTOMATICA CON AGENTE IA (OpenCode / Browser Automation)" -ForegroundColor Cyan
-    Write-Host "      -> Compilazione guidata account con pausa e avviso sonoro solo su codici OTP/SMS" -ForegroundColor DarkGray
+    Write-Host "  [2] MODALITA' AUTOMATICA CON AGENTE IA (Proton Mail Rapido + Setup Completo)" -ForegroundColor Cyan
+    Write-Host "      -> Creazione rapida Proton Mail + installazione app e ottimizzazioni in parallelo" -ForegroundColor DarkGray
     Write-Host "  [3] PREPARA USB OFFLINE (Scarica tutti i programmi sulla chiavetta)" -ForegroundColor Yellow
-    Write-Host "  [4] TRASFERIMENTO DATI (Migrazione da vecchio PC o disco esterno)" -ForegroundColor Magenta
-    Write-Host "  [5] CHECK SALUTE & DIAGNOSTICA HARDWARE (Report SSD SMART, Batteria, Driver)" -ForegroundColor Blue
+    Write-Host "  [4] CHECK SALUTE & DIAGNOSTICA HARDWARE (Report SSD SMART, Batteria, Driver)" -ForegroundColor Blue
     Write-Host "  [Q] Esci" -ForegroundColor DarkGray
     Write-Host ""
-    $sceltaMenu = (Attendi-Risposta "Scegli opzione [1-5 / Q] (default = 1)").Trim().ToUpper()
+    $sceltaMenu = (Attendi-Risposta "Scegli opzione [1-4 / Q] (default = 1)").Trim().ToUpper()
     switch ($sceltaMenu) {
         "2" {
-            Invoke-AiAgentAutoSignup -NomeCliente $NomeCliente -Test:$Test
-            $sceltaCont = Attendi-Risposta "Vuoi proseguire anche con l'ottimizzazione e i programmi del PC? (S/N, default = S)"
-            if ($sceltaCont -match "^[Nn]") { return }
+            Invoke-AiAgentAutoSignup -NomeCliente $NomeCliente -Servizio "Proton" -Test:$Test
             $Espresso = $true; $Global:ModoEspresso = $true
         }
         "3" { $PreparaUSB = $true; $Global:ModoEspresso = $false }
         "P" { $PreparaUSB = $true; $Global:ModoEspresso = $false }
-        "4" { $Migrazione = $true; $Global:ModoEspresso = $false }
-        "B" { $Migrazione = $true; $Global:ModoEspresso = $false }
-        "5" { Invoke-PcFacileDiagnostics -MostraDettagli; return }
+        "4" { Invoke-PcFacileDiagnostics -MostraDettagli; return }
         "D" { Invoke-PcFacileDiagnostics -MostraDettagli; return }
         "Q" { Write-Host "Uscita."; return }
         default { $Espresso = $true; $Global:ModoEspresso = $true }

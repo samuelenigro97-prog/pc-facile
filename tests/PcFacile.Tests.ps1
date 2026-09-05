@@ -418,7 +418,7 @@ Describe 'Invoke-AiAgentAutoSignup' {
         $res = Invoke-AiAgentAutoSignup -NomeCliente 'Mario Rossi' -Test
         $res | Should -Not -BeNullOrEmpty
         $res.Stato | Should -BeExactly 'Completato'
-        $res.ServiziTestati | Should -Contain 'Microsoft'
+        $res.ServiziTestati | Should -Contain 'Proton'
     }
 }
 
