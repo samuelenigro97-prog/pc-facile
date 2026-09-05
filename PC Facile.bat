@@ -51,6 +51,13 @@ reg add "HKCU\Console" /v ScreenColors /t REG_DWORD /d 7 /f >nul 2>&1
 REM Sblocca automaticamente tutti i file della chiavetta ed elimina gli avvisi SmartScreen / Apri file
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:SEE_MASK_NOZONECHECKS=1; Get-ChildItem -Path '%~dp0' -Recurse -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue" >nul 2>&1
 
+REM --- Auto-connessione Wi-Fi Negozio da chiavetta USB (se non ancora connesso a Internet) ---
+ping -n 1 8.8.8.8 >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Connessione a Internet assente: verifico configurazione Wi-Fi su chiavetta...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='SilentlyContinue'; $dirs=@('%~dp0wifi','%~dp0'); foreach($d in $dirs){ if(Test-Path $d){ Get-ChildItem -Path $d -Filter '*.xml' | ForEach-Object { $c=Get-Content $_.FullName -Raw; if($c -match '<name>(.*?)</name>'){ & netsh wlan add profile filename=$_.FullName user=all >nul 2>&1; & netsh wlan connect name=$Matches[1] >nul 2>&1 } }; if(Test-Path (Join-Path $d 'wifi.txt')){ $lines=Get-Content (Join-Path $d 'wifi.txt'); $s=''; $p=''; foreach($l in $lines){ if($l -match '^(SSID|WIFI|RETE)\s*[:=]\s*(.+)$'){$s=$Matches[2].Trim()} elseif($l -match '^(PASS|PASSWORD|KEY|CHIAVE)\s*[:=]\s*(.+)$'){$p=$Matches[2].Trim()} }; if($s -and $p){ $xml = '<?xml version=\"1.0\"?><WLANProfile xmlns=\"http://www.microsoft.com/networking/WLAN/profile/v1\"><name>'+$s+'</name><SSIDConfig><SSID><name>'+$s+'</name></SSID></SSIDConfig><connectionType>ESS</connectionType><connectionMode>auto</connectionMode><MSM><security><authEncryption><authentication>WPA2PSK</authentication><encryption>AES</encryption><useOneX>false</useOneX></authEncryption><sharedKey><keyType>passPhrase</keyType><protected>false</protected><keyMaterial>'+$p+'</keyMaterial></sharedKey></security></MSM></WLANProfile>'; $t=$env:TEMP+'\w.xml'; [IO.File]::WriteAllText($t,$xml); & netsh wlan add profile filename=$t user=all >nul 2>&1; & netsh wlan connect name=$s >nul 2>&1; Remove-Item $t -Force } } } }; Start-Sleep -Seconds 3" >nul 2>&1
+)
+
 REM --- 3. Scarica l'ultima versione da GitHub (con fallback offline) ---
 set "HAS_LOCAL="
 if exist "%~dp0setup-pc.ps1" set "HAS_LOCAL=1"

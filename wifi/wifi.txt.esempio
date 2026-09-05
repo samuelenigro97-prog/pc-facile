@@ -1,0 +1,7 @@
+# Configurazione Wi-Fi Negozio / Laboratorio
+# Rinomina questo file in 'wifi.txt' (o creane uno) con il nome e la password della rete.
+# Quando inserisci la chiavetta su un nuovo PC, PC Facile si colleghera'
+# automaticamente a questa rete Wi-Fi senza chiederti nulla!
+
+SSID=Unieuro_Staff
+PASSWORD=LaTuaPasswordWifi123

@@ -23,7 +23,8 @@ BeforeAll {
         'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus',
         'Get-SystemHardwareDetails', 'Install-VisualCRuntime',
         'Update-PannelloStatus', 'Open-PannelloOperatore', 'Get-CredenzialiSalvatePannello',
-        'Enable-SilentElevation', 'Restore-SilentElevation'
+        'Enable-SilentElevation', 'Restore-SilentElevation',
+        'New-WlanProfileXml', 'Connect-AutoWiFi', 'Save-StoreWiFiProfile'
     )
     foreach ($nome in $script:FunzioniTestate) {
         $fn = $ast.FindAll({
@@ -365,5 +366,30 @@ Describe 'Enable-SilentElevation & Restore-SilentElevation' {
         { Restore-SilentElevation } | Should -Not -Throw
     }
 }
+
+Describe 'New-WlanProfileXml' {
+    It 'genera un profilo XML valido per WPA2-PSK' {
+        $xml = New-WlanProfileXml -Ssid "TestWifi" -Password "TestPass123"
+        $xml | Should -Match "<name>TestWifi</name>"
+        $xml | Should -Match "<keyMaterial>TestPass123</keyMaterial>"
+        $xml | Should -Match "<authentication>WPA2PSK</authentication>"
+    }
+}
+
+Describe 'Connect-AutoWiFi & Save-StoreWiFiProfile' {
+    It 'Connect-AutoWiFi completa senza eccezioni in modalita test' {
+        $Global:Test = $true
+        $res = Connect-AutoWiFi -TargetDir "/fake/dir"
+        $res | Should -BeTrue
+        $Global:Test = $false
+    }
+    It 'Save-StoreWiFiProfile completa senza eccezioni in modalita test' {
+        $Global:Test = $true
+        $res = Save-StoreWiFiProfile -TargetDir "/fake/dir"
+        $res | Should -BeTrue
+        $Global:Test = $false
+    }
+}
+
 
 

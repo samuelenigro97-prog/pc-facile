@@ -2188,6 +2188,14 @@ function Invoke-PreparaUSBOffline {
         Write-OK "File di avvio e script aggiornati nella radice della chiavetta."
     } catch {}
 
+    # Configurazione Wi-Fi Negozio / Laboratorio
+    Write-Host ""
+    Write-Host "Configurazione Wi-Fi Negozio / Laboratorio:" -ForegroundColor White
+    $salvaWifi = Attendi-Risposta "Vuoi salvare la rete Wi-Fi del negozio sulla chiavetta per la connessione automatica? (S/N, default = S)"
+    if ($salvaWifi -match "^[Ss]" -or [string]::IsNullOrWhiteSpace($salvaWifi)) {
+        Save-StoreWiFiProfile -TargetDir $targetBase
+    }
+
     # Riepilogo finale
     Write-Host ""
     Write-Titolo "PREPARAZIONE USB COMPLETATA"
@@ -2196,7 +2204,7 @@ function Invoke-PreparaUSBOffline {
     Write-Host ""
     Write-Host "Ora la tua chiavetta USB e' un kit autonomo al 100%!" -ForegroundColor Yellow
     Write-Host "Puoi inserirla nei PC dei clienti e lanciare 'PC Facile.bat':" -ForegroundColor White
-    Write-Host "le applicazioni si installeranno all'istante anche SENZA connessione a Internet." -ForegroundColor White
+    Write-Host "il PC si colleghera' in automatico al Wi-Fi del negozio e installera' tutto da solo!" -ForegroundColor White
     Write-Host ""
     Beep-Completato
 }
@@ -2439,6 +2447,7 @@ $RunReale = (-not $Test -and -not $Diagnostica)
 if ($RunReale) {
     Enable-SilentElevation
     Set-PreventSleep $true
+    Connect-AutoWiFi -TargetDir $TargetDir
     Open-PannelloOperatore -NomeCliente $NomeCliente
 }
 
@@ -2637,6 +2646,182 @@ function Test-Endpoint {
         return [bool]$connesso
     } catch {
         return $false
+    }
+}
+
+function New-WlanProfileXml {
+    param([string]$Ssid, [string]$Password)
+    return @"
+<?xml version="1.0"?>
+<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+    <name>$Ssid</name>
+    <SSIDConfig>
+        <SSID>
+            <name>$Ssid</name>
+        </SSID>
+    </SSIDConfig>
+    <connectionType>ESS</connectionType>
+    <connectionMode>auto</connectionMode>
+    <MSM>
+        <security>
+            <authEncryption>
+                <authentication>WPA2PSK</authentication>
+                <encryption>AES</encryption>
+                <useOneX>false</useOneX>
+            </authEncryption>
+            <sharedKey>
+                <keyType>passPhrase</keyType>
+                <protected>false</protected>
+                <keyMaterial>$Password</keyMaterial>
+            </sharedKey>
+        </security>
+    </MSM>
+</WLANProfile>
+"@
+}
+
+function Connect-AutoWiFi {
+    param([string]$TargetDir)
+    if ($Test) { return $true }
+    try {
+        # Se siamo gia' connessi a Internet, non serve fare nulla
+        if (Test-Rete) { return $true }
+
+        Write-Info "Verifica e connessione automatica Wi-Fi da chiavetta USB..."
+        $searchDirs = @()
+        if ($TargetDir -and (Test-Path -LiteralPath $TargetDir)) {
+            $searchDirs += (Join-Path $TargetDir "wifi")
+            $searchDirs += $TargetDir
+        }
+        if ($PSScriptRoot -and (Test-Path -LiteralPath $PSScriptRoot)) {
+            $searchDirs += (Join-Path $PSScriptRoot "wifi")
+            $searchDirs += $PSScriptRoot
+        }
+        try {
+            $drives = Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -gt 0 }
+            foreach ($drv in $drives) {
+                $root = $drv.Root
+                if (Test-Path (Join-Path $root "wifi")) { $searchDirs += (Join-Path $root "wifi") }
+                if (Test-Path $root) { $searchDirs += $root }
+            }
+        } catch {}
+
+        $searchDirs = @($searchDirs | Select-Object -Unique)
+
+        foreach ($dir in $searchDirs) {
+            if (-not (Test-Path -LiteralPath $dir)) { continue }
+
+            # 1. Cerca profili XML esportati da netsh (*.xml con <WLANProfile>)
+            $xmlFiles = @(Get-ChildItem -Path $dir -Filter "*.xml" -ErrorAction SilentlyContinue)
+            foreach ($xml in $xmlFiles) {
+                try {
+                    $content = Get-Content -Path $xml.FullName -Raw -ErrorAction SilentlyContinue
+                    if ($content -match '<WLANProfile' -and $content -match '<name>(.*?)</name>') {
+                        $profName = $Matches[1]
+                        Write-Info "Tentativo di connessione alla rete Wi-Fi: '$profName'..."
+                        & netsh.exe wlan add profile filename="$($xml.FullName)" user=all 2>$null | Out-Null
+                        & netsh.exe wlan connect name="$profName" 2>$null | Out-Null
+
+                        $t = 0
+                        while ((-not (Test-Rete)) -and $t -lt 6) {
+                            Start-Sleep -Seconds 2
+                            $t += 2
+                        }
+                        if (Test-Rete) {
+                            Write-OK "Connesso automaticamente al Wi-Fi: $profName!"
+                            return $true
+                        }
+                    }
+                } catch {}
+            }
+
+            # 2. Cerca file wifi.txt / wifi.ini / wifi.conf con SSID e Password
+            $txtFiles = @(Join-Path $dir "wifi.txt", Join-Path $dir "wifi.ini", Join-Path $dir "wifi.conf")
+            foreach ($txt in $txtFiles) {
+                if (Test-Path -LiteralPath $txt) {
+                    $lines = Get-Content -LiteralPath $txt -ErrorAction SilentlyContinue
+                    $ssid = ""
+                    $pwd = ""
+                    foreach ($l in $lines) {
+                        $line = $l.Trim()
+                        if ($line -match '^(SSID|RETE|WIFI)\s*[:=]\s*(.+)$') { $ssid = $Matches[2].Trim() }
+                        elseif ($line -match '^(PASS|PASSWORD|KEY|CHIAVE)\s*[:=]\s*(.+)$') { $pwd = $Matches[2].Trim() }
+                        elseif (-not $ssid -and $line -notmatch '^#' -and $line.Length -gt 0) {
+                            $ssid = $line
+                        } elseif ($ssid -and -not $pwd -and $line -notmatch '^#' -and $line.Length -gt 0) {
+                            $pwd = $line
+                        }
+                    }
+                    if ($ssid -and $pwd) {
+                        Write-Info "Tentativo di connessione automatica Wi-Fi: '$ssid'..."
+                        $tempXml = Join-Path $env:TEMP "wifi_auto_$([Math]::Abs((Get-Random)%10000)).xml"
+                        $xmlData = New-WlanProfileXml -Ssid $ssid -Password $pwd
+                        [System.IO.File]::WriteAllText($tempXml, $xmlData, [System.Text.Encoding]::UTF8)
+                        & netsh.exe wlan add profile filename="$tempXml" user=all 2>$null | Out-Null
+                        & netsh.exe wlan connect name="$ssid" 2>$null | Out-Null
+                        Remove-Item -LiteralPath $tempXml -Force -ErrorAction SilentlyContinue
+
+                        $t = 0
+                        while ((-not (Test-Rete)) -and $t -lt 8) {
+                            Start-Sleep -Seconds 2
+                            $t += 2
+                        }
+                        if (Test-Rete) {
+                            Write-OK "Connesso automaticamente al Wi-Fi: $ssid!"
+                            return $true
+                        }
+                    }
+                }
+            }
+        }
+    } catch {}
+    return $false
+}
+
+function Save-StoreWiFiProfile {
+    param([string]$TargetDir)
+    if ($Test) { return $true }
+    try {
+        $wifiDir = Join-Path $TargetDir "wifi"
+        if (-not (Test-Path $wifiDir)) { New-Item -Path $wifiDir -ItemType Directory -Force | Out-Null }
+
+        $exported = $false
+        try {
+            $interfaces = & netsh.exe wlan show interfaces 2>$null
+            $currentSsid = ""
+            foreach ($line in $interfaces) {
+                if ($line -match '^\s*SSID\s*:\s*(.+)$') {
+                    $currentSsid = $Matches[1].Trim()
+                    break
+                }
+            }
+            if ($currentSsid) {
+                & netsh.exe wlan export profile name="$currentSsid" folder="$wifiDir" key=clear 2>$null | Out-Null
+                $xmls = Get-ChildItem -Path $wifiDir -Filter "*.xml" -ErrorAction SilentlyContinue
+                if ($xmls.Count -gt 0) {
+                    Write-OK "Profilo Wi-Fi esportato con successo per '$currentSsid' in $wifiDir"
+                    $exported = $true
+                }
+            }
+        } catch {}
+
+        if (-not $exported) {
+            Write-Info "Inserisci i dati della rete Wi-Fi del negozio (verranno salvati in 'wifi/wifi.txt'):"
+            $ssidIn = (Attendi-Risposta "Nome Rete Wi-Fi (SSID)").Trim()
+            if ($ssidIn) {
+                $pwdIn = (Attendi-Risposta "Password Wi-Fi (WPA2)").Trim()
+                $txtFile = Join-Path $wifiDir "wifi.txt"
+                $content = "SSID=$ssidIn`r`nPASSWORD=$pwdIn"
+                [System.IO.File]::WriteAllText($txtFile, $content, [System.Text.Encoding]::UTF8)
+
+                $xmlData = New-WlanProfileXml -Ssid $ssidIn -Password $pwdIn
+                $xmlFile = Join-Path $wifiDir "wifi-$ssidIn.xml"
+                [System.IO.File]::WriteAllText($xmlFile, $xmlData, [System.Text.Encoding]::UTF8)
+                Write-OK "Rete Wi-Fi '$ssidIn' salvata con successo nella cartella wifi."
+            }
+        }
+    } catch {
+        Write-Info "Impossibile salvare il profilo Wi-Fi: $($_.Exception.Message)"
     }
 }
 
