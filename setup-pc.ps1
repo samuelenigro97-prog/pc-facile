@@ -899,36 +899,52 @@ function Open-PannelloOperatore {
 
         <div class="grid">
             <div class="card">
-                <h2><span class="bar"></span> &#128273; Credenziali Consigliate Cliente</h2>
+                <h2><span class="bar"></span> &#128273; Generatore Credenziali &amp; Account Cliente</h2>
+                
+                <!-- 1. SELETTORE DOMINIO / PROVIDER PRIMA DI TUTTO -->
                 <div class="cred-group">
-                    <div class="cred-label">Nome Cliente / Riferimento</div>
-                    <div class="cred-box">
-                        <input type="text" id="inNome" class="cred-input" value="$NomeCliente" placeholder="Mario Rossi" oninput="aggiornaCred()">
+                    <div class="cred-label">1. Scegli Provider / Dominio Email:</div>
+                    <div class="dom-selector">
+                        <button type="button" class="dom-btn active" onclick="setDomain('outlook.it', 'Microsoft', this)">@outlook.it</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('hotmail.com', 'Hotmail', this)">@hotmail.com</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('gmail.com', 'Google', this)">@gmail.com</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('proton.me', 'Proton', this)">@proton.me</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('libero.it', 'Libero', this)">@libero.it</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('icloud.com', 'iCloud', this)">@icloud.com</button>
                     </div>
                 </div>
+
+                <!-- 2. COGNOME E NOME DEL CLIENTE -->
                 <div class="cred-group">
-                    <div class="cred-label">Provider Email:</div>
-                    <div class="dom-selector">
-                        <button type="button" class="dom-btn active" onclick="setDomain('outlook.it', this)">@outlook.it</button>
-                        <button type="button" class="dom-btn" onclick="setDomain('gmail.com', this)">@gmail.com</button>
-                        <button type="button" class="dom-btn" onclick="setDomain('proton.me', this)">@proton.me</button>
-                        <button type="button" class="dom-btn" onclick="setDomain('libero.it', this)">@libero.it</button>
+                    <div class="cred-label">2. Dati Cliente (Cognome e Nome):</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <input type="text" id="inCognome" class="cred-input" placeholder="Cognome (es. Rossi)" oninput="aggiornaCred()">
+                        <input type="text" id="inNome" class="cred-input" value="$NomeCliente" placeholder="Nome (es. Mario)" oninput="aggiornaCred()">
                     </div>
+                </div>
+
+                <!-- 3. EMAIL RISULTANTE -->
+                <div class="cred-group">
+                    <div class="cred-label">3. Email Generata (modificabile / incollabile):</div>
                     <div class="cred-box">
-                        <input type="text" id="inEmail" class="cred-input" value="$Email" readonly>
+                        <input type="text" id="inEmail" class="cred-input" value="$Email" oninput="segnaModificato()">
                         <button class="btn-copy" onclick="copia('inEmail', this)">Copia Email</button>
                     </div>
                 </div>
+
+                <!-- 4. PASSWORD INIZIALE -->
                 <div class="cred-group">
-                    <div class="cred-label">Password Consigliata (Sicura)</div>
+                    <div class="cred-label">4. Password Iniziale Consigliata:</div>
                     <div class="cred-box">
-                        <input type="text" id="inPass" class="cred-input" value="$Password" readonly>
+                        <input type="text" id="inPass" class="cred-input" value="$Password" oninput="segnaModificato()">
                         <button class="btn-copy" onclick="copia('inPass', this)">Copia Password</button>
                     </div>
                 </div>
-                <p style="font-size: 11px; color: #94a3b8; margin-top: 4px;">
-                    Password conforme a tutti gli standard di sicurezza (maiuscola, minuscola, numero, simbolo).
-                </p>
+
+                <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                    <button id="btnSalvaCred" class="btn-scheda" style="background: #EE7203; border: none; font-size: 11.5px; padding: 7px 14px; cursor: pointer;" onclick="salvaCredenziali()">&#128190; Salva per Scheda Consegna</button>
+                    <span style="font-size: 11px; color: #94a3b8;">Standard: <em>CognomeNome@dominio</em> &bull; <em>Nome123!</em></span>
+                </div>
             </div>
 
             <div class="card">
@@ -1076,15 +1092,22 @@ function Open-PannelloOperatore {
 
     <script>
         var currentDomain = 'outlook.it';
+        var currentProviderName = 'Microsoft';
+        var manualEdit = false;
 
-        function setDomain(dom, btn) {
+        function setDomain(dom, provName, btn) {
             currentDomain = dom;
+            currentProviderName = provName || dom;
             var btns = document.querySelectorAll('.dom-btn');
             for (var i = 0; i < btns.length; i++) {
                 btns[i].classList.remove('active');
             }
             if (btn) btn.classList.add('active');
             aggiornaCred();
+        }
+
+        function segnaModificato() {
+            manualEdit = true;
         }
 
         function copia(id, btn) {
@@ -1102,19 +1125,83 @@ function Open-PannelloOperatore {
         }
 
         function aggiornaCred() {
-            var nome = document.getElementById('inNome').value.trim();
-            if (!nome) {
-                document.getElementById('inEmail').value = 'cliente@' + currentDomain;
-                document.getElementById('inPass').value = 'Cliente123!';
+            var cognome = (document.getElementById('inCognome') ? document.getElementById('inCognome').value.trim() : '');
+            var nome = (document.getElementById('inNome') ? document.getElementById('inNome').value.trim() : '');
+            
+            if (!cognome && !nome) {
+                if (!manualEdit) {
+                    document.getElementById('inEmail').value = 'cliente@' + currentDomain;
+                    document.getElementById('inPass').value = 'Cliente123!';
+                }
                 return;
             }
-            var parts = nome.toLowerCase().split(/\s+/).filter(Boolean);
-            var pulito = parts.length > 1 ? (parts.slice(1).join('') + parts[0]) : parts[0];
-            pulito = pulito.replace(/[^a-z0-9]/g, '');
-            document.getElementById('inEmail').value = pulito + '@' + currentDomain;
-            var prima = parts[0];
-            var cap = prima.charAt(0).toUpperCase() + prima.slice(1).toLowerCase();
-            document.getElementById('inPass').value = cap + '123!';
+
+            var cClean = cognome.toLowerCase().replace(/[^a-z0-9]/g, '');
+            var nClean = nome.toLowerCase().replace(/[^a-z0-9]/g, '');
+            
+            var emailPrefix = '';
+            var passBase = '';
+            
+            if (cClean && nClean) {
+                emailPrefix = cClean + nClean;
+                passBase = nClean;
+            } else if (cClean) {
+                emailPrefix = cClean;
+                passBase = cClean;
+            } else {
+                var parts = nome.toLowerCase().split(/\s+/).filter(Boolean);
+                if (parts.length > 1) {
+                    var pCognome = parts.slice(1).join('').replace(/[^a-z0-9]/g, '');
+                    var pNome = parts[0].replace(/[^a-z0-9]/g, '');
+                    emailPrefix = pCognome + pNome;
+                    passBase = pNome;
+                } else {
+                    emailPrefix = nClean;
+                    passBase = nClean;
+                }
+            }
+
+            if (emailPrefix.length > 20) { emailPrefix = emailPrefix.substring(0, 20); }
+            document.getElementById('inEmail').value = emailPrefix + '@' + currentDomain;
+            
+            if (passBase) {
+                var cap = passBase.charAt(0).toUpperCase() + passBase.slice(1).toLowerCase().replace(/[^a-z0-9]/g, '');
+                document.getElementById('inPass').value = cap + '123!';
+            }
+        }
+
+        function salvaCredenziali() {
+            var email = document.getElementById('inEmail').value.trim();
+            var pass = document.getElementById('inPass').value.trim();
+            var cognome = (document.getElementById('inCognome') ? document.getElementById('inCognome').value.trim() : '');
+            var nome = (document.getElementById('inNome') ? document.getElementById('inNome').value.trim() : '');
+            var cliente = (cognome + ' ' + nome).trim() || nome || cognome || 'Cliente';
+            
+            var payload = {
+                Email: email,
+                Password: pass,
+                Provider: currentProviderName,
+                Cliente: cliente
+            };
+            
+            var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'pcfacile-cred.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            var btn = document.getElementById('btnSalvaCred');
+            if (btn) {
+                var old = btn.innerHTML;
+                btn.innerHTML = '&#10003; Credenziali Salvate per la Scheda!';
+                btn.style.background = '#16a34a';
+                setTimeout(function() {
+                    btn.innerHTML = old;
+                    btn.style.background = '#EE7203';
+                }, 3000);
+            }
         }
 
         // MOTORE DI SINCRONIZZAZIONE LIVE CON POWERSHELL
@@ -1211,6 +1298,40 @@ function Open-PannelloOperatore {
     } catch {
         Write-Info "Creazione pannello operatore non riuscita: $_"
     }
+}
+
+function Get-CredenzialiSalvatePannello {
+    $tempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { [System.IO.Path]::GetTempPath() }
+    $userProf = [Environment]::GetFolderPath('UserProfile')
+    $paths = @(
+        (Join-Path $userProf "Downloads\pcfacile-cred.json"),
+        (Join-Path $tempDir "pcfacile-cred.json")
+    )
+    foreach ($p in $paths) {
+        if ($p -and (Test-Path -LiteralPath $p)) {
+            try {
+                $raw = Get-Content -LiteralPath $p -Raw -Encoding UTF8
+                $content = $raw | ConvertFrom-Json
+                if ($content.Email) {
+                    $Global:credMsAccount = $content.Email
+                    $Global:credGenerataEmail = $content.Email
+                }
+                if ($content.Password) {
+                    $Global:credMsPassword = $content.Password
+                    $Global:credGenerataPass = $content.Password
+                }
+                if ($content.Provider) {
+                    $Global:credProvider = $content.Provider
+                    $Global:provNome = $content.Provider
+                }
+                if ($content.Cliente -and (-not $Global:nomeCliente -or $Global:nomeCliente -eq 'telef')) {
+                    $Global:nomeCliente = $content.Cliente
+                }
+                return $true
+            } catch {}
+        }
+    }
+    return $false
 }
 
 # =============================================================================
@@ -4937,6 +5058,9 @@ per averlo sempre a disposizione in caso di necessita'.
     # Microsoft ($credMsAccount / $credMsPassword). Se quel passo e' stato saltato
     # restano vuote. Niente domande all'operatore, niente password dal browser.
     #
+    # Leggi se l'operatore ha salvato/aggiornato credenziali dal pannello Edge
+    Get-CredenzialiSalvatePannello | Out-Null
+
     # RETE DI SICUREZZA sulla PASSWORD: nel file non deve MAI mancare. Se per
     # qualsiasi motivo e' vuota (passo saltato, account gia' esistente senza
     # password digitata) ma conosco il nome cliente, la imposto al formato

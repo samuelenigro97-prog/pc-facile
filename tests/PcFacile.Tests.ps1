@@ -22,7 +22,7 @@ BeforeAll {
         'Get-OfflineDirs', 'Find-OfflineInstaller', 'Install-OfflinePackage', 'Select-DestinazioneUSB',
         'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus',
         'Get-SystemHardwareDetails', 'Install-VisualCRuntime',
-        'Update-PannelloStatus', 'Open-PannelloOperatore'
+        'Update-PannelloStatus', 'Open-PannelloOperatore', 'Get-CredenzialiSalvatePannello'
     )
     foreach ($nome in $script:FunzioniTestate) {
         $fn = $ast.FindAll({
@@ -314,6 +314,28 @@ Describe 'Update-PannelloStatus' {
         $content | Should -Match "window\.onPCFacileStatusUpdate"
         $content | Should -Match "pulizia"
         $content | Should -Match "running"
+    }
+}
+
+Describe 'Get-CredenzialiSalvatePannello' {
+    It 'legge correttamente il file json salvato dal pannello operatore' {
+        $tempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { [System.IO.Path]::GetTempPath() }
+        $jsonFile = Join-Path $tempDir "pcfacile-cred.json"
+        $testData = @{
+            Email = "rossimario@gmail.com"
+            Password = "Mario123!"
+            Provider = "Google"
+            Cliente = "Mario Rossi"
+        } | ConvertTo-Json
+        $testData | Set-Content -Path $jsonFile -Encoding UTF8
+        
+        $res = Get-CredenzialiSalvatePannello
+        $res | Should -BeTrue
+        $Global:credMsAccount | Should -Be "rossimario@gmail.com"
+        $Global:credMsPassword | Should -Be "Mario123!"
+        $Global:provNome | Should -Be "Google"
+        
+        Remove-Item $jsonFile -Force -ErrorAction SilentlyContinue
     }
 }
 
