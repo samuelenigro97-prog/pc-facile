@@ -27,12 +27,14 @@ param(
     [string]$TargetDir
 )
 
+if ($TargetDir) { $Global:TargetDir = $TargetDir }
+
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "11.0 (2026-09-04)"
+$SCRIPT_VERSION = "11.1 (2026-09-05)"
 
 # Versione SEMPRE VISIBILE: la scrivo nella barra del titolo della finestra, che
 # resta a video in QUALSIASI schermata (a differenza dell'header, che scorre via).
@@ -428,6 +430,18 @@ function Get-BitLockerRecovery {
 
 function Get-OfflineDirs {
     $dirs = [System.Collections.Generic.List[string]]::new()
+    if ($Global:TargetDir) {
+        $dirs.Add((Join-Path $Global:TargetDir "installers"))
+        $dirs.Add((Join-Path $Global:TargetDir "offline"))
+        $dirs.Add((Join-Path $Global:TargetDir "cache"))
+        $dirs.Add($Global:TargetDir)
+    }
+    if ($TargetDir -and $TargetDir -ne $Global:TargetDir) {
+        $dirs.Add((Join-Path $TargetDir "installers"))
+        $dirs.Add((Join-Path $TargetDir "offline"))
+        $dirs.Add((Join-Path $TargetDir "cache"))
+        $dirs.Add($TargetDir)
+    }
     if ($PSScriptRoot) {
         $dirs.Add((Join-Path $PSScriptRoot "installers"))
         $dirs.Add((Join-Path $PSScriptRoot "offline"))
@@ -442,15 +456,24 @@ function Get-OfflineDirs {
         $dirs.Add($curr)
     }
     try {
-        $removables = Get-Volume | Where-Object { $_.DriveType -eq 'Removable' -and $_.DriveLetter }
-        foreach ($r in $removables) {
-            $rPath = "$($r.DriveLetter):\"
-            $dirs.Add((Join-Path $rPath "installers"))
-            $dirs.Add((Join-Path $rPath "offline"))
-            $dirs.Add((Join-Path $rPath "cache"))
-            $dirs.Add($rPath)
+        $allDrives = [System.IO.DriveInfo]::GetDrives() | Where-Object { $_.IsReady }
+        foreach ($d in $allDrives) {
+            $root = $d.RootDirectory.FullName
+            $dirs.Add((Join-Path $root "installers"))
+            $dirs.Add((Join-Path $root "offline"))
+            $dirs.Add((Join-Path $root "cache"))
         }
-    } catch {}
+    } catch {
+        try {
+            $removables = Get-Volume | Where-Object { $_.DriveLetter }
+            foreach ($r in $removables) {
+                $rPath = "$($r.DriveLetter):\"
+                $dirs.Add((Join-Path $rPath "installers"))
+                $dirs.Add((Join-Path $rPath "offline"))
+                $dirs.Add((Join-Path $rPath "cache"))
+            }
+        } catch {}
+    }
 
     $existing = @()
     foreach ($d in $dirs) {
@@ -468,21 +491,51 @@ function Find-OfflineInstaller {
     if ($dirs.Count -eq 0) { return $null }
 
     $patterns = @{
-        "Google.Chrome"                     = @("*Chrome*Setup*.exe", "*Chrome*Standalone*.exe", "*googlechrome*.exe")
-        "Mozilla.Firefox"                  = @("*Firefox*Setup*.exe", "*firefox*.exe", "*Firefox*Installer*.exe")
+        "Google.Chrome"                     = @("*Chrome*Setup*.exe", "*Chrome*Standalone*.exe", "*googlechrome*.exe", "*Chrome*.msi")
+        "Mozilla.Firefox"                  = @("*Firefox*Setup*.exe", "*firefox*.exe", "*Firefox*Installer*.exe", "*Firefox*.msi")
         "VideoLAN.VLC"                     = @("*vlc*win64.exe", "*vlc*.exe", "*vlc*.msi")
-        "Adobe.Acrobat.Reader.64-bit"      = @("*AcroRdr*.exe", "*Acrobat*Reader*.exe", "*AdbeRdr*.exe", "*AcroRdr*it_IT*.exe")
-        "7zip.7zip"                        = @("*7z*x64.exe", "*7z*x64.msi", "*7z*.exe")
+        "Adobe.Acrobat.Reader.64-bit"      = @("*AcroRdr*.exe", "*Acrobat*Reader*.exe", "*AdbeRdr*.exe", "*AcroRdr*it_IT*.exe", "*Acro*.msi")
+        "SumatraPDF.SumatraPDF"            = @("*SumatraPDF*.exe", "*SumatraPDF*.msi")
+        "7zip.7zip"                        = @("*7z*x64.exe", "*7z*x64.msi", "*7z*.exe", "*7z*.msi")
         "AnyDesk.AnyDesk"                  = @("*AnyDesk*.exe")
-        "TeamViewer.TeamViewer"            = @("*TeamViewer*Setup*.exe", "*TeamViewer*.exe")
-        "Zoom.Zoom"                        = @("*ZoomInstaller*.exe", "*Zoom*.msi")
-        "TheDocumentFoundation.LibreOffice"= @("*LibreOffice*x86-64.msi", "*LibreOffice*.msi")
-        "Apache.OpenOffice"                = @("*Apache*OpenOffice*.exe", "*OpenOffice*.exe")
-        "Spotify.Spotify"                  = @("*Spotify*Setup*.exe")
-        "Valve.Steam"                      = @("*SteamSetup*.exe")
-        "Discord.Discord"                  = @("*DiscordSetup*.exe")
-        "qBittorrent.qBittorrent"          = @("*qbittorrent*setup*.exe")
+        "TeamViewer.TeamViewer"            = @("*TeamViewer*Setup*.exe", "*TeamViewer*.exe", "*TeamViewer*.msi")
+        "Zoom.Zoom"                        = @("*ZoomInstaller*.exe", "*Zoom*.msi", "*Zoom*.exe")
+        "TheDocumentFoundation.LibreOffice"= @("*LibreOffice*x86-64.msi", "*LibreOffice*.msi", "*LibreOffice*.exe")
+        "Apache.OpenOffice"                = @("*Apache*OpenOffice*.exe", "*OpenOffice*.exe", "*OpenOffice*.msi")
+        "Spotify.Spotify"                  = @("*Spotify*Setup*.exe", "*Spotify*.exe", "*Spotify*.msixbundle")
+        "9NKSQGP7F2NH"                     = @("*WhatsApp*.exe", "*WhatsApp*.msixbundle", "*WhatsApp*.appxbundle")
+        "GIMP.GIMP"                        = @("*gimp*setup*.exe", "*gimp*.exe", "*gimp*.msi")
+        "Valve.Steam"                      = @("*SteamSetup*.exe", "*Steam*.exe")
+        "EpicGames.EpicGamesLauncher"      = @("*EpicGamesLauncher*.msi", "*EpicInstaller*.msi", "*EpicGames*.exe")
+        "Discord.Discord"                  = @("*DiscordSetup*.exe", "*Discord*.exe")
+        "qBittorrent.qBittorrent"          = @("*qbittorrent*setup*.exe", "*qbittorrent*.exe")
         "AIMP.AIMP"                        = @("*aimp*.exe")
+        "Intel.IntelDriverAndSupportAssistant" = @("*Intel*Driver*Support*Assistant*.exe", "*IntelDSA*.exe", "*Intel*.exe")
+        "Microsoft.Office"                 = @("*OfficeSetup*.exe", "*Office*.exe", "*Setup32*.exe", "*Setup64*.exe")
+        "MCPR"                             = @("*MCPR*.exe")
+        "NRnR"                             = @("*NRnR*.exe")
+    }
+
+    $namePatterns = @{
+        "VLC"                              = @("*vlc*win64.exe", "*vlc*.exe", "*vlc*.msi")
+        "Adobe Acrobat Reader"             = @("*AcroRdr*.exe", "*Acrobat*Reader*.exe", "*AdbeRdr*.exe", "*AcroRdr*it_IT*.exe", "*Acro*.msi")
+        "Sumatra PDF"                      = @("*SumatraPDF*.exe", "*SumatraPDF*.msi")
+        "7-Zip"                            = @("*7z*x64.exe", "*7z*x64.msi", "*7z*.exe", "*7z*.msi")
+        "AnyDesk"                          = @("*AnyDesk*.exe")
+        "TeamViewer"                       = @("*TeamViewer*Setup*.exe", "*TeamViewer*.exe", "*TeamViewer*.msi")
+        "Zoom"                             = @("*ZoomInstaller*.exe", "*Zoom*.msi", "*Zoom*.exe")
+        "LibreOffice"                      = @("*LibreOffice*x86-64.msi", "*LibreOffice*.msi", "*LibreOffice*.exe")
+        "OpenOffice"                       = @("*Apache*OpenOffice*.exe", "*OpenOffice*.exe", "*OpenOffice*.msi")
+        "Spotify"                          = @("*Spotify*Setup*.exe", "*Spotify*.exe", "*Spotify*.msixbundle")
+        "WhatsApp"                         = @("*WhatsApp*.exe", "*WhatsApp*.msixbundle", "*WhatsApp*.appxbundle")
+        "GIMP"                             = @("*gimp*setup*.exe", "*gimp*.exe", "*gimp*.msi")
+        "Steam"                            = @("*SteamSetup*.exe", "*Steam*.exe")
+        "Epic Games Launcher"              = @("*EpicGamesLauncher*.msi", "*EpicInstaller*.msi", "*EpicGames*.exe")
+        "Discord"                          = @("*DiscordSetup*.exe", "*Discord*.exe")
+        "qBittorrent"                      = @("*qbittorrent*setup*.exe", "*qbittorrent*.exe")
+        "AIMP"                             = @("*aimp*.exe")
+        "Intel Driver e Support Assistant" = @("*Intel*Driver*Support*Assistant*.exe", "*IntelDSA*.exe", "*Intel*.exe")
+        "Microsoft 365"                    = @("*OfficeSetup*.exe", "*Office*.exe", "*Setup32*.exe", "*Setup64*.exe")
         "MCPR"                             = @("*MCPR*.exe")
         "NRnR"                             = @("*NRnR*.exe")
     }
@@ -490,6 +543,7 @@ function Find-OfflineInstaller {
     $searchList = @()
     if ($WingetId -and $patterns.ContainsKey($WingetId)) { $searchList += $patterns[$WingetId] }
     if ($Nome -and $patterns.ContainsKey($Nome)) { $searchList += $patterns[$Nome] }
+    if ($Nome -and $namePatterns.ContainsKey($Nome)) { $searchList += $namePatterns[$Nome] }
     if ($WingetId) {
         $searchList += "*$WingetId*.exe"
         $searchList += "*$WingetId*.msi"
@@ -523,7 +577,7 @@ function Install-OfflinePackage {
         $proc = $null
         if ($ext -eq '.msi') {
             $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/i `"$FilePath`" /qn /norestart" -Wait -PassThru -ErrorAction Stop
-        } elseif ($ext -eq '.msixbundle' -or $ext -eq '.appxbundle' -or $ext -eq '.msix') {
+        } elseif ($ext -eq '.msixbundle' -or $ext -eq '.appxbundle' -or $ext -eq '.msix' -or $ext -eq '.appx') {
             Add-AppxPackage -Path $FilePath -ErrorAction Stop
             Write-OK "$Nome installato con successo da pacchetto offline Appx/MSIX!"
             return $true
@@ -533,12 +587,18 @@ function Install-OfflinePackage {
             elseif ($FilePath -like "*Firefox*") { $arg = "/S" }
             elseif ($FilePath -like "*7z*") { $arg = "/S" }
             elseif ($FilePath -like "*vlc*") { $arg = "/L=1040 /S" }
-            elseif ($FilePath -like "*Acro*") { $arg = "/sAll /rs /msi EULA_ACCEPT=YES" }
+            elseif ($FilePath -like "*Acro*" -or $FilePath -like "*Adbe*") { $arg = "/sAll /rs /msi EULA_ACCEPT=YES" }
+            elseif ($FilePath -like "*Sumatra*") { $arg = "/S" }
             elseif ($FilePath -like "*AnyDesk*") { $arg = "--install `"C:\Program Files (x86)\AnyDesk`" --silent --create-shortcuts" }
             elseif ($FilePath -like "*TeamViewer*") { $arg = "/S" }
             elseif ($FilePath -like "*Zoom*") { $arg = "/silent" }
             elseif ($FilePath -like "*LibreOffice*" -or $FilePath -like "*OpenOffice*") { $arg = "/S" }
             elseif ($FilePath -like "*aimp*") { $arg = "/AUTO" }
+            elseif ($FilePath -like "*Spotify*") { $arg = "/silent" }
+            elseif ($FilePath -like "*gimp*") { $arg = "/VERYSILENT /NORESTART /ALLUSERS" }
+            elseif ($FilePath -like "*Steam*") { $arg = "/S" }
+            elseif ($FilePath -like "*qbittorrent*") { $arg = "/S" }
+            elseif ($FilePath -like "*Intel*") { $arg = "/quiet /norestart" }
 
             $proc = Start-Process -FilePath $FilePath -ArgumentList $arg -Wait -PassThru -ErrorAction Stop
         }
@@ -712,6 +772,7 @@ function Invoke-PreparaUSBOffline {
             Nome      = "Norton Removal Tool (NRnR)"
             File      = "NRnR.exe"
             Urls      = @(
+                "https://buy-download.norton.com/downloads/RnR/NLOK/NRnR.exe",
                 "https://www.norton.com/nrnr"
             )
             MinSizeKB = 5000
@@ -725,6 +786,60 @@ function Invoke-PreparaUSBOffline {
             )
             MinSizeKB = 5000
             Categoria = "Base"
+        },
+        @{
+            Nome      = "Sumatra PDF (64-bit)"
+            File      = "SumatraPDF-install.exe"
+            Urls      = @(
+                "https://www.sumatrapdfreader.org/dl/SumatraPDF-3.5.2-64-install.exe"
+            )
+            MinSizeKB = 7000
+            Categoria = "Completo"
+        },
+        @{
+            Nome      = "Spotify"
+            File      = "SpotifySetup.exe"
+            Urls      = @(
+                "https://download.scdn.co/SpotifySetup.exe"
+            )
+            MinSizeKB = 1000
+            Categoria = "Completo"
+        },
+        @{
+            Nome      = "GIMP (Image Editor)"
+            File      = "gimp-setup.exe"
+            Urls      = @(
+                "https://download.gimp.org/gimp/v2.10/windows/gimp-2.10.38-setup.exe"
+            )
+            MinSizeKB = 250000
+            Categoria = "Completo"
+        },
+        @{
+            Nome      = "Steam Setup"
+            File      = "SteamSetup.exe"
+            Urls      = @(
+                "https://cdn.akamai.steamstatic.com/client/installer/SteamSetup.exe"
+            )
+            MinSizeKB = 2000
+            Categoria = "Completo"
+        },
+        @{
+            Nome      = "Discord"
+            File      = "DiscordSetup.exe"
+            Urls      = @(
+                "https://discord.com/api/download?platform=win"
+            )
+            MinSizeKB = 80000
+            Categoria = "Completo"
+        },
+        @{
+            Nome      = "qBittorrent (64-bit)"
+            File      = "qbittorrent_setup.exe"
+            Urls      = @(
+                "https://download.qbittorrent.org/qbittorrent_5.0.0_x64_setup.exe"
+            )
+            MinSizeKB = 30000
+            Categoria = "Completo"
         }
     )
 
@@ -732,7 +847,7 @@ function Invoke-PreparaUSBOffline {
     if (-not $Test) {
         Write-Host "Cosa vuoi scaricare sulla chiavetta?" -ForegroundColor White
         Write-Host "  1) Pacchetto Base + Utility (Consigliato: Chrome, Firefox, VLC, Adobe, 7-Zip, AnyDesk, NRnR, MCPR - ~450 MB)" -ForegroundColor Green
-        Write-Host "  2) Pacchetto Completo (Tutti i programmi inclusi LibreOffice, TeamViewer, Zoom, AIMP - ~950 MB)" -ForegroundColor White
+        Write-Host "  2) Pacchetto Completo (Tutti i programmi inclusi LibreOffice, Spotify, Zoom, GIMP, Steam, Discord - ~1.5 GB)" -ForegroundColor White
         Write-Host ""
         $sceltaPkg = Attendi-Risposta "Scelta (1/2, INVIO = Pacchetto Base)"
         if ([string]::IsNullOrWhiteSpace($sceltaPkg) -or $sceltaPkg -eq "1") {
@@ -1681,6 +1796,14 @@ function Installa-Pacchetto {
         }
     }
 
+    # 2. Se l'offline non e' presente, serve Winget
+    if (-not (Confirm-Winget)) {
+        Write-Errore "Winget non disponibile e nessun installer offline trovato per $Nome."
+        Add-Report "$Nome (installazione)" "ERRORE"
+        $Global:UltimaInstallOk = $false
+        return
+    }
+
     # Disambigua SEMPRE la sorgente: ID Microsoft Store (12 caratteri) -> msstore,
     # tutto il resto -> winget. Senza --source, winget da' errore -1978335138
     # ("specify --source") quando lo stesso ID compare in piu' sorgenti, ed evita
@@ -2211,36 +2334,45 @@ if ($vuoiPulizia -match "^[Ss]") {
             } finally { Stop-BarraAnimata }
         }
 
-        # VERIFICO davvero cosa e' rimasto (non mi fido dell'esito di winget).
-        Start-Sleep -Seconds 2
+        # VERIFICO cosa e' rimasto: attendo che i processi di disinstallazione silenziosa
+        # abbiano completato la cancellazione delle chiavi di registro (fino a 16s).
+        $maxAttesaAV = 8
+        for ($w = 0; $w -lt $maxAttesaAV; $w++) {
+            Start-Sleep -Seconds 2
+            $rimasti = @(Get-AntivirusInstallati)
+            if ($rimasti.Count -eq 0) { break }
+        }
+
         $rimasti      = @(Get-AntivirusInstallati)
         $mcafeeResta  = @($rimasti | Where-Object { $_.Nome -match 'McAfee' }).Count -gt 0
         $nortonResta  = @($rimasti | Where-Object { $_.Nome -match 'Norton' }).Count -gt 0
+
         if ($rimasti.Count -eq 0) {
-            Write-OK "Antivirus di prova rimossi."
+            Write-OK "Antivirus di prova rimossi con successo (disinstallazione standard completata)."
             Add-Report "Antivirus di prova rimossi" "OK"
         } else {
-            Write-Info "Resistono ai metodi standard: $(($rimasti.Nome) -join ', '). Uso i tool ufficiali."
+            Write-Info "Resistono ai metodi standard: $(($rimasti.Nome) -join ', '). Uso i tool dedicati."
             Add-Report "Antivirus di prova (residui: tool ufficiale)" "AVVISO"
         }
 
-        # McAfee: winget non lo toglie del tutto, serve MCPR (tool ufficiale).
-        # NON lo scarico/eseguo dallo script: scaricare+lanciare un .exe fa
-        # scattare l'euristica comportamentale dell'antivirus (IDP.Generic) e lo
-        # script finisce in quarantena. Apro invece la PAGINA del tool: l'operatore
-        # lo scarica e lo lancia a mano (Avanti -> Avanti), poi RIAVVIO.
+        # McAfee: se resiste alla disinstallazione standard, usiamo il tool dedicato MCPR
         if ($mcafeeResta) {
-            if ($nortonResta) {
-                # Con Norton presente NON scarico l'exe: Norton lo blocca come
-                # IDP.Generic. Apro la pagina, MCPR lo esegue l'operatore.
+            $mcprOffline = Find-OfflineInstaller -Nome "MCPR"
+            if ($mcprOffline -and (Test-Path $mcprOffline)) {
+                Write-Info "McAfee resiste: avvio MCPR da archivio offline USB ($mcprOffline)..."
+                Start-Process -FilePath $mcprOffline
+                Write-Info "MCPR avviato: completalo a video, poi RIAVVIA il PC."
+                Add-Report "McAfee (avviato MCPR da USB)" "AVVISO"
+            } elseif ($nortonResta) {
+                # Se Norton e' presente, scaricare un exe farebbe scattare IDP.Generic: apro la pagina
                 Start-Process "https://www.mcafee.com/support/?articleId=TS101331"
                 Write-Info "McAfee resiste: aperta la pagina di MCPR. Scaricalo ed eseguilo a mano, poi RIAVVIA."
                 Add-Report "McAfee (MCPR a mano)" "AVVISO"
             } else {
-                # Solo McAfee: MCPR e' il tool UFFICIALE McAfee, non blocca se stesso.
                 try {
                     Write-Info "McAfee resiste: scarico e avvio MCPR (tool ufficiale McAfee)..."
                     $mcpr = "$env:TEMP\MCPR.exe"
+                    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
                     irm "https://download.mcafee.com/molbin/iss-loc/SupportTools/MCPR/MCPR.exe" -OutFile $mcpr -ErrorAction Stop
                     Start-Process -FilePath $mcpr
                     Write-Info "MCPR avviato: completalo (Avanti), poi RIAVVIA. Toglie McAfee del tutto."
@@ -2252,11 +2384,30 @@ if ($vuoiPulizia -match "^[Ss]") {
                 }
             }
         }
-        # Norton: come McAfee, serve il tool ufficiale (Norton Remove and Reinstall).
+
+        # Norton: se e SOLO se la disinstallazione standard fallisce e Norton e' ancora presente
         if ($nortonResta) {
-            Start-Process "https://norton.com/nrnr"
-            Write-Info "Norton ancora presente: aperto il tool ufficiale NRnR. Eseguilo, poi RIAVVIA."
-            Add-Report "Norton (NRnR aperto: completare a mano)" "AVVISO"
+            $nrnrOffline = Find-OfflineInstaller -Nome "NRnR"
+            if ($nrnrOffline -and (Test-Path $nrnrOffline)) {
+                Write-Info "Norton resiste ai metodi standard: avvio NRnR da archivio offline USB ($nrnrOffline)..."
+                Start-Process -FilePath $nrnrOffline
+                Write-Info "NRnR avviato: seleziona 'Opzioni avanzate' -> 'Solo rimozione', poi RIAVVIA."
+                Add-Report "Norton (avviato NRnR da USB)" "AVVISO"
+            } else {
+                try {
+                    Write-Info "Norton resiste ai metodi standard: scarico e avvio NRnR (tool ufficiale)..."
+                    $nrnrDest = "$env:TEMP\NRnR.exe"
+                    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls13
+                    irm "https://buy-download.norton.com/downloads/RnR/NLOK/NRnR.exe" -OutFile $nrnrDest -ErrorAction Stop
+                    Start-Process -FilePath $nrnrDest
+                    Write-Info "NRnR avviato: seleziona 'Opzioni avanzate' -> 'Solo rimozione', poi RIAVVIA."
+                    Add-Report "Norton (NRnR avviato: completare a mano)" "AVVISO"
+                } catch {
+                    Start-Process "https://norton.com/nrnr"
+                    Write-Info "Norton ancora presente: aperta pagina NRnR. Scaricalo, eseguilo e poi RIAVVIA."
+                    Add-Report "Norton (NRnR a mano)" "AVVISO"
+                }
+            }
         }
     }
 
@@ -2830,10 +2981,8 @@ if ($Global:ModoEspresso) {
             if (Get-OsppPath) {
                 Write-OK "Office gia' installato su questo PC."
                 Add-Report "Microsoft Office (installazione)" "OK"
-            } elseif (Confirm-Winget) {
-                Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
             } else {
-                Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
+                Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
             }
             Add-CollegamentiOffice
             # 2/2: ATTIVAZIONE
@@ -2843,21 +2992,17 @@ if ($Global:ModoEspresso) {
             Add-Report "Microsoft 365 (riscatto card PIN)" "OK"
         }
         "3" {
-            if (Confirm-Winget) { Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice" }
-            else { Write-Errore "Winget non disponibile." ; Add-Report "OpenOffice (installazione)" "ERRORE" }
+            Installa-Pacchetto -Nome "OpenOffice" -WingetId "Apache.OpenOffice"
         }
         "4" {
-            if (Confirm-Winget) { Installa-Pacchetto -Nome "LibreOffice" -WingetId "TheDocumentFoundation.LibreOffice" }
-            else { Write-Errore "Winget non disponibile." ; Add-Report "LibreOffice (installazione)" "ERRORE" }
+            Installa-Pacchetto -Nome "LibreOffice" -WingetId "TheDocumentFoundation.LibreOffice"
         }
         "2" {
             if (Get-OsppPath) {
                 Write-OK "Office gia' installato su questo PC."
                 Add-Report "Microsoft Office (installazione)" "OK"
-            } elseif (Confirm-Winget) {
-                Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
             } else {
-                Write-Errore "Winget non disponibile: se Office manca, scaricalo da office.com dopo il riscatto."
+                Installa-Pacchetto -Nome "Microsoft 365" -WingetId "Microsoft.Office"
             }
             Add-CollegamentiOffice
             Start-Process "https://office.com/setup"

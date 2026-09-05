@@ -17,7 +17,8 @@ BeforeAll {
 
     $script:FunzioniTestate = @(
         'New-PasswordCliente', 'New-EmailCliente',
-        'Test-NomeSimile', 'Test-LnkJunk', 'Test-Indietro'
+        'Test-NomeSimile', 'Test-LnkJunk', 'Test-Indietro',
+        'Get-OfflineDirs', 'Find-OfflineInstaller'
     )
     foreach ($nome in $script:FunzioniTestate) {
         $fn = $ast.FindAll({
@@ -119,3 +120,62 @@ Describe 'Test-Indietro' {
         Test-Indietro 'S' | Should -BeFalse
     }
 }
+
+Describe 'Get-OfflineDirs' {
+    It 'restituisce array di percorsi esistenti validi' {
+        $dirs = Get-OfflineDirs
+        $dirs | Should -Not -BeNullOrEmpty
+        foreach ($d in $dirs) {
+            Test-Path $d | Should -BeTrue
+        }
+    }
+}
+
+Describe 'Find-OfflineInstaller' {
+    BeforeAll {
+        $script:tempTestDir = Join-Path ([System.IO.Path]::GetTempPath()) "PcFacileTest_$(Get-Random)"
+        $script:tempInstDir = Join-Path $script:tempTestDir "installers"
+        New-Item -Path $script:tempInstDir -ItemType Directory -Force | Out-Null
+        $Global:TargetDir = $script:tempTestDir
+
+        New-Item -Path (Join-Path $script:tempInstDir "ChromeStandaloneSetup64.exe") -ItemType File -Force | Out-Null
+        New-Item -Path (Join-Path $script:tempInstDir "7z2408-x64.exe") -ItemType File -Force | Out-Null
+        New-Item -Path (Join-Path $script:tempInstDir "NRnR.exe") -ItemType File -Force | Out-Null
+        New-Item -Path (Join-Path $script:tempInstDir "MCPR.exe") -ItemType File -Force | Out-Null
+    }
+
+    AfterAll {
+        $Global:TargetDir = $null
+        if (Test-Path $script:tempTestDir) {
+            Remove-Item -Path $script:tempTestDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'trova Google Chrome per WingetId' {
+        $found = Find-OfflineInstaller -WingetId 'Google.Chrome' -Nome 'Google Chrome'
+        $found | Should -Not -BeNullOrEmpty
+        $found | Should -Match 'ChromeStandaloneSetup64\.exe$'
+    }
+
+    It 'trova 7-Zip per Nome o WingetId' {
+        $found = Find-OfflineInstaller -WingetId '7zip.7zip' -Nome '7-Zip'
+        $found | Should -Not -BeNullOrEmpty
+        $found | Should -Match '7z2408-x64\.exe$'
+    }
+
+    It 'trova i tool rimozione NRnR e MCPR' {
+        $nrnr = Find-OfflineInstaller -Nome 'NRnR'
+        $nrnr | Should -Not -BeNullOrEmpty
+        $nrnr | Should -Match 'NRnR\.exe$'
+
+        $mcpr = Find-OfflineInstaller -Nome 'MCPR'
+        $mcpr | Should -Not -BeNullOrEmpty
+        $mcpr | Should -Match 'MCPR\.exe$'
+    }
+
+    It 'restituisce null se il pacchetto non esiste' {
+        $found = Find-OfflineInstaller -WingetId 'NonEsistente.App' -Nome 'AppFantasma'
+        $found | Should -BeNullOrEmpty
+    }
+}
+
