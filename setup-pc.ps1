@@ -221,20 +221,23 @@ function Start-BarraAnimata {
     if (-not $RunReale) { return }
     Stop-BarraAnimata
     try {
+        $pctVal = if ($Global:PannelloStatus) { $Global:PannelloStatus.Percentuale } else { 0 }
+        try { $host.UI.RawUI.WindowTitle = "PC Facile [$pctVal%] - $Testo" } catch {}
         $ps = [PowerShell]::Create()
         [void]$ps.AddScript({
-            param($testo, $full, $empty, $uOrange, $uReset, $uBlue, $uPeach)
-            $larg = 22; $span = 4; $period = ($larg - $span) * 2; $inizio = Get-Date; $i = 0
+            param($testo, $full, $empty, $uOrange, $uReset, $uBlue, $uPeach, $pct)
+            $larg = 20; $span = 4; $period = ($larg - $span) * 2; $inizio = Get-Date; $i = 0
             while ($true) {
                 $phase = $i % $period
                 $pos = if ($phase -le ($larg - $span)) { $phase } else { $period - $phase }
                 $barra = ($empty * $pos) + ($full * $span) + ($empty * ($larg - $span - $pos))
                 $sec = [int]((Get-Date) - $inizio).TotalSeconds
-                $riga = "   $uBlue$testo$uReset  [$uOrange$barra$uReset]  $uPeach${sec}s$uReset"
+                $pctTxt = if ($pct -ge 0) { " $uOrange$pct%$uReset" } else { "" }
+                $riga = "   $uBlue$testo$uReset$pctTxt  [$uOrange$barra$uReset]  $uPeach${sec}s$uReset"
                 try { [Console]::Write("`r$riga") } catch {}
                 Start-Sleep -Milliseconds 120; $i++
             }
-        }).AddArgument($Testo).AddArgument([string]$BOX_FULL).AddArgument([string]$BOX_EMPTY).AddArgument($U_ORANGE).AddArgument($U_RESET).AddArgument($U_BLUE).AddArgument($U_PEACH)
+        }).AddArgument($Testo).AddArgument([string]$BOX_FULL).AddArgument([string]$BOX_EMPTY).AddArgument($U_ORANGE).AddArgument($U_RESET).AddArgument($U_BLUE).AddArgument($U_PEACH).AddArgument($pctVal)
         [void]$ps.BeginInvoke()
         $Global:BarraPS = $ps
     } catch { $Global:BarraPS = $null }
@@ -710,6 +713,66 @@ $Global:PannelloStatus = [ordered]@{
     }
 }
 
+function Set-SplitScreenLayout {
+    param([string]$HtmlPath)
+    if ($Global:Test -or $env:PESTER_TEST) { return }
+    try {
+        Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public class WinSplit {
+    [DllImport("user32.dll")]
+    public static extern int GetSystemMetrics(int nIndex);
+
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetConsoleWindow();
+
+    [DllImport("user32.dll")]
+    public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+
+    [DllImport("user32.dll")]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+}
+"@ -ErrorAction SilentlyContinue
+
+        $scrW = 1920
+        $scrH = 1080
+        try {
+            $w = [WinSplit]::GetSystemMetrics(0)
+            $h = [WinSplit]::GetSystemMetrics(1)
+            if ($w -gt 600) { $scrW = $w }
+            if ($h -gt 400) { $scrH = $h }
+        } catch {}
+
+        $workH = [math]::Max(400, $scrH - 48)
+        $halfW = [int]($scrW / 2)
+
+        # 1. Posiziona la console a DESTRA (X = halfW, Y = 0, W = halfW, H = workH)
+        try {
+            $hConsole = [WinSplit]::GetConsoleWindow()
+            if ($hConsole -and $hConsole -ne [IntPtr]::Zero) {
+                [WinSplit]::ShowWindow($hConsole, 9)
+                [WinSplit]::MoveWindow($hConsole, $halfW, 0, $halfW, $workH, $true) | Out-Null
+            }
+        } catch {}
+
+        # 2. Avvia Edge a SINISTRA (X = 0, Y = 0, W = halfW, H = workH)
+        $edgePath = "$env:ProgramFiles (x86)\Microsoft\Edge\Application\msedge.exe"
+        if (-not (Test-Path $edgePath)) {
+            $edgePath = "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe"
+        }
+        
+        if (Test-Path $edgePath) {
+            Start-Process -FilePath $edgePath -ArgumentList "--new-window --window-position=0,0 --window-size=$halfW,$workH `"$HtmlPath`"" -ErrorAction SilentlyContinue
+        } else {
+            Start-Process $HtmlPath
+        }
+    } catch {
+        try { Start-Process $HtmlPath } catch {}
+    }
+}
+
 function Update-PannelloStatus {
     param(
         [string]$TaskId = "",
@@ -732,10 +795,10 @@ function Update-PannelloStatus {
                     "ripristino"  = [ordered]@{ Nome = "Punto di Ripristino di Sicurezza (5% SSD)"; Stato = "pending"; Dettaglio = "In attesa" }
                     "runtime"     = [ordered]@{ Nome = "Runtime Microsoft Visual C++ (x86 & x64)"; Stato = "pending"; Dettaglio = "In attesa" }
                     "office"      = [ordered]@{ Nome = "Configurazione Icone Office / Microsoft 365"; Stato = "pending"; Dettaglio = "In attesa" }
-                    "antivirus"   = [ordered]@{ Nome = "Sicurezza & Antivirus (Windows Defender / Card)"; Stato = "pending"; Dettaglio = "In attesa" }
-                    "cyber"       = [ordered]@{ Nome = "Servizio Unieuro Cyber Protection"; Stato = "pending"; Dettaglio = "In attesa" }
                     "aggiorna"    = [ordered]@{ Nome = "Aggiornamenti & Driver Windows Update"; Stato = "pending"; Dettaglio = "In attesa" }
-                    "app"         = [ordered]@{ Nome = "Installazione Applicazioni (Ultimo Passaggio)"; Stato = "pending"; Dettaglio = "In attesa" }
+                    "app"         = [ordered]@{ Nome = "Installazione Applicazioni Unieuro"; Stato = "pending"; Dettaglio = "In attesa" }
+                    "antivirus"   = [ordered]@{ Nome = "Sicurezza & Antivirus Definitivo (Defender / Card)"; Stato = "pending"; Dettaglio = "In attesa" }
+                    "cyber"       = [ordered]@{ Nome = "Servizio Unieuro Cyber Protection"; Stato = "pending"; Dettaglio = "In attesa" }
                     "diagnostica" = [ordered]@{ Nome = "Diagnostica Hardware, BitLocker & Scheda Consegna"; Stato = "pending"; Dettaglio = "In attesa" }
                 }
             }
@@ -752,6 +815,13 @@ function Update-PannelloStatus {
             if ($Stato) { $Global:PannelloStatus.Tasks[$TaskId].Stato = $Stato }
             if ($Dettaglio) { $Global:PannelloStatus.Tasks[$TaskId].Dettaglio = $Dettaglio }
         }
+
+        # Aggiorna il titolo della finestra console con percentuale e fase
+        try {
+            $curPct = $Global:PannelloStatus.Percentuale
+            $curFase = if ($FaseCorrente) { $FaseCorrente } else { $Global:PannelloStatus.FaseCorrente }
+            $host.UI.RawUI.WindowTitle = "PC Facile [$curPct%] - $curFase"
+        } catch {}
 
         $tempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { [System.IO.Path]::GetTempPath() }
         $statusFile = Join-Path $tempDir "pcfacile-status.js"
@@ -1043,12 +1113,20 @@ function Open-PannelloOperatore {
             <div class="card">
                 <h2><span class="bar"></span> &#9881; Lavori Automatici in Background</h2>
                 <ul class="bg-tasks" id="tasksContainer">
-                    <!-- FASE 1: BASELINE SISTEMA -->
-                    <div class="portal-divider" style="margin-top: 0;"><span>&#128736; 1. Baseline &amp; Preparazione Sistema</span></div>
+                    <!-- FASE 1: PULIZIA & SISTEMA -->
+                    <div class="portal-divider" style="margin-top: 0;"><span>&#128736; 1. Pulizia &amp; Sistema</span></div>
+                    <li id="task-pulizia" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">1. Pulizia Bloatware OEM &amp; Ottimizzazione SSD</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
                     <li id="task-lingua" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">1. Forzatura Lingua &amp; Regione Italiana (it-IT)</span>
+                            <span class="task-name">2. Forzatura Lingua &amp; Regione Italiana (it-IT)</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -1056,22 +1134,14 @@ function Open-PannelloOperatore {
                     <li id="task-ripristino" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">2. Punto di Ripristino di Sicurezza (5% SSD)</span>
-                            <span class="task-detail"></span>
-                        </div>
-                        <span class="task-badge badge-pending">In attesa</span>
-                    </li>
-                    <li id="task-pulizia" class="task-item pending">
-                        <div class="task-left">
-                            <span class="task-icon">&#9675;</span>
-                            <span class="task-name">3. Pulizia Bloatware OEM &amp; Ottimizzazione SSD</span>
+                            <span class="task-name">3. Punto di Ripristino di Sicurezza (5% SSD)</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
                     </li>
 
-                    <!-- FASE 2: COMPONENTI & HARDWARE -->
-                    <div class="portal-divider"><span>&#9881; 2. Componenti &amp; Driver Hardware</span></div>
+                    <!-- FASE 2: COMPONENTI & PRODUTTIVITA' -->
+                    <div class="portal-divider"><span>&#9881; 2. Componenti &amp; Produttivit&agrave;</span></div>
                     <li id="task-runtime" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
@@ -1080,21 +1150,37 @@ function Open-PannelloOperatore {
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
                     </li>
+                    <li id="task-office" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">5. Configurazione Icone Office / Microsoft 365</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
                     <li id="task-aggiorna" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">5. Aggiornamenti &amp; Driver Windows Update</span>
+                            <span class="task-name">6. Aggiornamenti &amp; Driver Windows Update</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
                     </li>
 
-                    <!-- FASE 3: SICUREZZA & PRODUTTIVITA' -->
-                    <div class="portal-divider"><span>&#128737; 3. Sicurezza &amp; Produttivit&agrave;</span></div>
+                    <!-- FASE 3: APPLICAZIONI & SICUREZZA -->
+                    <div class="portal-divider"><span>&#128737; 3. Applicazioni &amp; Sicurezza</span></div>
+                    <li id="task-app" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">7. Installazione Applicazioni Unieuro</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
                     <li id="task-antivirus" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">6. Sicurezza &amp; Antivirus (Defender / Card)</span>
+                            <span class="task-name">8. Sicurezza &amp; Antivirus Definitivo (Defender / Card)</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -1102,34 +1188,18 @@ function Open-PannelloOperatore {
                     <li id="task-cyber" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">7. Servizio Unieuro Cyber Protection</span>
-                            <span class="task-detail"></span>
-                        </div>
-                        <span class="task-badge badge-pending">In attesa</span>
-                    </li>
-                    <li id="task-office" class="task-item pending">
-                        <div class="task-left">
-                            <span class="task-icon">&#9675;</span>
-                            <span class="task-name">8. Configurazione Icone Office / Microsoft 365</span>
+                            <span class="task-name">9. Servizio Unieuro Cyber Protection</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
                     </li>
 
-                    <!-- FASE 4: APPLICAZIONI & COLLAUDO -->
-                    <div class="portal-divider"><span>&#128640; 4. Applicazioni &amp; Consegna</span></div>
-                    <li id="task-app" class="task-item pending">
-                        <div class="task-left">
-                            <span class="task-icon">&#9675;</span>
-                            <span class="task-name">9. Installazione Applicazioni (Ultimo Passaggio)</span>
-                            <span class="task-detail"></span>
-                        </div>
-                        <span class="task-badge badge-pending">In attesa</span>
-                    </li>
+                    <!-- FASE 4: COLLAUDO & SCHEDA -->
+                    <div class="portal-divider"><span>&#128640; 4. Collaudo &amp; Scheda di Consegna</span></div>
                     <li id="task-diagnostica" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">10. Diagnostica Hardware, BitLocker &amp; Scheda</span>
+                            <span class="task-name">10. Diagnostica Hardware, BitLocker &amp; Scheda Consegna</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -1303,7 +1373,7 @@ function Open-PannelloOperatore {
                             var badgeClass = 'badge-pending';
                             var badgeText = 'In attesa';
                             if (stato === 'done') { badgeClass = 'badge-done-task'; badgeText = 'Completato'; }
-                            else if (stato === 'running') { badgeClass = 'badge-running'; badgeText = 'In corso...'; }
+                            else if (stato === 'running') { badgeClass = 'badge-running'; badgeText = 'In corso (' + pct + '%)'; }
                             else if (stato === 'error') { badgeClass = 'badge-error'; badgeText = 'Errore'; }
                             else if (stato === 'skipped') { badgeClass = 'badge-skipped'; badgeText = 'Saltato'; }
                             
@@ -1345,7 +1415,9 @@ function Open-PannelloOperatore {
 "@
         $html | Set-Content -Path $pannelloFile -Encoding UTF8
         if (-not $Global:Test -and -not $env:PESTER_TEST) {
-            try { Start-Process $pannelloFile } catch {}
+            try { Set-SplitScreenLayout -HtmlPath $pannelloFile } catch {
+                try { Start-Process $pannelloFile } catch {}
+            }
         }
         Write-OK "Pannello Operatore aperto nel browser: sincronizzazione live dei lavori attiva."
     } catch {
@@ -4343,17 +4415,13 @@ $bloatwareAppx = @(
     } catch {}
 
     try {
-        Write-Info "Pulizia componenti obsoleti WinSxS (DISM)..."
-        Start-BarraAnimata "Pulizia componenti WinSxS"
-        $dismProc = Start-Process dism.exe -ArgumentList "/Online /Cleanup-Image /StartComponentCleanup /NoRestart" -Wait -PassThru -NoNewWindow -ErrorAction SilentlyContinue
-        if ($dismProc -and $dismProc.ExitCode -eq 0) {
-            Write-OK "Pulizia WinSxS completata con successo."
-            Add-Report "Pulizia componenti WinSxS (DISM)" "OK"
-        }
-    } catch {} finally { Stop-BarraAnimata }
+        Write-Info "Avvio pulizia componenti obsoleti WinSxS (DISM in background)..."
+        Start-Process dism.exe -ArgumentList "/Online /Cleanup-Image /StartComponentCleanup /NoRestart" -NoNewWindow -ErrorAction SilentlyContinue | Out-Null
+        Add-Report "Pulizia componenti WinSxS (DISM)" "OK"
+    } catch {}
 
     Write-OK "Pulizia e ottimizzazione iniziale completata."
-    Update-PannelloStatus -TaskId "pulizia" -Stato "done" -Percentuale 25 -Dettaglio "Completato"
+    Update-PannelloStatus -TaskId "pulizia" -Stato "done" -Percentuale 20 -Dettaglio "Completato"
 
 Save-Fase 3 "Pulizia e ottimizzazione"
 }
@@ -4866,11 +4934,11 @@ function Attiva-ServizioWeb {
     }
 }
 
-# Il wizard: passo 3=Antivirus, 4=Unieuro Cyber Protection, 5=Aggiornamenti, 6=Driver,
-# 7=Applicazioni + browser (ULTIMO PASSAGGIO). La barra mostra (passo-2) su 5.
+# Il wizard: passo 3=Aggiornamenti, 4=Driver, 5=Applicazioni + browser,
+# 6=Antivirus, 7=Unieuro Cyber Protection (ULTIMO SERVIZIO). La barra mostra (passo-2) su 5.
 $passo = 3
 # Nomi leggibili dei passi wizard per il checkpoint di ripresa sessione.
-$wizNomi = @{ 3 = "Antivirus"; 4 = "Unieuro Cyber Protection"; 5 = "Aggiornamenti (app + Windows)"; 6 = "Driver"; 7 = "Applicazioni + browser" }
+$wizNomi = @{ 3 = "Aggiornamenti (app + Windows)"; 4 = "Driver"; 5 = "Applicazioni + browser"; 6 = "Antivirus"; 7 = "Unieuro Cyber Protection" }
 # Ripresa sessione: fase 7..11 = passo wizard 3..7 completato -> si riparte
 # dal successivo (fase 11 = tutto il wizard fatto, si salta al report).
 if ($Global:FaseRipresa -ge 7) {
@@ -4889,82 +4957,11 @@ Write-Host ("$AON  Passo $passoMostrato/$totPassi  [$bar]$AOFF") -ForegroundColo
 switch ($passo) {
 3 {
 # =============================================================================
-# PASSO 3 - ANTIVIRUS
-# =============================================================================
-
-Write-Titolo "Antivirus"
-Update-PannelloStatus -TaskId "antivirus" -Stato "running" -Percentuale 65 -FaseCorrente "Configurazione Antivirus" -Dettaglio "Verifica Windows Defender e card cliente..."
-
-if ($Global:ModoEspresso) {
-    Write-OK "Modalita' Espresso: Windows Defender / Sicurezza di Windows configurato e attivo."
-    Add-Report "Antivirus" "OK (Windows Defender)"
-    Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 68 -Dettaglio "Windows Defender attivo"
-} else {
-    Write-Host "Scegli l'antivirus da installare:" -ForegroundColor White
-    Write-Host "  1) McAfee"
-    Write-Host "  2) Norton"
-    Write-Host "  3) Salta (Windows Defender attivo)"
-    Write-Host ""
-
-    $sceltaAV = Attendi-Risposta "Scelta (1-3, B=indietro)"
-    if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
-
-    switch ($sceltaAV) {
-        "1" {
-            Installa-Antivirus -Nome "McAfee" -UrlRiscatto "https://www.mcafee.com/activate" -Utente $credMsAccount -Password $credMsPassword
-            Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 68 -Dettaglio "McAfee configurato"
-        }
-        "2" {
-            Installa-Antivirus -Nome "Norton" -UrlRiscatto "https://www.norton.com/setup" -Utente $credMsAccount -Password $credMsPassword
-            Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 68 -Dettaglio "Norton configurato"
-        }
-        default {
-            Write-Info "Antivirus dedicato saltato: Windows Defender e' attivo e aggiornato."
-            Add-Report "Antivirus" "OK (Windows Defender)"
-            Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 68 -Dettaglio "Windows Defender attivo"
-        }
-    }
-}
-
-$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
-}
-4 {
-# =============================================================================
-# PASSO 4 - UNIEURO CYBER PROTECTION (opzionale)
-# =============================================================================
-
-Write-Titolo "Unieuro Cyber Protection"
-Update-PannelloStatus -TaskId "cyber" -Stato "running" -Percentuale 70 -FaseCorrente "Unieuro Cyber Protection" -Dettaglio "Configurazione servizio web..."
-
-if ($Global:ModoEspresso) {
-    Write-Info "Modalita' Espresso: Cyber Protection non richiesta (attivabile manualmente se acquistata)."
-    Add-Report "Unieuro Cyber Protection" "SALTATO"
-    Update-PannelloStatus -TaskId "cyber" -Stato "skipped" -Percentuale 74 -Dettaglio "Non acquistato (saltato)"
-} else {
-    Write-Host "Servizio venduto solo su richiesta: INVIO per saltare se non l'ha comprato." -ForegroundColor White
-    Write-Host ""
-
-    $vuoiUnieuro = Attendi-Risposta "Attivare Unieuro Cyber Protection? (S = si / INVIO = no, B=indietro)"
-    if (Test-Indietro $vuoiUnieuro) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
-    if ($vuoiUnieuro -match "^[Ss]") {
-        Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it" -Utente $credMsAccount
-        Update-PannelloStatus -TaskId "cyber" -Stato "done" -Percentuale 74 -Dettaglio "Configurato"
-    } else {
-        Write-Info "Unieuro Cyber Protection saltato."
-        Add-Report "Unieuro Cyber Protection" "SALTATO"
-        Update-PannelloStatus -TaskId "cyber" -Stato "skipped" -Percentuale 74 -Dettaglio "Non acquistato (saltato)"
-    }
-}
-
-$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
-}
-5 {
-# =============================================================================
-# PASSO 5 - AGGIORNAMENTI - app installate (winget) + sicurezza di Windows
+# PASSO 3 - AGGIORNAMENTI - app installate (winget) + sicurezza di Windows
 # =============================================================================
 
 Write-Titolo "Aggiornamenti (app + Windows)"
-Update-PannelloStatus -TaskId "aggiorna" -Stato "running" -Percentuale 76 -FaseCorrente "Aggiornamenti di Sicurezza" -Dettaglio "Verifica aggiornamenti app e Windows..."
+Update-PannelloStatus -TaskId "aggiorna" -Stato "running" -Percentuale 55 -FaseCorrente "Aggiornamenti di Sicurezza" -Dettaglio "Verifica aggiornamenti app e Windows..."
 
 Write-Host "Con un solo SI aggiorno, una dopo l'altra:" -ForegroundColor White
 Write-Host "  - App: all'ultima versione le app gestite da winget (anche OEM)." -ForegroundColor White
@@ -5011,23 +5008,23 @@ if ($vuoiUpgrade -match "^[Ss]") {
         Write-Errore "Impossibile avviare gli aggiornamenti di Windows: $_"
         Add-Report "Aggiornamenti di sicurezza Windows" "ERRORE"
     }
-    Update-PannelloStatus -TaskId "aggiorna" -Stato "running" -Percentuale 80 -Dettaglio "Aggiornamenti avviati in background"
+    Update-PannelloStatus -TaskId "aggiorna" -Stato "running" -Percentuale 62 -Dettaglio "Aggiornamenti avviati in background"
 } else {
     Write-Info "Aggiornamenti saltati (app e Windows)."
     Add-Report "Aggiornamento app installate" "SALTATO"
     Add-Report "Aggiornamenti di sicurezza Windows" "SALTATO"
-    Update-PannelloStatus -TaskId "aggiorna" -Stato "skipped" -Percentuale 80 -Dettaglio "Saltato"
+    Update-PannelloStatus -TaskId "aggiorna" -Stato "skipped" -Percentuale 62 -Dettaglio "Saltato"
 }
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-6 {
+4 {
 # =============================================================================
-# PASSO 6 - DRIVER (Windows Update, opzionale)
+# PASSO 4 - DRIVER (Windows Update, opzionale)
 # =============================================================================
 
 Write-Titolo "Driver (Windows Update)"
-Update-PannelloStatus -TaskId "aggiorna" -Stato "running" -Percentuale 82 -FaseCorrente "Driver Hardware & GPU" -Dettaglio "Verifica driver grafici e periferiche..."
+Update-PannelloStatus -TaskId "aggiorna" -Stato "running" -Percentuale 65 -FaseCorrente "Driver Hardware & GPU" -Dettaglio "Verifica driver grafici e periferiche..."
 
 Write-Host "Cerca e installa i driver mancanti/aggiornati dal catalogo Windows Update." -ForegroundColor White
 Write-Host "Se c'e' una scheda video DEDICATA, uso anche il tool del produttore (Windows" -ForegroundColor White
@@ -5118,27 +5115,27 @@ if ($vuoiDriver -match "^[Ss]") {
             }
             if ($esito.RebootRequired) { Write-Info "Alcuni driver richiedono un RIAVVIO per completare." }
         }
-        Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 86 -Dettaglio "Completato"
+        Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 72 -Dettaglio "Completato"
     } catch {
         Write-Errore "Ricerca/installazione driver non riuscita: $_"
         Add-Report "Driver (Windows Update)" "ERRORE"
-        Update-PannelloStatus -TaskId "aggiorna" -Stato "error" -Percentuale 86 -Dettaglio "Non riuscito (proseguo)"
+        Update-PannelloStatus -TaskId "aggiorna" -Stato "error" -Percentuale 72 -Dettaglio "Non riuscito (proseguo)"
     }
 } else {
     Write-Info "Installazione driver saltata."
     Add-Report "Driver (Windows Update)" "SALTATO"
-    Update-PannelloStatus -TaskId "aggiorna" -Stato "skipped" -Percentuale 86 -Dettaglio "Saltato"
+    Update-PannelloStatus -TaskId "aggiorna" -Stato "skipped" -Percentuale 72 -Dettaglio "Saltato"
 }
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-7 {
+5 {
 # =============================================================================
-# PASSO 7 - APPLICAZIONI + BROWSER (ULTIMO PASSAGGIO)
+# PASSO 5 - APPLICAZIONI + BROWSER
 # =============================================================================
 
 Write-Titolo "Applicazioni"
-Update-PannelloStatus -TaskId "app" -Stato "running" -Percentuale 88 -FaseCorrente "Installazione Applicazioni (Ultimo Passaggio)" -Dettaglio "Avvio installazione app..."
+Update-PannelloStatus -TaskId "app" -Stato "running" -Percentuale 74 -FaseCorrente "Installazione Applicazioni" -Dettaglio "Avvio installazione app..."
 
 $appsDisponibili = $CatalogoApp
 $profili = [ordered]@{
@@ -5180,7 +5177,7 @@ if ($Global:AppProfiloRipresa) {
     Write-OK "Riprendo l'installazione app (profilo $etichetta): $rimaste da completare."
     Write-Info "Le app gia' installate le salto: riparto dall'esatta app rimasta."
 } elseif ($Global:ModoEspresso) {
-    Write-Host "Modalita' Espresso: installazione automatica del PROFILO BASE (ultimo passaggio)..." -ForegroundColor Green
+    Write-Host "Modalita' Espresso: installazione automatica del PROFILO BASE..." -ForegroundColor Green
     Write-Host "  (Google Chrome, VLC, Adobe Acrobat Reader, 7-Zip, AnyDesk, WhatsApp, Spotify, AIMP, Zoom)" -ForegroundColor Gray
     $etichetta = "BASE"
     $pianoApp  = @(Costruisci-PianoApp -Scelta "1")
@@ -5247,7 +5244,7 @@ if ($pianoApp.Count -gt 0) {
             Write-Info "$($app.Nome): gia' installato in questa sessione, salto."
             continue
         }
-        $currPct = 88 + [int](8 * $appIndex / $pianoApp.Count)
+        $currPct = 74 + [int](14 * $appIndex / $pianoApp.Count)
         Update-PannelloStatus -TaskId "app" -Stato "running" -Percentuale $currPct -FaseCorrente "Installazione Applicazioni" -Dettaglio "Installazione $($app.Nome) in corso..."
         Installa-Pacchetto -Nome $app.Nome -WingetId $app.Id
         if ($Global:UltimaInstallOk) {
@@ -5255,9 +5252,9 @@ if ($pianoApp.Count -gt 0) {
             Save-AppProgresso -Profilo $etichetta -Lista $pianoApp -Fatte $appFatte
         }
     }
-    Update-PannelloStatus -TaskId "app" -Stato "done" -Percentuale 96 -Dettaglio "Tutte le app installate"
+    Update-PannelloStatus -TaskId "app" -Stato "done" -Percentuale 88 -Dettaglio "Tutte le app installate"
 } else {
-    Update-PannelloStatus -TaskId "app" -Stato "skipped" -Percentuale 96 -Dettaglio "Saltato"
+    Update-PannelloStatus -TaskId "app" -Stato "skipped" -Percentuale 88 -Dettaglio "Saltato"
 }
 
 Remove-IconeDoppieDesktop
@@ -5269,6 +5266,77 @@ if ($Global:AppFallite -ge 2) {
     Write-Info "e rilancia PC Facile: rispondi S a 'Riprendere da dove eri arrivato?' -"
     Write-Info "le app gia' installate si saltano da sole, riscarica solo le mancanti."
     Add-Report "App non installate ($($Global:AppFallite)): probabile rete" "AVVISO"
+}
+
+$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
+}
+6 {
+# =============================================================================
+# PASSO 6 - ANTIVIRUS
+# =============================================================================
+
+Write-Titolo "Antivirus"
+Update-PannelloStatus -TaskId "antivirus" -Stato "running" -Percentuale 90 -FaseCorrente "Configurazione Antivirus" -Dettaglio "Verifica Windows Defender e card cliente..."
+
+if ($Global:ModoEspresso) {
+    Write-OK "Modalita' Espresso: Windows Defender / Sicurezza di Windows configurato e attivo."
+    Add-Report "Antivirus" "OK (Windows Defender)"
+    Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 92 -Dettaglio "Windows Defender attivo"
+} else {
+    Write-Host "Scegli l'antivirus da installare:" -ForegroundColor White
+    Write-Host "  1) McAfee"
+    Write-Host "  2) Norton"
+    Write-Host "  3) Salta (Windows Defender attivo)"
+    Write-Host ""
+
+    $sceltaAV = Attendi-Risposta "Scelta (1-3, B=indietro)"
+    if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
+
+    switch ($sceltaAV) {
+        "1" {
+            Installa-Antivirus -Nome "McAfee" -UrlRiscatto "https://www.mcafee.com/activate" -Utente $credMsAccount -Password $credMsPassword
+            Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 92 -Dettaglio "McAfee configurato"
+        }
+        "2" {
+            Installa-Antivirus -Nome "Norton" -UrlRiscatto "https://www.norton.com/setup" -Utente $credMsAccount -Password $credMsPassword
+            Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 92 -Dettaglio "Norton configurato"
+        }
+        default {
+            Write-Info "Antivirus dedicato saltato: Windows Defender e' attivo e aggiornato."
+            Add-Report "Antivirus" "OK (Windows Defender)"
+            Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 92 -Dettaglio "Windows Defender attivo"
+        }
+    }
+}
+
+$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
+}
+7 {
+# =============================================================================
+# PASSO 7 - UNIEURO CYBER PROTECTION (opzionale, ultimo passo prima della consegna)
+# =============================================================================
+
+Write-Titolo "Unieuro Cyber Protection"
+Update-PannelloStatus -TaskId "cyber" -Stato "running" -Percentuale 94 -FaseCorrente "Unieuro Cyber Protection" -Dettaglio "Configurazione servizio web..."
+
+if ($Global:ModoEspresso) {
+    Write-Info "Modalita' Espresso: Cyber Protection disponibile 1-Click dal Pannello Operatore."
+    Add-Report "Unieuro Cyber Protection" "Disponibile (Pannello Operatore)"
+    Update-PannelloStatus -TaskId "cyber" -Stato "done" -Percentuale 96 -Dettaglio "Disponibile 1-Click nel pannello"
+} else {
+    Write-Host "Servizio venduto solo su richiesta: INVIO per saltare se non l'ha comprato." -ForegroundColor White
+    Write-Host ""
+
+    $vuoiUnieuro = Attendi-Risposta "Attivare Unieuro Cyber Protection? (S = si / INVIO = no, B=indietro)"
+    if (Test-Indietro $vuoiUnieuro) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
+    if ($vuoiUnieuro -match "^[Ss]") {
+        Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it" -Utente $credMsAccount
+        Update-PannelloStatus -TaskId "cyber" -Stato "done" -Percentuale 96 -Dettaglio "Configurato"
+    } else {
+        Write-Info "Unieuro Cyber Protection saltato."
+        Add-Report "Unieuro Cyber Protection" "SALTATO"
+        Update-PannelloStatus -TaskId "cyber" -Stato "skipped" -Percentuale 96 -Dettaglio "Non acquistato (saltato)"
+    }
 }
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)

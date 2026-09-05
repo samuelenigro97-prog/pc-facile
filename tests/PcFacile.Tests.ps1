@@ -22,7 +22,7 @@ BeforeAll {
         'Get-OfflineDirs', 'Find-OfflineInstaller', 'Install-OfflinePackage', 'Stop-AppPopups', 'Select-DestinazioneUSB',
         'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus',
         'Get-SystemHardwareDetails', 'Install-VisualCRuntime',
-        'Update-PannelloStatus', 'Open-PannelloOperatore', 'Get-CredenzialiSalvatePannello',
+        'Update-PannelloStatus', 'Open-PannelloOperatore', 'Set-SplitScreenLayout', 'Get-CredenzialiSalvatePannello',
         'Enable-SilentElevation', 'Restore-SilentElevation',
         'New-WlanProfileXml', 'Connect-AutoWiFi', 'Save-StoreWiFiProfile'
     )
@@ -393,5 +393,10 @@ Describe 'Connect-AutoWiFi & Save-StoreWiFiProfile' {
     }
 }
 
-
-
+Describe 'Set-SplitScreenLayout' {
+    It 'esegue senza errori in modalita test' {
+        $Global:Test = $true
+        { Set-SplitScreenLayout -HtmlPath "/fake/test.html" } | Should -Not -Throw
+        $Global:Test = $false
+    }
+}
