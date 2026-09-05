@@ -1372,9 +1372,11 @@ function Install-OfflinePackage {
     Write-Info "Installazione offline da USB in corso: $Nome ($FilePath)..."
     try {
         $ext = [System.IO.Path]::GetExtension($FilePath).ToLower()
+        $workDir = Split-Path -Path $FilePath -Parent
+        if (-not $workDir -or -not (Test-Path -LiteralPath $workDir)) { $workDir = $env:TEMP }
         $proc = $null
         if ($ext -eq '.msi') {
-            $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/i `"$FilePath`" /qn /norestart" -Wait -PassThru -ErrorAction Stop
+            $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList "/i `"$FilePath`" /qn /norestart" -WorkingDirectory $workDir -Wait -PassThru -ErrorAction Stop
         } elseif ($ext -eq '.msixbundle' -or $ext -eq '.appxbundle' -or $ext -eq '.msix' -or $ext -eq '.appx') {
             Add-AppxPackage -Path $FilePath -ErrorAction Stop
             Write-OK "$Nome installato con successo da pacchetto offline Appx/MSIX!"
@@ -1385,7 +1387,7 @@ function Install-OfflinePackage {
             $taskName = "PCFacile_Spotify_$([Math]::Abs((Get-Random) % 10000))"
             try {
                 if (Get-Command New-ScheduledTaskAction -ErrorAction SilentlyContinue) {
-                    $action = New-ScheduledTaskAction -Execute $FilePath -Argument "/silent"
+                    $action = New-ScheduledTaskAction -Execute $FilePath -Argument "/silent" -WorkingDirectory $workDir
                     $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
                     Register-ScheduledTask -TaskName $taskName -Action $action -Principal $principal -Force -ErrorAction Stop | Out-Null
                     Start-ScheduledTask -TaskName $taskName -ErrorAction Stop
@@ -1405,7 +1407,7 @@ function Install-OfflinePackage {
                 }
             } catch {
                 try {
-                    Start-Process -FilePath "runas.exe" -ArgumentList "/trustlevel:0x20000 `"`"$FilePath`" /silent`"" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
+                    Start-Process -FilePath "runas.exe" -ArgumentList "/trustlevel:0x20000 `"`"$FilePath`" /silent`"" -WorkingDirectory $workDir -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
                 } catch {}
             }
 
@@ -1437,7 +1439,7 @@ function Install-OfflinePackage {
             elseif ($FilePath -like "*Intel*") { $arg = "/quiet /norestart" }
             elseif ($FilePath -like "*vc_redist*" -or $FilePath -like "*vcredist*") { $arg = "/install /quiet /norestart" }
 
-            $proc = Start-Process -FilePath $FilePath -ArgumentList $arg -Wait -PassThru -ErrorAction Stop
+            $proc = Start-Process -FilePath $FilePath -ArgumentList $arg -WorkingDirectory $workDir -Wait -PassThru -ErrorAction Stop
         }
         if ($proc -and ($proc.ExitCode -eq 0 -or $proc.ExitCode -eq 3010 -or $proc.ExitCode -eq 1641)) {
             Write-OK "$Nome installato con successo da cache offline USB!"
@@ -3496,9 +3498,6 @@ Update-PannelloStatus -TaskId "pulizia" -Stato "running" -Percentuale 15 -FaseCo
 Write-Host "Toglie antivirus di prova + bloatware OEM + OneDrive, alleggerisce l'avvio." -ForegroundColor White
 Write-Host ""
 
-$vuoiPulizia = Chiedi "Eseguire ora la pulizia e ottimizzazione iniziale? (consigliato) (S/N)" "S"
-if ($vuoiPulizia -match "^[Ss]") {
-
     # ---------------------------------------------------------------------
     # 1/3 - ANTIVIRUS DI PROVA
     # ---------------------------------------------------------------------
@@ -3891,14 +3890,6 @@ $bloatwareAppx = @(
 
     Write-OK "Pulizia e ottimizzazione iniziale completata."
     Update-PannelloStatus -TaskId "pulizia" -Stato "done" -Percentuale 25 -Dettaglio "Completato"
-} else {
-    Write-Info "Pulizia e ottimizzazione iniziale saltata."
-    Update-PannelloStatus -TaskId "pulizia" -Stato "skipped" -Percentuale 25 -Dettaglio "Saltato"
-    Add-Report "Antivirus di prova" "SALTATO"
-    Add-Report "Rimozione bloatware" "SALTATO"
-    Add-Report "Configurazione Windows base" "SALTATO"
-    Add-Report "Privacy e telemetria Windows" "SALTATO"
-}
 
 Save-Fase 3 "Pulizia e ottimizzazione"
 }
@@ -3918,9 +3909,6 @@ Write-Host ""
 
 $culturaAttuale = (Get-Culture).Name
 Write-Info "Lingua/regione attuale: $culturaAttuale"
-
-$impostaLingua = Chiedi "Impostare il sistema in Italiano (it-IT)? (S/N)" "S"
-if ($impostaLingua -match "^[Ss]") {
 
     # Salto il DOWNLOAD del pacchetto SOLO se il DISPLAY e' gia' in italiano
     # (Get-UICulture). ATTENZIONE: il fatto che it-IT sia "tra le lingue installate"
@@ -4050,21 +4038,10 @@ if ($impostaLingua -match "^[Ss]") {
 
     # --- 5) Windows 10: il pacchetto lingua (display) va aggiunto a mano ---
     if ($packDaAggiungere) {
-        Write-Info "Su Windows 10 il pacchetto della lingua di visualizzazione va aggiunto a mano."
-        $apriImp = Chiedi "Aprire ora Impostazioni lingua per aggiungere/verificare l'Italiano? (S/N)" "N"
-        if ($apriImp -match "^[Ss]") {
-            Start-Process "ms-settings:regionlanguage"
-            Write-Info "In Impostazioni: aggiungi 'Italiano (Italia)', impostalo come lingua di"
-            Write-Info "  visualizzazione e scarica il pacchetto lingua. Poi torna qui."
-            Pausa
-        }
+        Write-Info "Su Windows 10 il pacchetto della lingua di visualizzazione va aggiunto da Impostazioni > Lingua."
+    }
     Write-OK "Lingua e regione impostate su Italiano (it-IT)."
     Update-PannelloStatus -TaskId "lingua" -Stato "done" -Percentuale 35 -Dettaglio "Completato"
-} else {
-    Write-Info "Impostazione lingua saltata."
-    Update-PannelloStatus -TaskId "lingua" -Stato "skipped" -Percentuale 35 -Dettaglio "Saltato"
-    Add-Report "Lingua italiana (it-IT)" "SALTATO"
-}
 
 Save-Fase 4 "Lingua e regione"
 }
@@ -4090,10 +4067,6 @@ Write-Host ""
 Write-Host "  Rispondi S per crearlo (consigliato) oppure N per saltare, poi premi INVIO." -ForegroundColor Gray
 
 # Chiedi/Read-Host accettano SOLO input da tastiera (niente finestra GUI con
-# pulsanti): la conferma si da' scrivendo S o N e premendo INVIO. Enter senza
-# testo = S (predefinito, come indicato in "consigliato").
-$vuoiRestore = Chiedi "Creare un punto di ripristino ora? (consigliato) (S/N)" "S"
-if (($vuoiRestore -match "^[Ss]") -or ($vuoiRestore.Trim() -eq '')) {
     try {
         Enable-ComputerRestore -Drive "$env:SystemDrive\" -ErrorAction SilentlyContinue
         # Limita lo spazio massimo del ripristino al 5% del disco per proteggere lo storage SSD
@@ -4142,11 +4115,6 @@ if (($vuoiRestore -match "^[Ss]") -or ($vuoiRestore.Trim() -eq '')) {
         Update-PannelloStatus -TaskId "ripristino" -Stato "error" -Percentuale 45 -Dettaglio "Non riuscito (proseguo)"
         Add-Report "Punto di ripristino" "ERRORE"
     }
-} else {
-    Write-Info "Punto di ripristino saltato."
-    Update-PannelloStatus -TaskId "ripristino" -Stato "skipped" -Percentuale 45 -Dettaglio "Saltato"
-    Add-Report "Punto di ripristino" "SALTATO"
-}
 
 Save-Fase 5 "Punto di ripristino"
 }
@@ -4160,6 +4128,7 @@ Save-Fase 5 "Punto di ripristino"
 # =============================================================================
 
 if (Test-FaseFatta 6) { Write-Info "App Office: gia' fatto nella sessione precedente, salto." }
+else {
 Write-Titolo "Installazione App Office"
 Update-PannelloStatus -TaskId "office" -Stato "running" -Percentuale 50 -FaseCorrente "Configurazione Office & Runtime" -Dettaglio "Configurazione icone Office e runtime..."
 
@@ -4540,10 +4509,6 @@ Write-Host "Puo' richiedere diversi minuti. (I driver hanno il loro passo dedica
 Write-Host ""
 
     $vuoiUpgrade = "S"
-    if (-not $Global:ModoEspresso) {
-        $vuoiUpgrade = Attendi-Risposta "Aggiornare ora app e Windows? (S/N, B=indietro)"
-        if (Test-Indietro $vuoiUpgrade) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
-    }
 if ($vuoiUpgrade -match "^[Ss]") {
     # 1) APP INSTALLATE (winget)
     if (Confirm-Winget) {
@@ -4648,10 +4613,6 @@ switch ($gpuDed) {
 }
 
     $vuoiDriver = "S"
-    if (-not $Global:ModoEspresso) {
-        $vuoiDriver = Attendi-Risposta "Cercare e installare i driver ora? (S/N, B=indietro)"
-        if (Test-Indietro $vuoiDriver) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
-    }
 if ($vuoiDriver -match "^[Ss]") {
     try {
         Write-Info "Ricerca driver su Windows Update (puo' richiedere qualche minuto)..."
