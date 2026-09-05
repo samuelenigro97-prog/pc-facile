@@ -22,7 +22,7 @@ BeforeAll {
         'Get-OfflineDirs', 'Find-OfflineInstaller', 'Install-OfflinePackage', 'Select-DestinazioneUSB',
         'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus',
         'Get-SystemHardwareDetails', 'Install-VisualCRuntime',
-        'Open-PannelloOperatore'
+        'Update-PannelloStatus', 'Open-PannelloOperatore'
     )
     foreach ($nome in $script:FunzioniTestate) {
         $fn = $ast.FindAll({
@@ -301,6 +301,19 @@ Describe 'Open-PannelloOperatore' {
         $content | Should -Match "mcafee\.com/activate"
         $content | Should -Match "norton\.com/setup"
         $content | Should -Match "unieuro-cyber-protection\.covercare\.it"
+    }
+}
+
+Describe 'Update-PannelloStatus' {
+    It 'scrive lo stato live in formato js senza errori' {
+        Update-PannelloStatus -TaskId "pulizia" -Stato "running" -Percentuale 15 -FaseCorrente "Pulizia Bloatware" -Dettaglio "Rimozione in corso..."
+        $tempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { [System.IO.Path]::GetTempPath() }
+        $statusFile = Join-Path $tempDir "pcfacile-status.js"
+        Test-Path $statusFile | Should -BeTrue
+        $content = Get-Content $statusFile -Raw
+        $content | Should -Match "window\.onPCFacileStatusUpdate"
+        $content | Should -Match "pulizia"
+        $content | Should -Match "running"
     }
 }
 

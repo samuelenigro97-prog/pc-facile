@@ -667,6 +667,77 @@ function Clear-TempCache {
     }
 }
 
+$Global:PannelloStatus = [ordered]@{
+    Percentuale   = 5
+    FaseCorrente  = "Inizializzazione Setup"
+    Dettaglio     = "Avvio pannello operatore Unieuro e preparazione ambiente..."
+    Completato    = $false
+    Tasks         = [ordered]@{
+        "pulizia"     = [ordered]@{ Nome = "Pulizia Bloatware OEM & Ottimizzazione SSD"; Stato = "pending"; Dettaglio = "In attesa" }
+        "lingua"      = [ordered]@{ Nome = "Forzatura Lingua & Regione Italiana (it-IT)"; Stato = "pending"; Dettaglio = "In attesa" }
+        "ripristino"  = [ordered]@{ Nome = "Punto di Ripristino di Sicurezza (5% SSD)"; Stato = "pending"; Dettaglio = "In attesa" }
+        "runtime"     = [ordered]@{ Nome = "Runtime Microsoft Visual C++ (x86 & x64)"; Stato = "pending"; Dettaglio = "In attesa" }
+        "office"      = [ordered]@{ Nome = "Configurazione Icone Office / Microsoft 365"; Stato = "pending"; Dettaglio = "In attesa" }
+        "antivirus"   = [ordered]@{ Nome = "Sicurezza & Antivirus (Windows Defender / Card)"; Stato = "pending"; Dettaglio = "In attesa" }
+        "cyber"       = [ordered]@{ Nome = "Servizio Unieuro Cyber Protection"; Stato = "pending"; Dettaglio = "In attesa" }
+        "aggiorna"    = [ordered]@{ Nome = "Aggiornamenti & Driver Windows Update"; Stato = "pending"; Dettaglio = "In attesa" }
+        "app"         = [ordered]@{ Nome = "Installazione Applicazioni (Ultimo Passaggio)"; Stato = "pending"; Dettaglio = "In attesa" }
+        "diagnostica" = [ordered]@{ Nome = "Diagnostica Hardware, BitLocker & Scheda Consegna"; Stato = "pending"; Dettaglio = "In attesa" }
+    }
+}
+
+function Update-PannelloStatus {
+    param(
+        [string]$TaskId = "",
+        [string]$Stato = "",
+        [string]$Dettaglio = "",
+        [int]$Percentuale = -1,
+        [string]$FaseCorrente = "",
+        [switch]$Completato
+    )
+    try {
+        if (-not $Global:PannelloStatus) {
+            $Global:PannelloStatus = [ordered]@{
+                Percentuale   = 5
+                FaseCorrente  = "Inizializzazione Setup"
+                Dettaglio     = "Avvio pannello operatore Unieuro..."
+                Completato    = $false
+                Tasks         = [ordered]@{
+                    "pulizia"     = [ordered]@{ Nome = "Pulizia Bloatware OEM & Ottimizzazione SSD"; Stato = "pending"; Dettaglio = "In attesa" }
+                    "lingua"      = [ordered]@{ Nome = "Forzatura Lingua & Regione Italiana (it-IT)"; Stato = "pending"; Dettaglio = "In attesa" }
+                    "ripristino"  = [ordered]@{ Nome = "Punto di Ripristino di Sicurezza (5% SSD)"; Stato = "pending"; Dettaglio = "In attesa" }
+                    "runtime"     = [ordered]@{ Nome = "Runtime Microsoft Visual C++ (x86 & x64)"; Stato = "pending"; Dettaglio = "In attesa" }
+                    "office"      = [ordered]@{ Nome = "Configurazione Icone Office / Microsoft 365"; Stato = "pending"; Dettaglio = "In attesa" }
+                    "antivirus"   = [ordered]@{ Nome = "Sicurezza & Antivirus (Windows Defender / Card)"; Stato = "pending"; Dettaglio = "In attesa" }
+                    "cyber"       = [ordered]@{ Nome = "Servizio Unieuro Cyber Protection"; Stato = "pending"; Dettaglio = "In attesa" }
+                    "aggiorna"    = [ordered]@{ Nome = "Aggiornamenti & Driver Windows Update"; Stato = "pending"; Dettaglio = "In attesa" }
+                    "app"         = [ordered]@{ Nome = "Installazione Applicazioni (Ultimo Passaggio)"; Stato = "pending"; Dettaglio = "In attesa" }
+                    "diagnostica" = [ordered]@{ Nome = "Diagnostica Hardware, BitLocker & Scheda Consegna"; Stato = "pending"; Dettaglio = "In attesa" }
+                }
+            }
+        }
+        if ($Percentuale -ge 0) { $Global:PannelloStatus.Percentuale = $Percentuale }
+        if ($FaseCorrente) { $Global:PannelloStatus.FaseCorrente = $FaseCorrente }
+        if ($Dettaglio -and -not $TaskId) { $Global:PannelloStatus.Dettaglio = $Dettaglio }
+        if ($Completato) {
+            $Global:PannelloStatus.Completato = $true
+            $Global:PannelloStatus.Percentuale = 100
+        }
+
+        if ($TaskId -and $Global:PannelloStatus.Tasks.Contains($TaskId)) {
+            if ($Stato) { $Global:PannelloStatus.Tasks[$TaskId].Stato = $Stato }
+            if ($Dettaglio) { $Global:PannelloStatus.Tasks[$TaskId].Dettaglio = $Dettaglio }
+        }
+
+        $tempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { [System.IO.Path]::GetTempPath() }
+        $statusFile = Join-Path $tempDir "pcfacile-status.js"
+        
+        $json = $Global:PannelloStatus | ConvertTo-Json -Depth 5 -Compress
+        $js = "window.PCFacileStatus = $json; if (typeof window.onPCFacileStatusUpdate === 'function') { window.onPCFacileStatusUpdate(window.PCFacileStatus); }"
+        $js | Set-Content -Path $statusFile -Encoding UTF8
+    } catch {}
+}
+
 function Open-PannelloOperatore {
     param(
         [string]$NomeCliente = "",
@@ -680,6 +751,10 @@ function Open-PannelloOperatore {
 
     $tempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { [System.IO.Path]::GetTempPath() }
     $pannelloFile = Join-Path $tempDir "Pannello-Operatore.html"
+    
+    # Inizializza subito il file di stato sincrono
+    Update-PannelloStatus -Percentuale 5 -FaseCorrente "Inizializzazione Setup" -Dettaglio "Avvio pannello operatore Unieuro..."
+    
     try {
         $html = @"
 <!DOCTYPE html>
@@ -691,46 +766,100 @@ function Open-PannelloOperatore {
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
         body { background: #00122B; color: #f8fafc; padding: 20px; }
         .container { max-width: 980px; margin: 0 auto; }
-        .header { background: linear-gradient(135deg, #001A3A 0%, #002B5C 100%); border-radius: 12px; padding: 22px 28px; border-bottom: 4px solid #EE7203; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+        .header { background: linear-gradient(135deg, #001A3A 0%, #002B5C 100%); border-radius: 12px; padding: 20px 24px; border-bottom: 4px solid #EE7203; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
         .brand-box { display: flex; align-items: center; gap: 14px; }
         .u-logo { background: #EE7203; color: #fff; font-weight: 900; font-size: 20px; letter-spacing: 1.5px; padding: 8px 14px; border-radius: 8px; text-transform: uppercase; box-shadow: 0 2px 10px rgba(238,114,3,0.4); }
-        .brand-titles h1 { font-size: 20px; color: #fff; font-weight: 700; letter-spacing: 0.3px; }
-        .brand-titles p { font-size: 13px; color: #94a3b8; margin-top: 3px; }
+        .brand-titles h1 { font-size: 19px; color: #fff; font-weight: 700; letter-spacing: 0.3px; }
+        .brand-titles p { font-size: 13px; color: #94a3b8; margin-top: 2px; }
         .u-tagline { color: #EE7203; font-weight: 700; font-style: italic; }
-        .badge-live { background: linear-gradient(135deg, #EE7203 0%, #d95e00 100%); color: #fff; font-weight: 800; font-size: 12px; padding: 8px 16px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.6px; box-shadow: 0 0 14px rgba(238,114,3,0.6); animation: pulse 2s infinite; }
+        .badge-live { background: linear-gradient(135deg, #EE7203 0%, #d95e00 100%); color: #fff; font-weight: 800; font-size: 11px; padding: 6px 14px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.6px; box-shadow: 0 0 14px rgba(238,114,3,0.6); animation: pulse 2s infinite; }
+        .badge-done { background: #16a34a !important; box-shadow: 0 0 14px rgba(34,197,94,0.6) !important; animation: none !important; color: #fff; font-weight: 800; font-size: 11px; padding: 6px 14px; border-radius: 20px; text-transform: uppercase; }
         @keyframes pulse { 0% { opacity: 0.9; transform: scale(1); } 50% { opacity: 1; transform: scale(1.03); } 100% { opacity: 0.9; transform: scale(1); } }
-        .status-alert { background: rgba(238, 114, 3, 0.12); border: 1px solid #EE7203; border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; display: flex; align-items: center; gap: 14px; }
-        .status-alert .icon { font-size: 24px; color: #EE7203; }
-        .status-alert .text { font-size: 13px; color: #fed7aa; line-height: 1.45; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+        
+        /* CARD PROGRESSO SINCRONIZZATO IN TEMPO REALE */
+        .progress-card { background: linear-gradient(135deg, #001A3A 0%, #00264D 100%); border: 1px solid #00458C; border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 4px 14px rgba(0,0,0,0.3); }
+        .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 13px; }
+        .progress-title { color: #fed7aa; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+        .progress-pct { color: #EE7203; font-size: 16px; font-weight: 900; }
+        .progress-bar-bg { background: #00122B; border: 1px solid #003B7A; height: 14px; border-radius: 7px; overflow: hidden; position: relative; }
+        .progress-bar-fill { background: linear-gradient(90deg, #EE7203 0%, #ff9d42 100%); height: 100%; width: 5%; border-radius: 7px; transition: width 0.4s ease; box-shadow: 0 0 10px rgba(238,114,3,0.7); }
+        .progress-status-row { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 12px; }
+        .current-fase { color: #fff; font-weight: 600; }
+        .current-detail { color: #94a3b8; font-style: italic; }
+
+        .banner-complete { display: none; background: rgba(34, 197, 94, 0.15); border: 2px solid #22c55e; border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; text-align: center; }
+        .banner-complete h3 { color: #4ade80; font-size: 15px; margin-bottom: 4px; }
+        .banner-complete p { color: #dcfce7; font-size: 13px; margin-bottom: 10px; }
+        .btn-scheda { display: inline-block; background: #22c55e; color: #fff; font-weight: 700; font-size: 13px; padding: 8px 18px; border-radius: 6px; text-decoration: none; box-shadow: 0 2px 10px rgba(34,197,94,0.4); }
+        .btn-scheda:hover { background: #16a34a; }
+
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
         .card { background: #001F48; border: 1px solid #003B7A; border-radius: 12px; padding: 18px; box-shadow: 0 4px 14px rgba(0,0,0,0.3); }
         .card h2 { font-size: 15px; color: #f8fafc; margin-bottom: 14px; border-bottom: 2px solid #003B7A; padding-bottom: 8px; display: flex; align-items: center; gap: 8px; }
         .card h2 .bar { width: 4px; height: 16px; background: #EE7203; border-radius: 2px; display: inline-block; }
+        
+        /* CREDENZIALI */
         .cred-group { margin-bottom: 12px; }
         .cred-label { font-size: 11px; color: #93c5fd; margin-bottom: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
         .cred-box { display: flex; gap: 8px; }
-        .cred-input { flex: 1; background: #00142E; border: 1px solid #00458C; border-radius: 6px; padding: 10px 12px; font-size: 14px; color: #fff; font-family: 'Consolas', monospace; outline: none; transition: border-color 0.2s; }
+        .cred-input { flex: 1; background: #00142E; border: 1px solid #00458C; border-radius: 6px; padding: 9px 12px; font-size: 13px; color: #fff; font-family: 'Consolas', monospace; outline: none; transition: border-color 0.2s; }
         .cred-input:focus { border-color: #EE7203; box-shadow: 0 0 0 2px rgba(238,114,3,0.35); }
         .dom-selector { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
-        .dom-btn { background: #00142E; border: 1px solid #00458C; color: #cbd5e1; font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .dom-btn { background: #00142E; border: 1px solid #00458C; color: #cbd5e1; font-size: 11px; font-weight: 700; padding: 5px 9px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
         .dom-btn:hover { border-color: #EE7203; color: #fff; }
         .dom-btn.active { background: #EE7203; border-color: #EE7203; color: #fff; box-shadow: 0 2px 8px rgba(238,114,3,0.4); }
-        .btn-copy { background: linear-gradient(135deg, #003B7A 0%, #002B5C 100%); border: 1px solid #0056B3; color: #fff; border-radius: 6px; padding: 0 14px; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
+        .btn-copy { background: linear-gradient(135deg, #003B7A 0%, #002B5C 100%); border: 1px solid #0056B3; color: #fff; border-radius: 6px; padding: 0 12px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; }
         .btn-copy:hover { background: #EE7203; border-color: #EE7203; }
         .btn-copy.copied { background: #16a34a !important; border-color: #22c55e !important; }
-        .links-grid { display: flex; flex-direction: column; gap: 8px; }
-        .portal-btn { display: flex; align-items: center; justify-content: space-between; background: #00142E; border: 1px solid #003B7A; border-radius: 8px; padding: 10px 12px; color: #f8fafc; text-decoration: none; font-size: 13px; font-weight: 600; transition: all 0.2s; }
+        
+        /* PORTALI 1-CLICK */
+        .links-grid { display: flex; flex-direction: column; gap: 7px; }
+        .portal-btn { display: flex; align-items: center; justify-content: space-between; background: #00142E; border: 1px solid #003B7A; border-radius: 8px; padding: 9px 12px; color: #f8fafc; text-decoration: none; font-size: 12px; font-weight: 600; transition: all 0.2s; }
         .portal-btn:hover { background: #00224D; border-color: #EE7203; transform: translateX(3px); }
-        .portal-btn .icon { font-size: 16px; margin-right: 8px; }
+        .portal-btn .icon { font-size: 15px; margin-right: 6px; }
         .portal-btn .arrow { color: #EE7203; font-weight: bold; }
         .portal-btn.highlight { border-color: #EE7203; background: rgba(238, 114, 3, 0.08); }
+        
+        /* CHECKLIST */
         .checklist { list-style: none; display: flex; flex-direction: column; gap: 8px; }
-        .checklist li { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #e2e8f0; background: #00142E; padding: 9px 12px; border-radius: 6px; border: 1px solid #003B7A; }
+        .checklist li { display: flex; align-items: center; gap: 10px; font-size: 12px; color: #e2e8f0; background: #00142E; padding: 8px 12px; border-radius: 6px; border: 1px solid #003B7A; }
         .checklist input[type="checkbox"] { width: 16px; height: 16px; accent-color: #EE7203; cursor: pointer; }
-        .bg-tasks { list-style: none; display: flex; flex-direction: column; gap: 7px; }
-        .bg-tasks li { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #94a3b8; }
-        .bg-tasks li .check { color: #22c55e; font-weight: bold; font-size: 14px; }
-        .footer { text-align: center; font-size: 12px; color: #64748b; margin-top: 18px; padding-top: 14px; border-top: 1px solid #002B5C; }
+        
+        /* TASKS SINCRONIZZATI */
+        .bg-tasks { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+        .task-item { display: flex; align-items: center; justify-content: space-between; font-size: 12px; padding: 6px 10px; border-radius: 6px; border: 1px solid transparent; transition: all 0.3s ease; }
+        .task-left { display: flex; align-items: center; gap: 8px; flex: 1; }
+        .task-icon { font-size: 13px; width: 16px; text-align: center; }
+        .task-name { color: #cbd5e1; }
+        .task-detail { color: #fed7aa; font-size: 11px; margin-left: 4px; }
+        .task-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; white-space: nowrap; }
+        
+        /* STATI DEI TASK */
+        .task-item.pending { color: #64748b; }
+        .task-item.pending .task-icon { color: #475569; }
+        .badge-pending { background: #00142E; color: #64748b; border: 1px solid #003B7A; }
+        
+        .task-item.running { background: rgba(238, 114, 3, 0.12); border-color: #EE7203; color: #fff; font-weight: 600; box-shadow: 0 0 10px rgba(238,114,3,0.25); }
+        .task-item.running .task-name { color: #fff; font-weight: 700; }
+        .badge-running { background: #EE7203; color: #fff; animation: pulse 1.5s infinite; }
+        
+        .task-item.done { color: #f8fafc; }
+        .task-item.done .task-icon { color: #22c55e; font-weight: bold; }
+        .task-item.done .task-name { color: #e2e8f0; }
+        .badge-done-task { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid #22c55e; }
+        
+        .task-item.error { background: rgba(239, 68, 68, 0.12); border-color: #ef4444; color: #fca5a5; }
+        .task-item.error .task-icon { color: #ef4444; font-weight: bold; }
+        .badge-error { background: #ef4444; color: #fff; }
+        
+        .task-item.skipped { color: #94a3b8; }
+        .task-item.skipped .task-icon { color: #94a3b8; }
+        .badge-skipped { background: #00142E; color: #94a3b8; border: 1px solid #003B7A; }
+
+        .spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #EE7203; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .footer { text-align: center; font-size: 12px; color: #64748b; margin-top: 14px; padding-top: 12px; border-top: 1px solid #002B5C; }
         .footer strong { color: #cbd5e1; }
     </style>
 </head>
@@ -744,15 +873,28 @@ function Open-PannelloOperatore {
                     <p><span class="u-tagline">Batte. Forte. Sempre.</span> &bull; Setup Tecnico Dedicato</p>
                 </div>
             </div>
-            <div class="badge-live">&#9889; Setup in corso</div>
+            <div id="badgeLive" class="badge-live">&#9889; Setup in corso</div>
         </div>
 
-        <div class="status-alert">
-            <div class="icon">&#9881;</div>
-            <div class="text">
-                <strong>La configurazione del PC &egrave; gi&agrave; in esecuzione in background a massima velocit&agrave;!</strong><br>
-                Mentre la console installa le app, ottimizza il sistema e aggiorna i driver, usa questo pannello Unieuro per registrare gli account e riscattare le card del cliente.
+        <!-- PROGRESS CARD SINCRONIZZATA IN TEMPO REALE -->
+        <div class="progress-card">
+            <div class="progress-header">
+                <div class="progress-title">&#9889; Avanzamento Configurazione Automatica (Zero-Touch)</div>
+                <div id="progressPercentText" class="progress-pct">5%</div>
             </div>
+            <div class="progress-bar-bg">
+                <div id="progressBarFill" class="progress-bar-fill" style="width: 5%;"></div>
+            </div>
+            <div class="progress-status-row">
+                <div><span style="color:#93c5fd; font-weight:700;">FASE:</span> <span id="currentFaseText" class="current-fase">Inizializzazione Setup</span></div>
+                <div id="currentDetailText" class="current-detail">Avvio pannello operatore Unieuro...</div>
+            </div>
+        </div>
+
+        <div id="completionBanner" class="banner-complete">
+            <h3>&#127881; TUTTI I LAVORI IN BACKGROUND COMPLETATI CON SUCCESSO!</h3>
+            <p>Il computer &egrave; configurato, ottimizzato e aggiornato secondo gli standard Unieuro.</p>
+            <a href="Scheda-Consegna-Cliente.html" target="_blank" class="btn-scheda">&#128196; Apri Scheda di Consegna Cliente</a>
         </div>
 
         <div class="grid">
@@ -784,7 +926,7 @@ function Open-PannelloOperatore {
                         <button class="btn-copy" onclick="copia('inPass', this)">Copia Password</button>
                     </div>
                 </div>
-                <p style="font-size: 11px; color: #94a3b8; margin-top: 6px;">
+                <p style="font-size: 11px; color: #94a3b8; margin-top: 4px;">
                     Password conforme a tutti gli standard di sicurezza (maiuscola, minuscola, numero, simbolo).
                 </p>
             </div>
@@ -839,18 +981,90 @@ function Open-PannelloOperatore {
                 </ul>
             </div>
 
+            <!-- LAVORI IN BACKGROUND SINCRONIZZATI IN TEMPO REALE -->
             <div class="card">
                 <h2><span class="bar"></span> &#9881; Lavori Automatici in Background</h2>
-                <ul class="bg-tasks">
-                    <li><span class="check">&#10003;</span> Rimozione Bloatware OEM e antivirus di prova</li>
-                    <li><span class="check">&#10003;</span> Forzatura lingua e regione Italiana (it-IT)</li>
-                    <li><span class="check">&#10003;</span> Creazione punto di ripristino di sicurezza (5% max SSD)</li>
-                    <li><span class="check">&#10003;</span> Installazione Runtime Microsoft Visual C++ (x86 &amp; x64)</li>
-                    <li><span class="check">&#10003;</span> Installazione app Base (Chrome, 7-Zip, VLC, Adobe, AnyDesk...)</li>
-                    <li><span class="check">&#10003;</span> Creazione icone Office Word/Excel sul Desktop</li>
-                    <li><span class="check">&#10003;</span> Aggiornamenti di sicurezza e driver video/hardware</li>
-                    <li><span class="check">&#10003;</span> Diagnostica SMART disco, batteria e licenza Windows</li>
-                    <li><span class="check">&#10003;</span> Salvataggio chiave BitLocker (NON CANCELLARE)</li>
+                <ul class="bg-tasks" id="tasksContainer">
+                    <li id="task-pulizia" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">Pulizia Bloatware OEM &amp; Ottimizzazione SSD</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
+                    <li id="task-lingua" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">Forzatura Lingua &amp; Regione Italiana (it-IT)</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
+                    <li id="task-ripristino" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">Punto di Ripristino di Sicurezza (5% SSD)</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
+                    <li id="task-runtime" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">Runtime Microsoft Visual C++ (x86 &amp; x64)</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
+                    <li id="task-office" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">Configurazione Icone Office / Microsoft 365</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
+                    <li id="task-antivirus" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">Sicurezza &amp; Antivirus (Windows Defender / Card)</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
+                    <li id="task-cyber" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">Servizio Unieuro Cyber Protection</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
+                    <li id="task-aggiorna" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">Aggiornamenti &amp; Driver Windows Update</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
+                    <li id="task-app" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">Installazione Applicazioni (Ultimo Passaggio)</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
+                    <li id="task-diagnostica" class="task-item pending">
+                        <div class="task-left">
+                            <span class="task-icon">&#9675;</span>
+                            <span class="task-name">Diagnostica Hardware, BitLocker &amp; Scheda Consegna</span>
+                            <span class="task-detail"></span>
+                        </div>
+                        <span class="task-badge badge-pending">In attesa</span>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -902,6 +1116,89 @@ function Open-PannelloOperatore {
             var cap = prima.charAt(0).toUpperCase() + prima.slice(1).toLowerCase();
             document.getElementById('inPass').value = cap + '123!';
         }
+
+        // MOTORE DI SINCRONIZZAZIONE LIVE CON POWERSHELL
+        function applyStatus(data) {
+            if (!data) return;
+            
+            var pct = data.Percentuale !== undefined ? data.Percentuale : (data.percentuale || 0);
+            var bar = document.getElementById('progressBarFill');
+            var pctText = document.getElementById('progressPercentText');
+            if (bar) bar.style.width = pct + '%';
+            if (pctText) pctText.innerText = pct + '%';
+            
+            var faseEl = document.getElementById('currentFaseText');
+            var faseVal = data.FaseCorrente || data.faseCorrente;
+            if (faseEl && faseVal) faseEl.innerText = faseVal;
+            
+            var detEl = document.getElementById('currentDetailText');
+            var detVal = data.Dettaglio || data.dettaglio;
+            if (detEl && detVal) detEl.innerText = detVal;
+            
+            if (data.Completato || data.completato) {
+                var badgeLive = document.getElementById('badgeLive');
+                if (badgeLive) {
+                    badgeLive.className = 'badge-done';
+                    badgeLive.innerHTML = '&#10003; Setup Completato';
+                }
+                var compBanner = document.getElementById('completionBanner');
+                if (compBanner) compBanner.style.display = 'block';
+            }
+
+            var tasks = data.Tasks || data.tasks;
+            if (tasks) {
+                for (var key in tasks) {
+                    var task = tasks[key];
+                    var row = document.getElementById('task-' + key);
+                    if (row) {
+                        var stato = (task.Stato || task.stato || 'pending').toLowerCase();
+                        var dettaglio = task.Dettaglio || task.dettaglio || '';
+                        
+                        var iconEl = row.querySelector('.task-icon');
+                        var statusBadge = row.querySelector('.task-badge');
+                        var detailEl = row.querySelector('.task-detail');
+                        
+                        row.className = 'task-item ' + stato;
+                        if (statusBadge) {
+                            var badgeClass = 'badge-pending';
+                            var badgeText = 'In attesa';
+                            if (stato === 'done') { badgeClass = 'badge-done-task'; badgeText = 'Completato'; }
+                            else if (stato === 'running') { badgeClass = 'badge-running'; badgeText = 'In corso...'; }
+                            else if (stato === 'error') { badgeClass = 'badge-error'; badgeText = 'Errore'; }
+                            else if (stato === 'skipped') { badgeClass = 'badge-skipped'; badgeText = 'Saltato'; }
+                            
+                            statusBadge.className = 'task-badge ' + badgeClass;
+                            statusBadge.innerText = badgeText;
+                        }
+                        if (iconEl) {
+                            if (stato === 'done') iconEl.innerHTML = '&#10003;';
+                            else if (stato === 'running') iconEl.innerHTML = '<span class=\"spinner\"></span>';
+                            else if (stato === 'error') iconEl.innerHTML = '&#10007;';
+                            else if (stato === 'skipped') iconEl.innerHTML = '&rarr;';
+                            else iconEl.innerHTML = '&#9675;';
+                        }
+                        if (detailEl) {
+                            if (dettaglio && stato === 'running') {
+                                detailEl.innerText = ' - ' + dettaglio;
+                            } else {
+                                detailEl.innerText = '';
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        window.onPCFacileStatusUpdate = applyStatus;
+
+        function pollStatus() {
+            var s = document.createElement('script');
+            s.src = 'pcfacile-status.js?t=' + new Date().getTime();
+            s.onload = function() { if (this.parentNode) this.parentNode.removeChild(this); };
+            s.onerror = function() { if (this.parentNode) this.parentNode.removeChild(this); };
+            document.head.appendChild(s);
+        }
+        setInterval(pollStatus, 1000);
     </script>
 </body>
 </html>
@@ -910,7 +1207,7 @@ function Open-PannelloOperatore {
         if (-not $Global:Test -and -not $env:PESTER_TEST) {
             try { Start-Process $pannelloFile } catch {}
         }
-        Write-OK "Pannello Operatore aperto nel browser: gestisci account, Office e antivirus in parallelo."
+        Write-OK "Pannello Operatore aperto nel browser: sincronizzazione live dei lavori attiva."
     } catch {
         Write-Info "Creazione pannello operatore non riuscita: $_"
     }
@@ -3194,6 +3491,7 @@ if (Test-FaseFatta 3) { Write-Info "Pulizia e ottimizzazione: gia' fatto nella s
 else {
 
 Write-Titolo "Pulizia e Ottimizzazione Iniziale"
+Update-PannelloStatus -TaskId "pulizia" -Stato "running" -Percentuale 15 -FaseCorrente "Pulizia Bloatware & Ottimizzazione SSD" -Dettaglio "Rimozione bloatware e antivirus di prova..."
 
 Write-Host "Toglie antivirus di prova + bloatware OEM + OneDrive, alleggerisce l'avvio." -ForegroundColor White
 Write-Host ""
@@ -3592,8 +3890,10 @@ $bloatwareAppx = @(
     } catch {} finally { Stop-BarraAnimata }
 
     Write-OK "Pulizia e ottimizzazione iniziale completata."
+    Update-PannelloStatus -TaskId "pulizia" -Stato "done" -Percentuale 25 -Dettaglio "Completato"
 } else {
     Write-Info "Pulizia e ottimizzazione iniziale saltata."
+    Update-PannelloStatus -TaskId "pulizia" -Stato "skipped" -Percentuale 25 -Dettaglio "Saltato"
     Add-Report "Antivirus di prova" "SALTATO"
     Add-Report "Rimozione bloatware" "SALTATO"
     Add-Report "Configurazione Windows base" "SALTATO"
@@ -3611,6 +3911,7 @@ if (Test-FaseFatta 4) { Write-Info "Lingua e regione: gia' fatto nella sessione 
 else {
 
 Write-Titolo "Lingua e Regione (Italiano)"
+Update-PannelloStatus -TaskId "lingua" -Stato "running" -Percentuale 30 -FaseCorrente "Forzatura Lingua & Regione (it-IT)" -Dettaglio "Configurazione lingua italiana..."
 
 Write-Host "Imposta display, tastiera, formati e pacchetto lingua in italiano (it-IT)." -ForegroundColor White
 Write-Host ""
@@ -3757,9 +4058,11 @@ if ($impostaLingua -match "^[Ss]") {
             Write-Info "  visualizzazione e scarica il pacchetto lingua. Poi torna qui."
             Pausa
         }
-    }
+    Write-OK "Lingua e regione impostate su Italiano (it-IT)."
+    Update-PannelloStatus -TaskId "lingua" -Stato "done" -Percentuale 35 -Dettaglio "Completato"
 } else {
     Write-Info "Impostazione lingua saltata."
+    Update-PannelloStatus -TaskId "lingua" -Stato "skipped" -Percentuale 35 -Dettaglio "Saltato"
     Add-Report "Lingua italiana (it-IT)" "SALTATO"
 }
 
@@ -3780,6 +4083,7 @@ elseif ($skipRestore) {
 } else {
 
 Write-Titolo "Punto di Ripristino"
+Update-PannelloStatus -TaskId "ripristino" -Stato "running" -Percentuale 40 -FaseCorrente "Punto di Ripristino" -Dettaglio "Creazione punto di ripristino di sicurezza (5% SSD)..."
 
 Write-Host "Crea un punto di ripristino: se qualcosa va storto puoi tornare indietro." -ForegroundColor White
 Write-Host ""
@@ -3825,6 +4129,7 @@ if (($vuoiRestore -match "^[Ss]") -or ($vuoiRestore.Trim() -eq '')) {
             Write-Errore "NON e' stato possibile creare il punto di ripristino."
             Write-Info "  Causa: $_"
             Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
+            Update-PannelloStatus -TaskId "ripristino" -Stato "error" -Percentuale 45 -Dettaglio "Non riuscito (proseguo)"
             Add-Report "Punto di ripristino" "ERRORE"
         } finally {
             if ($job) { Remove-Job $job -Force -ErrorAction SilentlyContinue }
@@ -3834,10 +4139,12 @@ if (($vuoiRestore -match "^[Ss]") -or ($vuoiRestore.Trim() -eq '')) {
         Write-Errore "NON e' stato possibile creare il punto di ripristino."
         Write-Info "  Causa: $_"
         Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
+        Update-PannelloStatus -TaskId "ripristino" -Stato "error" -Percentuale 45 -Dettaglio "Non riuscito (proseguo)"
         Add-Report "Punto di ripristino" "ERRORE"
     }
 } else {
     Write-Info "Punto di ripristino saltato."
+    Update-PannelloStatus -TaskId "ripristino" -Stato "skipped" -Percentuale 45 -Dettaglio "Saltato"
     Add-Report "Punto di ripristino" "SALTATO"
 }
 
@@ -3853,9 +4160,13 @@ Save-Fase 5 "Punto di ripristino"
 # =============================================================================
 
 if (Test-FaseFatta 6) { Write-Info "App Office: gia' fatto nella sessione precedente, salto." }
-else {
-
 Write-Titolo "Installazione App Office"
+Update-PannelloStatus -TaskId "office" -Stato "running" -Percentuale 50 -FaseCorrente "Configurazione Office & Runtime" -Dettaglio "Configurazione icone Office e runtime..."
+
+# 0) Installazione Runtime Essenziali (Microsoft Visual C++ 2015-2022 x86 & x64)
+Update-PannelloStatus -TaskId "runtime" -Stato "running" -Percentuale 53 -FaseCorrente "Runtime Essenziali" -Dettaglio "Installazione Microsoft Visual C++ (x86 & x64)..."
+Install-VisualCRuntime
+Update-PannelloStatus -TaskId "runtime" -Stato "done" -Percentuale 56 -Dettaglio "Completato"
 
 function Get-OsppPath {
     $percorsi = @(
@@ -3976,6 +4287,7 @@ if ($Global:ModoEspresso) {
 }
 
 Save-Fase 6 "App Office"
+Update-PannelloStatus -TaskId "office" -Stato "done" -Percentuale 62 -Dettaglio "Icone Office pronte"
 }
 
 # =============================================================================
@@ -4121,11 +4433,11 @@ function Attiva-ServizioWeb {
     }
 }
 
-# Il wizard: passo 3=Unieuro, 4=App+browser, 5=Aggiornamento, 6=Driver,
-# 7=Antivirus (ultimo). La barra mostra (passo-2) su 5.
+# Il wizard: passo 3=Antivirus, 4=Unieuro Cyber Protection, 5=Aggiornamenti, 6=Driver,
+# 7=Applicazioni + browser (ULTIMO PASSAGGIO). La barra mostra (passo-2) su 5.
 $passo = 3
 # Nomi leggibili dei passi wizard per il checkpoint di ripresa sessione.
-$wizNomi = @{ 3 = "Unieuro Cyber Protection"; 4 = "Applicazioni + browser"; 5 = "Aggiornamenti (app + Windows)"; 6 = "Driver"; 7 = "Antivirus" }
+$wizNomi = @{ 3 = "Antivirus"; 4 = "Unieuro Cyber Protection"; 5 = "Aggiornamenti (app + Windows)"; 6 = "Driver"; 7 = "Applicazioni + browser" }
 # Ripresa sessione: fase 7..11 = passo wizard 3..7 completato -> si riparte
 # dal successivo (fase 11 = tutto il wizard fatto, si salta al report).
 if ($Global:FaseRipresa -ge 7) {
@@ -4142,17 +4454,18 @@ if ($pieni -gt $barLen) { $pieni = $barLen }
 $bar = (([string]$BOX_FULL) * $pieni) + (([string]$BOX_EMPTY) * ($barLen - $pieni))
 Write-Host ("$AON  Passo $passoMostrato/$totPassi  [$bar]$AOFF") -ForegroundColor $THEME_COL
 switch ($passo) {
-7 {
+3 {
 # =============================================================================
-# ANTIVIRUS (ultimo passo: dopo tutte le altre installazioni, cosi' un AV
-# appena attivato non blocca il download/installazione delle app - es. AnyDesk)
+# PASSO 3 - ANTIVIRUS
 # =============================================================================
 
 Write-Titolo "Antivirus"
+Update-PannelloStatus -TaskId "antivirus" -Stato "running" -Percentuale 65 -FaseCorrente "Configurazione Antivirus" -Dettaglio "Verifica Windows Defender e card cliente..."
 
 if ($Global:ModoEspresso) {
     Write-OK "Modalita' Espresso: Windows Defender / Sicurezza di Windows configurato e attivo."
     Add-Report "Antivirus" "OK (Windows Defender)"
+    Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 68 -Dettaglio "Windows Defender attivo"
 } else {
     Write-Host "Scegli l'antivirus da installare:" -ForegroundColor White
     Write-Host "  1) McAfee"
@@ -4166,29 +4479,34 @@ if ($Global:ModoEspresso) {
     switch ($sceltaAV) {
         "1" {
             Installa-Antivirus -Nome "McAfee" -UrlRiscatto "https://www.mcafee.com/activate" -Utente $credMsAccount -Password $credMsPassword
+            Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 68 -Dettaglio "McAfee configurato"
         }
         "2" {
             Installa-Antivirus -Nome "Norton" -UrlRiscatto "https://www.norton.com/setup" -Utente $credMsAccount -Password $credMsPassword
+            Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 68 -Dettaglio "Norton configurato"
         }
         default {
             Write-Info "Antivirus dedicato saltato: Windows Defender e' attivo e aggiornato."
             Add-Report "Antivirus" "OK (Windows Defender)"
+            Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 68 -Dettaglio "Windows Defender attivo"
         }
     }
 }
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
-3 {
+4 {
 # =============================================================================
-# STEP 4c - UNIEURO CYBER PROTECTION (opzionale)
+# PASSO 4 - UNIEURO CYBER PROTECTION (opzionale)
 # =============================================================================
 
 Write-Titolo "Unieuro Cyber Protection"
+Update-PannelloStatus -TaskId "cyber" -Stato "running" -Percentuale 70 -FaseCorrente "Unieuro Cyber Protection" -Dettaglio "Configurazione servizio web..."
 
 if ($Global:ModoEspresso) {
     Write-Info "Modalita' Espresso: Cyber Protection non richiesta (attivabile manualmente se acquistata)."
     Add-Report "Unieuro Cyber Protection" "SALTATO"
+    Update-PannelloStatus -TaskId "cyber" -Stato "skipped" -Percentuale 74 -Dettaglio "Non acquistato (saltato)"
 } else {
     Write-Host "Servizio venduto solo su richiesta: INVIO per saltare se non l'ha comprato." -ForegroundColor White
     Write-Host ""
@@ -4197,175 +4515,23 @@ if ($Global:ModoEspresso) {
     if (Test-Indietro $vuoiUnieuro) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
     if ($vuoiUnieuro -match "^[Ss]") {
         Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it" -Utente $credMsAccount
+        Update-PannelloStatus -TaskId "cyber" -Stato "done" -Percentuale 74 -Dettaglio "Configurato"
     } else {
         Write-Info "Unieuro Cyber Protection saltato."
         Add-Report "Unieuro Cyber Protection" "SALTATO"
+        Update-PannelloStatus -TaskId "cyber" -Stato "skipped" -Percentuale 74 -Dettaglio "Non acquistato (saltato)"
     }
-}
-
-$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
-}
-4 {
-# =============================================================================
-# APPLICAZIONI + BROWSER (unificati: il browser si installa da solo qui -
-# Chrome, oppure Opera GX se scegli il profilo GAMING)
-# =============================================================================
-
-Write-Titolo "Applicazioni"
-
-# App e profili derivano dal CATALOGO unico definito all'inizio (niente duplicati).
-$appsDisponibili = $CatalogoApp
-$profili = [ordered]@{
-    "BASE"    = @($CatalogoApp | Where-Object { $_.Profili -contains "BASE" }    | ForEach-Object { $_.Id })
-    "UFFICIO" = @($CatalogoApp | Where-Object { $_.Profili -contains "UFFICIO" } | ForEach-Object { $_.Id })
-    "GAMING"  = @($CatalogoApp | Where-Object { $_.Profili -contains "GAMING" }  | ForEach-Object { $_.Id })
-}
-
-# Costruisce il PIANO ordinato di installazione (browser in testa) per il
-# profilo scelto: una lista di @{Nome;Id} che il loop installa in sequenza e su
-# cui salva i progressi. Cosi' la ripresa sa esattamente cosa resta da fare.
-function Costruisci-PianoApp {
-    param([string]$Scelta)
-    $piano = @()
-    # Browser automatico: Opera GX per il GAMING (3), Chrome per gli altri.
-    if ($Scelta -eq "3") { $piano += @{ Nome = "Opera GX"; Id = "Opera.OperaGX" } }
-    else                 { $piano += @{ Nome = "Google Chrome"; Id = "Google.Chrome" } }
-    foreach ($app in $appsDisponibili) {
-        $prendi = switch ($Scelta) {
-            "1" { $profili["BASE"]    -contains $app.Id }
-            "2" { $profili["UFFICIO"] -contains $app.Id }
-            "3" { $profili["GAMING"]  -contains $app.Id }
-            "4" { $true }   # COMPLETO: tutte le app del catalogo
-            default { $false }
-        }
-        if ($prendi) { $piano += @{ Nome = $app.Nome; Id = $app.Id } }
-    }
-    return $piano
-}
-
-$Global:AppFallite = 0   # azzero: conto solo i fallimenti di QUESTO passo
-
-# --- Determino il PIANO (lista ordinata di @{Nome;Id}) e le app gia' fatte. ---
-# Se sto RIPRENDENDO il passo App dopo una chiusura, riuso profilo + piano dal
-# checkpoint e salto le app gia' installate; altrimenti mostro il menu di scelta.
-$pianoApp  = @()
-$appFatte  = @()
-$etichetta = ""
-
-if ($Global:AppProfiloRipresa) {
-    $etichetta = [string]$Global:AppProfiloRipresa
-    $pianoApp  = @($Global:AppListaRipresa | ForEach-Object { @{ Nome = [string]$_.Nome; Id = [string]$_.Id } })
-    $appFatte  = @($Global:AppFatteRipresa | ForEach-Object { [string]$_ })
-    # Consumo la ripresa: eventuali rientri successivi ripartono puliti dal menu.
-    $Global:AppProfiloRipresa = ""; $Global:AppListaRipresa = @(); $Global:AppFatteRipresa = @()
-    $rimaste = @($pianoApp | Where-Object { $appFatte -notcontains $_.Id }).Count
-    Write-OK "Riprendo l'installazione app (profilo $etichetta): $rimaste da completare."
-    Write-Info "Le app gia' installate le salto: riparto dall'esatta app rimasta."
-} elseif ($Global:ModoEspresso) {
-    Write-Host "Modalita' Espresso: installazione automatica del PROFILO BASE..." -ForegroundColor Green
-    Write-Host "  (Google Chrome, VLC, Adobe Acrobat Reader, 7-Zip, AnyDesk, WhatsApp, Spotify, AIMP, Zoom)" -ForegroundColor Gray
-    $etichetta = "BASE"
-    $pianoApp  = @(Costruisci-PianoApp -Scelta "1")
-} else {
-    Write-Host "Scegli come installare le applicazioni (browser incluso in automatico):" -ForegroundColor White
-    Write-Host "  1) PROFILO BASE     (Chrome + VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, AIMP, Zoom, AnyDesk)"
-    Write-Host "  2) PROFILO UFFICIO  (Chrome + BASE + GIMP, Sumatra PDF)"
-    Write-Host "  3) PROFILO GAMING   (Opera GX + BASE + Steam, Epic, Discord)"
-    Write-Host "  4) COMPLETO         (Chrome + tutte le app in lista)"
-    Write-Host "  5) MANUALE          (Chrome + scelgo io i singoli numeri)"
-    Write-Host "  S) Salta"
-    Write-Host ""
-
-    $sceltaApps = Attendi-Risposta "Scelta (1-5 - S salta - B indietro)"
-    if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
-
-    switch -Regex ($sceltaApps) {
-        "^[1-4]$" {
-            $etichetta = @{ "1" = "BASE"; "2" = "UFFICIO"; "3" = "GAMING"; "4" = "COMPLETO" }[$sceltaApps]
-            $pianoApp  = @(Costruisci-PianoApp -Scelta $sceltaApps)
-        }
-        "^5$" {
-            $etichetta = "MANUALE"
-            $pianoApp += @{ Nome = "Google Chrome"; Id = "Google.Chrome" }   # browser sempre
-            Write-Host ""
-            Write-Host "App disponibili:" -ForegroundColor White
-            for ($i = 0; $i -lt $appsDisponibili.Count; $i++) {
-                Write-Host "  $($i + 1)) $($appsDisponibili[$i].Nome)"
-            }
-            $sceltaManuale = Attendi-Risposta "Numeri separati da virgola (es: 1,3,5)"
-            $indici = $sceltaManuale -split "," | ForEach-Object { $_.Trim() }
-            foreach ($indice in $indici) {
-                $num = 0
-                if ($indice -match "^\d+$" -and [int]::TryParse($indice, [ref]$num)) {
-                    $idx = $num - 1
-                    if ($idx -ge 0 -and $idx -lt $appsDisponibili.Count) {
-                        $pianoApp += @{ Nome = $appsDisponibili[$idx].Nome; Id = $appsDisponibili[$idx].Id }
-                    } else {
-                        Write-Errore "Numero non valido: $indice"
-                    }
-                } elseif ($indice -ne "") {
-                    Write-Errore "Valore non riconosciuto: $indice"
-                }
-            }
-        }
-        default {
-            if ($sceltaApps -match "^[Ss]$") {
-                Write-Info "Applicazioni saltate."
-            } else {
-                Write-Info "Scelta non valida: applicazioni saltate."
-            }
-        }
-    }
-}
-
-# --- Eseguo il PIANO: installo in ordine, salto quelle gia' fatte, e dopo OGNI
-#     app riuscita salvo il progresso -> se si chiude, si riparte dall'app esatta.
-if ($pianoApp.Count -gt 0) {
-    # 0) Installazione Runtime Essenziali (Microsoft Visual C++ 2015-2022 x86 & x64)
-    Install-VisualCRuntime
-
-    # Installato un browser nostro, tolgo l'icona di Edge dal Desktop (superflua).
-    if ($pianoApp | Where-Object { $_.Id -eq "Google.Chrome" -or $_.Id -eq "Opera.OperaGX" }) {
-        Remove-EdgeDaDesktop
-    }
-    foreach ($app in $pianoApp) {
-        if ($appFatte -contains $app.Id) {
-            Write-Info "$($app.Nome): gia' installato in questa sessione, salto."
-            continue
-        }
-        Installa-Pacchetto -Nome $app.Nome -WingetId $app.Id
-        # Segno "fatta" e salvo SOLO se e' andata a buon fine: cosi' una ripresa
-        # ritenta le app fallite (rete) e salta solo quelle davvero installate.
-        if ($Global:UltimaInstallOk) {
-            $appFatte += $app.Id
-            Save-AppProgresso -Profilo $etichetta -Lista $pianoApp -Fatte $appFatte
-        }
-    }
-}
-
-# Dopo tutte le installazioni del passo: tolgo eventuali icone doppie (una nostra
-# sul Desktop utente + quella dell'installer sul Desktop pubblico).
-Remove-IconeDoppieDesktop
-
-# Se PIU' app sono fallite, quasi sempre e' la RETE (proxy/filtro/ispezione SSL
-# del negozio che blocca certi download): lo dico chiaro all'operatore.
-if ($Global:AppFallite -ge 2) {
-    Write-Host ""
-    Write-Errore "$($Global:AppFallite) app non installate: probabile RETE con proxy/filtro."
-    Write-Info "Collega il PC a un'altra rete (HOTSPOT del telefono o linea senza filtri)"
-    Write-Info "e rilancia PC Facile: rispondi S a 'Riprendere da dove eri arrivato?' -"
-    Write-Info "le app gia' installate si saltano da sole, riscarica solo le mancanti."
-    Add-Report "App non installate ($($Global:AppFallite)): probabile rete" "AVVISO"
 }
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 5 {
 # =============================================================================
-# AGGIORNAMENTI - app installate (winget) + sicurezza di Windows - opzionale
+# PASSO 5 - AGGIORNAMENTI - app installate (winget) + sicurezza di Windows
 # =============================================================================
 
 Write-Titolo "Aggiornamenti (app + Windows)"
+Update-PannelloStatus -TaskId "aggiorna" -Stato "running" -Percentuale 76 -FaseCorrente "Aggiornamenti di Sicurezza" -Dettaglio "Verifica aggiornamenti app e Windows..."
 
 Write-Host "Con un solo SI aggiorno, una dopo l'altra:" -ForegroundColor White
 Write-Host "  - App: all'ultima versione le app gestite da winget (anche OEM)." -ForegroundColor White
@@ -4391,12 +4557,6 @@ if ($vuoiUpgrade -match "^[Ss]") {
     }
 
     # 2) AGGIORNAMENTI DI SICUREZZA DI WINDOWS - in BACKGROUND.
-    # Invece di scaricarli e installarli QUI (bloccando per minuti), avvio un job
-    # che li SCARICA in background: lo script prosegue subito con driver/antivirus.
-    # L'installazione vera la faccio ALLA FINE, appena prima del riavvio (cosi' non
-    # gira insieme all'installazione dei driver, che usa lo stesso motore Windows
-    # Update), e il riavvio la finalizza. Scarico solo aggiornamenti SOFTWARE che
-    # non chiedono conferme; i driver hanno il loro passo.
     Write-Host ""
     Write-Info "Aggiornamenti di Windows: li SCARICO in background mentre proseguo."
     try {
@@ -4422,35 +4582,33 @@ if ($vuoiUpgrade -match "^[Ss]") {
         Write-Errore "Impossibile avviare gli aggiornamenti di Windows: $_"
         Add-Report "Aggiornamenti di sicurezza Windows" "ERRORE"
     }
+    Update-PannelloStatus -TaskId "aggiorna" -Stato "running" -Percentuale 80 -Dettaglio "Aggiornamenti avviati in background"
 } else {
     Write-Info "Aggiornamenti saltati (app e Windows)."
     Add-Report "Aggiornamento app installate" "SALTATO"
     Add-Report "Aggiornamenti di sicurezza Windows" "SALTATO"
+    Update-PannelloStatus -TaskId "aggiorna" -Stato "skipped" -Percentuale 80 -Dettaglio "Saltato"
 }
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
 }
 6 {
 # =============================================================================
-# DRIVER (Windows Update, opzionale)
+# PASSO 6 - DRIVER (Windows Update, opzionale)
 # =============================================================================
 
 Write-Titolo "Driver (Windows Update)"
+Update-PannelloStatus -TaskId "aggiorna" -Stato "running" -Percentuale 82 -FaseCorrente "Driver Hardware & GPU" -Dettaglio "Verifica driver grafici e periferiche..."
 
 Write-Host "Cerca e installa i driver mancanti/aggiornati dal catalogo Windows Update." -ForegroundColor White
 Write-Host "Se c'e' una scheda video DEDICATA, uso anche il tool del produttore (Windows" -ForegroundColor White
 Write-Host "Update spesso non ne prende il driver giusto). Puo' richiedere qualche minuto" -ForegroundColor White
-Write-Host "e talvolta un riavvio. Opzionale, ultimo passo." -ForegroundColor White
+Write-Host "e talvolta un riavvio. Opzionale." -ForegroundColor White
 Write-Host ""
 
-# DRIVER SCHEDA VIDEO DEDICATA: solo se c'e' una GPU dedicata (non l'integrata),
-# perche' e' li' che Windows Update fa cilecca. Sulle integrate ci pensa Windows
-# Update (sotto) e non installiamo app inutili.
 $gpuDed = Get-GpuDedicata
 switch ($gpuDed) {
     'NVIDIA' {
-        # App NVIDIA: gestisce i driver video meglio della ricerca generica di WU.
-        # Provo "NVIDIA App" (attuale), poi GeForce Experience come ripiego.
         if (Confirm-Winget) {
             Write-Info "Scheda video NVIDIA (dedicata): installo l'app NVIDIA per i driver..."
             winget install --exact --id Nvidia.NvidiaApp --silent --accept-package-agreements --accept-source-agreements 2>$null | Out-Null
@@ -4468,8 +4626,6 @@ switch ($gpuDed) {
         Write-Host ""
     }
     'INTEL' {
-        # Intel Arc (dedicata): Intel Driver & Support Assistant trova e installa
-        # da solo il driver grafico Intel piu' recente.
         if (Confirm-Winget) {
             Write-Info "Scheda video Intel Arc (dedicata): installo Intel Driver & Support Assistant..."
             Installa-Pacchetto -Nome "Intel Driver e Support Assistant" -WingetId "Intel.IntelDriverAndSupportAssistant"
@@ -4479,9 +4635,6 @@ switch ($gpuDed) {
         Write-Host ""
     }
     'AMD' {
-        # AMD dedicata: non c'e' un pacchetto winget affidabile per il driver
-        # Adrenalin, quindi apro la pagina AMD di rilevamento automatico (come
-        # per i tool antivirus): l'operatore scarica ed esegue.
         Write-Info "Scheda video AMD (dedicata): apro la pagina AMD per il driver video."
         Start-Process "https://www.amd.com/it/support"
         Write-OK "Browser aperto su amd.com/it/support (auto-rilevamento driver)."
@@ -4506,7 +4659,6 @@ if ($vuoiDriver -match "^[Ss]") {
         try {
             $sess = New-Object -ComObject Microsoft.Update.Session
             $searcher = $sess.CreateUpdateSearcher()
-            # Solo aggiornamenti di tipo driver non ancora installati
             $result = $searcher.Search("Type='Driver' and IsInstalled=0")
         } finally { Stop-BarraAnimata }
         if ($result.Updates.Count -eq 0) {
@@ -4541,13 +4693,157 @@ if ($vuoiDriver -match "^[Ss]") {
             }
             if ($esito.RebootRequired) { Write-Info "Alcuni driver richiedono un RIAVVIO per completare." }
         }
+        Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 86 -Dettaglio "Completato"
     } catch {
         Write-Errore "Ricerca/installazione driver non riuscita: $_"
         Add-Report "Driver (Windows Update)" "ERRORE"
+        Update-PannelloStatus -TaskId "aggiorna" -Stato "error" -Percentuale 86 -Dettaglio "Non riuscito (proseguo)"
     }
 } else {
     Write-Info "Installazione driver saltata."
     Add-Report "Driver (Windows Update)" "SALTATO"
+    Update-PannelloStatus -TaskId "aggiorna" -Stato "skipped" -Percentuale 86 -Dettaglio "Saltato"
+}
+
+$passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
+}
+7 {
+# =============================================================================
+# PASSO 7 - APPLICAZIONI + BROWSER (ULTIMO PASSAGGIO)
+# =============================================================================
+
+Write-Titolo "Applicazioni"
+Update-PannelloStatus -TaskId "app" -Stato "running" -Percentuale 88 -FaseCorrente "Installazione Applicazioni (Ultimo Passaggio)" -Dettaglio "Avvio installazione app..."
+
+$appsDisponibili = $CatalogoApp
+$profili = [ordered]@{
+    "BASE"    = @($CatalogoApp | Where-Object { $_.Profili -contains "BASE" }    | ForEach-Object { $_.Id })
+    "UFFICIO" = @($CatalogoApp | Where-Object { $_.Profili -contains "UFFICIO" } | ForEach-Object { $_.Id })
+    "GAMING"  = @($CatalogoApp | Where-Object { $_.Profili -contains "GAMING" }  | ForEach-Object { $_.Id })
+}
+
+function Costruisci-PianoApp {
+    param([string]$Scelta)
+    $piano = @()
+    if ($Scelta -eq "3") { $piano += @{ Nome = "Opera GX"; Id = "Opera.OperaGX" } }
+    else                 { $piano += @{ Nome = "Google Chrome"; Id = "Google.Chrome" } }
+    foreach ($app in $appsDisponibili) {
+        $prendi = switch ($Scelta) {
+            "1" { $profili["BASE"]    -contains $app.Id }
+            "2" { $profili["UFFICIO"] -contains $app.Id }
+            "3" { $profili["GAMING"]  -contains $app.Id }
+            "4" { $true }
+            default { $false }
+        }
+        if ($prendi) { $piano += @{ Nome = $app.Nome; Id = $app.Id } }
+    }
+    return $piano
+}
+
+$Global:AppFallite = 0
+
+$pianoApp  = @()
+$appFatte  = @()
+$etichetta = ""
+
+if ($Global:AppProfiloRipresa) {
+    $etichetta = [string]$Global:AppProfiloRipresa
+    $pianoApp  = @($Global:AppListaRipresa | ForEach-Object { @{ Nome = [string]$_.Nome; Id = [string]$_.Id } })
+    $appFatte  = @($Global:AppFatteRipresa | ForEach-Object { [string]$_ })
+    $Global:AppProfiloRipresa = ""; $Global:AppListaRipresa = @(); $Global:AppFatteRipresa = @()
+    $rimaste = @($pianoApp | Where-Object { $appFatte -notcontains $_.Id }).Count
+    Write-OK "Riprendo l'installazione app (profilo $etichetta): $rimaste da completare."
+    Write-Info "Le app gia' installate le salto: riparto dall'esatta app rimasta."
+} elseif ($Global:ModoEspresso) {
+    Write-Host "Modalita' Espresso: installazione automatica del PROFILO BASE (ultimo passaggio)..." -ForegroundColor Green
+    Write-Host "  (Google Chrome, VLC, Adobe Acrobat Reader, 7-Zip, AnyDesk, WhatsApp, Spotify, AIMP, Zoom)" -ForegroundColor Gray
+    $etichetta = "BASE"
+    $pianoApp  = @(Costruisci-PianoApp -Scelta "1")
+} else {
+    Write-Host "Scegli come installare le applicazioni (browser incluso in automatico):" -ForegroundColor White
+    Write-Host "  1) PROFILO BASE     (Chrome + VLC, Adobe Reader, 7-Zip, WhatsApp, Spotify, AIMP, Zoom, AnyDesk)"
+    Write-Host "  2) PROFILO UFFICIO  (Chrome + BASE + GIMP, Sumatra PDF)"
+    Write-Host "  3) PROFILO GAMING   (Opera GX + BASE + Steam, Epic, Discord)"
+    Write-Host "  4) COMPLETO         (Chrome + tutte le app in lista)"
+    Write-Host "  5) MANUALE          (Chrome + scelgo io i singoli numeri)"
+    Write-Host "  S) Salta"
+    Write-Host ""
+
+    $sceltaApps = Attendi-Risposta "Scelta (1-5 - S salta - B indietro)"
+    if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
+
+    switch -Regex ($sceltaApps) {
+        "^[1-4]$" {
+            $etichetta = @{ "1" = "BASE"; "2" = "UFFICIO"; "3" = "GAMING"; "4" = "COMPLETO" }[$sceltaApps]
+            $pianoApp  = @(Costruisci-PianoApp -Scelta $sceltaApps)
+        }
+        "^5$" {
+            $etichetta = "MANUALE"
+            $pianoApp += @{ Nome = "Google Chrome"; Id = "Google.Chrome" }
+            Write-Host ""
+            Write-Host "App disponibili:" -ForegroundColor White
+            for ($i = 0; $i -lt $appsDisponibili.Count; $i++) {
+                Write-Host "  $($i + 1)) $($appsDisponibili[$i].Nome)"
+            }
+            $sceltaManuale = Attendi-Risposta "Numeri separati da virgola (es: 1,3,5)"
+            $indici = $sceltaManuale -split "," | ForEach-Object { $_.Trim() }
+            foreach ($indice in $indici) {
+                $num = 0
+                if ($indice -match "^\d+$" -and [int]::TryParse($indice, [ref]$num)) {
+                    $idx = $num - 1
+                    if ($idx -ge 0 -and $idx -lt $appsDisponibili.Count) {
+                        $pianoApp += @{ Nome = $appsDisponibili[$idx].Nome; Id = $appsDisponibili[$idx].Id }
+                    } else {
+                        Write-Errore "Numero non valido: $indice"
+                    }
+                } elseif ($indice -ne "") {
+                    Write-Errore "Valore non riconosciuto: $indice"
+                }
+            }
+        }
+        default {
+            if ($sceltaApps -match "^[Ss]$") {
+                Write-Info "Applicazioni saltate."
+            } else {
+                Write-Info "Scelta non valida: applicazioni saltate."
+            }
+        }
+    }
+}
+
+if ($pianoApp.Count -gt 0) {
+    if ($pianoApp | Where-Object { $_.Id -eq "Google.Chrome" -or $_.Id -eq "Opera.OperaGX" }) {
+        Remove-EdgeDaDesktop
+    }
+    $appIndex = 0
+    foreach ($app in $pianoApp) {
+        $appIndex++
+        if ($appFatte -contains $app.Id) {
+            Write-Info "$($app.Nome): gia' installato in questa sessione, salto."
+            continue
+        }
+        $currPct = 88 + [int](8 * $appIndex / $pianoApp.Count)
+        Update-PannelloStatus -TaskId "app" -Stato "running" -Percentuale $currPct -FaseCorrente "Installazione Applicazioni" -Dettaglio "Installazione $($app.Nome) in corso..."
+        Installa-Pacchetto -Nome $app.Nome -WingetId $app.Id
+        if ($Global:UltimaInstallOk) {
+            $appFatte += $app.Id
+            Save-AppProgresso -Profilo $etichetta -Lista $pianoApp -Fatte $appFatte
+        }
+    }
+    Update-PannelloStatus -TaskId "app" -Stato "done" -Percentuale 96 -Dettaglio "Tutte le app installate"
+} else {
+    Update-PannelloStatus -TaskId "app" -Stato "skipped" -Percentuale 96 -Dettaglio "Saltato"
+}
+
+Remove-IconeDoppieDesktop
+
+if ($Global:AppFallite -ge 2) {
+    Write-Host ""
+    Write-Errore "$($Global:AppFallite) app non installate: probabile RETE con proxy/filtro."
+    Write-Info "Collega il PC a un'altra rete (HOTSPOT del telefono o linea senza filtri)"
+    Write-Info "e rilancia PC Facile: rispondi S a 'Riprendere da dove eri arrivato?' -"
+    Write-Info "le app gia' installate si saltano da sole, riscarica solo le mancanti."
+    Add-Report "App non installate ($($Global:AppFallite)): probabile rete" "AVVISO"
 }
 
 $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVIO)
@@ -4625,6 +4921,7 @@ if ($RunReale) {
     # esiste). Usa la funzione di log Add-Report come gli altri passi.
     # DATO SENSIBILE: la chiave finisce nel riepilogo che resta col PC (voluto).
     # -------------------------------------------------------------------------
+    Update-PannelloStatus -TaskId "diagnostica" -Stato "running" -Percentuale 98 -FaseCorrente "Diagnostica & Scheda Consegna" -Dettaglio "Salvataggio BitLocker e scheda cliente..."
     Write-Titolo "Chiave di Ripristino BitLocker"
     Write-Host "Salvo la chiave di ripristino nel riepilogo: senza, se Windows attiva la" -ForegroundColor White
     Write-Host "crittografia da solo, dopo un reset o un cambio hardware si perde l'accesso." -ForegroundColor White
@@ -5071,6 +5368,7 @@ per averlo sempre a disposizione in caso di necessita'.
     } catch {
         Write-Info "Impossibile creare il file riepilogo: $_"
     }
+    Update-PannelloStatus -TaskId "diagnostica" -Stato "done" -Percentuale 100 -FaseCorrente "Configurazione PC Completata!" -Dettaglio "Tutti i lavori terminati con successo" -Completato
 }
 
 # -----------------------------------------------------------------------------
