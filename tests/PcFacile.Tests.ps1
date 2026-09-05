@@ -18,7 +18,7 @@ BeforeAll {
     $script:FunzioniTestate = @(
         'New-PasswordCliente', 'New-EmailCliente',
         'Test-NomeSimile', 'Test-LnkJunk', 'Test-Indietro',
-        'Get-OfflineDirs', 'Find-OfflineInstaller'
+        'Get-OfflineDirs', 'Find-OfflineInstaller', 'Select-DestinazioneUSB'
     )
     foreach ($nome in $script:FunzioniTestate) {
         $fn = $ast.FindAll({
@@ -178,4 +178,13 @@ Describe 'Find-OfflineInstaller' {
         $found | Should -BeNullOrEmpty
     }
 }
+
+Describe 'Select-DestinazioneUSB' {
+    It 'restituisce un percorso valido di default in modalita non interattiva' {
+        $dest = Select-DestinazioneUSB -DefaultDir $PSScriptRoot -Test
+        $dest | Should -Not -BeNullOrEmpty
+        Test-Path $dest | Should -BeTrue
+    }
+}
+
 

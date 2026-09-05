@@ -615,6 +615,132 @@ function Install-OfflinePackage {
     return $false
 }
 
+function Select-DestinazioneUSB {
+    param(
+        [string]$DefaultDir,
+        [switch]$Test
+    )
+
+    $opzioni = [System.Collections.Generic.List[pscustomobject]]::new()
+    $visti = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+    # 1. Trova tutte le unita' rimovibili USB (massima priorita')
+    try {
+        $removables = [System.IO.DriveInfo]::GetDrives() | Where-Object { $_.IsReady -and $_.DriveType -eq 'Removable' }
+        foreach ($r in $removables) {
+            $p = $r.RootDirectory.FullName
+            if ($visti.Add($p)) {
+                $label = if ($r.VolumeLabel) { $r.VolumeLabel } else { "Chiavetta USB" }
+                $freeGb = [Math]::Round($r.TotalFreeSpace / 1GB, 1)
+                $totGb  = [Math]::Round($r.TotalSize / 1GB, 1)
+                $opzioni.Add([pscustomobject]@{
+                    Percorso    = $p
+                    Etichetta   = "$p  -  $label (USB Removibile, $freeGb GB liberi di $totGb GB)"
+                    Consigliato = $true
+                })
+            }
+        }
+    } catch {}
+
+    # 2. Se e' stato passato un TargetDir o PSScriptRoot valido (es. da PC Facile.bat)
+    $candDirs = @($DefaultDir, $Global:TargetDir, $PSScriptRoot)
+    foreach ($cd in $candDirs) {
+        if ($cd -and (Test-Path $cd) -and $cd -notlike "$env:TEMP*") {
+            try {
+                $full = (Get-Item $cd).FullName
+                if ($visti.Add($full)) {
+                    $opzioni.Add([pscustomobject]@{
+                        Percorso    = $full
+                        Etichetta   = "$full  (Cartella di avvio di PC Facile)"
+                        Consigliato = ($opzioni.Count -eq 0)
+                    })
+                }
+            } catch {}
+        }
+    }
+
+    # 3. Altre unita' disco secondarie (Fixed/Esterne/Dati, es. D:\, E:\)
+    try {
+        $otherDrives = [System.IO.DriveInfo]::GetDrives() | Where-Object {
+            $_.IsReady -and $_.DriveType -eq 'Fixed' -and $_.Name -notlike "C:*"
+        }
+        foreach ($od in $otherDrives) {
+            $p = $od.RootDirectory.FullName
+            if ($visti.Add($p)) {
+                $label = if ($od.VolumeLabel) { $od.VolumeLabel } else { "Disco secondario" }
+                $freeGb = [Math]::Round($od.TotalFreeSpace / 1GB, 1)
+                $totGb  = [Math]::Round($od.TotalSize / 1GB, 1)
+                $opzioni.Add([pscustomobject]@{
+                    Percorso    = $p
+                    Etichetta   = "$p  -  $label (Disco secondario, $freeGb GB liberi di $totGb GB)"
+                    Consigliato = ($opzioni.Count -eq 0)
+                })
+            }
+        }
+    } catch {}
+
+    # 4. Desktop di questo PC
+    try {
+        $desktopPath = [Environment]::GetFolderPath('Desktop')
+        if ($desktopPath -and (Test-Path $desktopPath) -and $visti.Add($desktopPath)) {
+            $opzioni.Add([pscustomobject]@{
+                Percorso    = $desktopPath
+                Etichetta   = "$desktopPath  (Desktop di questo PC)"
+                Consigliato = ($opzioni.Count -eq 0)
+            })
+        }
+    } catch {}
+
+    # Se siamo in modalita' test o non interattiva, prendi la prima
+    if ($Test -or $opzioni.Count -eq 0) {
+        if ($opzioni.Count -gt 0) { return $opzioni[0].Percorso }
+        return (Get-Location).Path
+    }
+
+    Write-Host "Seleziona dove preparare i pacchetti offline:" -ForegroundColor White
+    Write-Host ""
+    for ($i = 0; $i -lt $opzioni.Count; $i++) {
+        $num = $i + 1
+        $opt = $opzioni[$i]
+        $tag = if ($opt.Consigliato) { "  <-- CONSIGLIATO (INVIO)" } else { "" }
+        $col = if ($opt.Consigliato) { [ConsoleColor]::Green } else { [ConsoleColor]::White }
+        Write-Host "  [$num] " -ForegroundColor Yellow -NoNewline
+        Write-Host "$($opt.Etichetta)$tag" -ForegroundColor $col
+    }
+    $sfNum = $opzioni.Count + 1
+    Write-Host "  [$sfNum] Sfoglia cartelle / Inserisci percorso a mano..." -ForegroundColor Gray
+    Write-Host ""
+
+    $scelta = Attendi-Risposta "Scelta (1-$sfNum, INVIO = opzione 1 consigliata)"
+    if ([string]::IsNullOrWhiteSpace($scelta) -or $scelta -eq "1") {
+        return $opzioni[0].Percorso
+    }
+
+    if ($scelta -match '^\d+$') {
+        $idx = [int]$scelta - 1
+        if ($idx -ge 0 -and $idx -lt $opzioni.Count) {
+            return $opzioni[$idx].Percorso
+        }
+        if ($idx -eq $opzioni.Count) {
+            # Prova finestra di dialogo grafica per sfogliare
+            try {
+                Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+                $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+                $dialog.Description = "Seleziona la chiavetta USB o la cartella per i pacchetti offline"
+                $dialog.ShowNewFolderButton = $true
+                if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK -and $dialog.SelectedPath) {
+                    return $dialog.SelectedPath
+                }
+            } catch {}
+            $customPath = Attendi-Risposta "Scrivi il percorso della cartella (es. E:\ o D:\USB)"
+            if ($customPath -and (Test-Path $customPath)) { return $customPath }
+        }
+    }
+
+    if (Test-Path $scelta) { return $scelta }
+    return $opzioni[0].Percorso
+}
+
 function Invoke-PreparaUSBOffline {
     param([string]$TargetDir)
 
@@ -625,40 +751,11 @@ function Invoke-PreparaUSBOffline {
     Write-Host "al 100% OFFLINE e alla massima velocita' senza consumare banda!" -ForegroundColor Green
     Write-Host ""
 
-    # 1. Trova la cartella della chiavetta USB
-    $targetBase = $TargetDir
-    if (-not $targetBase) {
-        if ($PSScriptRoot -and (Test-Path $PSScriptRoot) -and $PSScriptRoot -notlike "$env:TEMP*") {
-            $targetBase = $PSScriptRoot
-        } else {
-            $curr = (Get-Location).Path
-            if ($curr -and (Test-Path $curr) -and $curr -notlike "$env:TEMP*") {
-                $targetBase = $curr
-            }
-        }
-    }
-
-    if (-not $targetBase) {
-        try {
-            $removable = Get-Volume | Where-Object { $_.DriveType -eq 'Removable' -and $_.DriveLetter } | Select-Object -First 1
-            if ($removable) {
-                $targetBase = "$($removable.DriveLetter):\"
-            }
-        } catch {}
-    }
-
-    if (-not $targetBase) {
-        $targetBase = (Get-Location).Path
-    }
-
-    Write-Host "Cartella di destinazione USB: " -NoNewline
-    Write-Host $targetBase -ForegroundColor Yellow
-    if (-not $Test) {
-        $ansDir = Attendi-Risposta "Confermi questa cartella? (INVIO = si / oppure scrivi il percorso)"
-        if ($ansDir -and (Test-Path $ansDir)) {
-            $targetBase = $ansDir
-        }
-    }
+    # 1. Selezione interattiva semplificata della cartella/chiavetta USB
+    $targetBase = Select-DestinazioneUSB -DefaultDir $TargetDir
+    Write-Host ""
+    Write-Host "Destinazione selezionata: " -NoNewline
+    Write-Host $targetBase -ForegroundColor Green
 
     $installersDir = Join-Path $targetBase "installers"
     if (-not (Test-Path $installersDir)) {
