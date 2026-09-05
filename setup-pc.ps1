@@ -2912,20 +2912,20 @@ function Invoke-BrowserAutoSignup {
 
     try { Set-Clipboard -Value "$emailProton" -ErrorAction SilentlyContinue } catch {}
     Write-Info "Email $emailProton copiata negli appunti (Ctrl+V per incollare)."
-    Write-Info "Apertura modulo di registrazione Proton Mail in Microsoft Edge..."
-    Start-Process "https://account.proton.me/signup"
+    Write-Info "Apertura modulo diretto Proton Mail Free in Microsoft Edge..."
+    Start-Process "https://account.proton.me/signup?plan=free"
 
     Beep-Attesa
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor DarkYellow
-    Write-Host " [AUTOMAZIONE BROWSER PROTON MAIL - IN ATTESA VERIFICA]" -ForegroundColor Green
-    Write-Host " 1. Incolla l'indirizzo email e la password nel modulo aperto a lato." -ForegroundColor White
-    Write-Host " 2. Se Proton Mail richiede una verifica (SMS / CAPTCHA / Email alternativa):" -ForegroundColor Yellow
-    Write-Host "    -> Fai inserire il codice al cliente." -ForegroundColor Yellow
+    Write-Host " [AUTOMAZIONE BROWSER PROTON MAIL FREE - GUIDA RAPIDA]" -ForegroundColor Green
+    Write-Host " 1. Form Gratuito: Incolla Username e Password generata." -ForegroundColor White
+    Write-Host " 2. Verifica Umana: Risolvi il puzzle/CAPTCHA visivo." -ForegroundColor White
+    Write-Host " 3. Recupero / Upsell: Clicca sempre 'Salta' o 'Forse piu tardi'." -ForegroundColor Yellow
     Write-Host "============================================================" -ForegroundColor DarkYellow
     Write-Host ""
 
-    $resp = Attendi-Risposta "Premi INVIO appena l'account Proton Mail e' creato per proseguire con il setup (o 'S' per saltare)"
+    $resp = Attendi-Risposta "Premi INVIO appena sei nella casella di posta per proseguire con il setup (o 'S' per saltare)"
     if ($resp -match "^[Ss]") {
         Write-Info "Creazione account Proton Mail saltata dall'operatore."
         Add-Report "Account Proton Mail" "SALTATO"

@@ -535,20 +535,20 @@ invoke_auto_signup_mac() {
 
     echo -n "$email_proton" | pbcopy 2>/dev/null
     info "Email $email_proton copiata negli appunti (Cmd+V per incollare)."
-    info "Apertura modulo di registrazione Proton Mail in Safari/Browser..."
-    open "https://account.proton.me/signup" 2>/dev/null
+    info "Apertura modulo diretto Proton Mail Free in Safari/Browser..."
+    open "https://account.proton.me/signup?plan=free" 2>/dev/null
 
     printf '\a'
     print -r -- ""
     print -r -- "${C_INFO}  ============================================================${C_RST}"
-    print -r -- "${C_OK}   [AUTOMAZIONE BROWSER PROTON MAIL - IN ATTESA VERIFICA]${C_RST}"
-    print -r -- "${C_TXT}   1. Incolla email e password nel modulo aperto a lato.${C_RST}"
-    print -r -- "${C_INFO}   2. Se Proton Mail richiede una verifica (SMS / CAPTCHA / Email):${C_RST}"
-    print -r -- "${C_INFO}      -> Fai inserire il codice al cliente.${C_RST}"
+    print -r -- "${C_OK}   [AUTOMAZIONE BROWSER PROTON MAIL FREE - GUIDA RAPIDA]${C_RST}"
+    print -r -- "${C_TXT}   1. Form Gratuito: Incolla Username e Password generata.${C_RST}"
+    print -r -- "${C_TXT}   2. Verifica Umana: Risolvi il puzzle/CAPTCHA visivo.${C_RST}"
+    print -r -- "${C_INFO}   3. Recupero / Upsell: Clicca sempre 'Salta' o 'Forse piu tardi'.${C_RST}"
     print -r -- "${C_INFO}  ============================================================${C_RST}"
     print -r -- ""
 
-    beep_attesa; print -n -- "   Premi INVIO appena l'account Proton Mail e' creato (o 'S' per saltare): "; read -r r_ok
+    beep_attesa; print -n -- "   Premi INVIO appena sei nella casella di posta (o 'S' per saltare): "; read -r r_ok
     if [[ "$r_ok" == [Ss]* ]]; then
         info "Creazione account Proton Mail saltata dall'operatore."
         add_report "Account Proton Mail" "SALTATO"
