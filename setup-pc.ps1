@@ -850,12 +850,15 @@ function Open-PannelloOperatore {
         .btn-copy.copied { background: #16a34a !important; border-color: #22c55e !important; }
         
         /* PORTALI 1-CLICK */
-        .links-grid { display: flex; flex-direction: column; gap: 7px; }
-        .portal-btn { display: flex; align-items: center; justify-content: space-between; background: #00142E; border: 1px solid #003B7A; border-radius: 8px; padding: 9px 12px; color: #f8fafc; text-decoration: none; font-size: 12px; font-weight: 600; transition: all 0.2s; }
+        .links-grid { display: flex; flex-direction: column; gap: 6px; }
+        .portal-divider { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px 0; }
+        .portal-divider::before, .portal-divider::after { content: ""; flex: 1; height: 1.5px; background: linear-gradient(90deg, rgba(238,114,3,0.1), #EE7203, rgba(238,114,3,0.1)); border-radius: 1px; }
+        .portal-divider span { font-size: 10px; font-weight: 800; color: #fed7aa; text-transform: uppercase; letter-spacing: 0.5px; background: #001A3A; border: 1px solid #EE7203; padding: 2px 8px; border-radius: 4px; box-shadow: 0 1px 6px rgba(238,114,3,0.25); white-space: nowrap; }
+        .portal-btn { display: flex; align-items: center; justify-content: space-between; background: #00142E; border: 1px solid #003B7A; border-radius: 8px; padding: 8.5px 12px; color: #f8fafc; text-decoration: none; font-size: 12px; font-weight: 600; transition: all 0.2s; }
         .portal-btn:hover { background: #00224D; border-color: #EE7203; transform: translateX(3px); }
         .portal-btn .icon { font-size: 15px; margin-right: 6px; }
         .portal-btn .arrow { color: #EE7203; font-weight: bold; }
-        .portal-btn.highlight { border-color: #EE7203; background: rgba(238, 114, 3, 0.08); }
+        .portal-btn.highlight { border-color: #EE7203; background: rgba(238, 114, 3, 0.12); box-shadow: 0 0 10px rgba(238,114,3,0.2); }
         
         /* CHECKLIST */
         .checklist { list-style: none; display: flex; flex-direction: column; gap: 8px; }
@@ -987,6 +990,8 @@ function Open-PannelloOperatore {
             <div class="card">
                 <h2><span class="bar"></span> &#127760; Portali Servizi &amp; Attivazione (1-Click)</h2>
                 <div class="links-grid">
+                    <!-- SEZIONE 1: ACCOUNT & EMAIL -->
+                    <div class="portal-divider" style="margin-top: 0;"><span>&#128100; Creazione Account &amp; Email</span></div>
                     <a href="https://account.microsoft.com" target="_blank" rel="noopener noreferrer" class="portal-btn">
                         <span><span class="icon">&#128100;</span> 1. Account Microsoft / Outlook</span>
                         <span class="arrow">&rarr;</span>
@@ -1003,10 +1008,16 @@ function Open-PannelloOperatore {
                         <span><span class="icon">&#128236;</span> 4. Account Libero Mail</span>
                         <span class="arrow">&rarr;</span>
                     </a>
+
+                    <!-- SEZIONE 2: PRODUTTIVITA' & OFFICE (DIVISIONE TRA 4 E 5) -->
+                    <div class="portal-divider"><span>&#128230; Produttivit&agrave; &amp; Licenze Office</span></div>
                     <a href="https://microsoft365.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn">
                         <span><span class="icon">&#128230;</span> 5. Riscatto Microsoft 365 / Office</span>
                         <span class="arrow">&rarr;</span>
                     </a>
+
+                    <!-- SEZIONE 3: ANTIVIRUS DA CARD (DIVISIONE TRA 5 E 6) -->
+                    <div class="portal-divider"><span>&#128737; Sicurezza &amp; Antivirus da Card</span></div>
                     <a href="https://www.mcafee.com/activate" target="_blank" rel="noopener noreferrer" class="portal-btn">
                         <span><span class="icon">&#128737;</span> 6. Attivazione Card McAfee</span>
                         <span class="arrow">&rarr;</span>
@@ -1015,6 +1026,9 @@ function Open-PannelloOperatore {
                         <span><span class="icon">&#128737;</span> 7. Attivazione Card Norton</span>
                         <span class="arrow">&rarr;</span>
                     </a>
+
+                    <!-- SEZIONE 4: SERVIZIO UNIEURO (DIVISIONE TRA 7 E 8) -->
+                    <div class="portal-divider"><span>&#128274; Servizio Esclusivo Unieuro</span></div>
                     <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" rel="noopener noreferrer" class="portal-btn highlight">
                         <span><span class="icon">&#128274;</span> 8. Unieuro Cyber Protection</span>
                         <span class="arrow">&rarr;</span>
