@@ -145,6 +145,40 @@ function Write-Errore {
     Write-Host "   $SYM_ERR  $Testo" -ForegroundColor Red
 }
 
+# =============================================================================
+# GESTIONE UAC SILENZIOSO & AVVISI SICUREZZA
+# Salva il valore originale di ConsentPromptBehaviorAdmin e lo imposta a 0
+# per l'intera durata dello script, eliminando qualsiasi richiesta UAC
+# intermedia durante l'installazione di programmi, runtime e driver.
+# =============================================================================
+$Global:OriginalUacConsent = $null
+
+function Enable-SilentElevation {
+    try {
+        $env:SEE_MASK_NOZONECHECKS = '1'
+        [Environment]::SetEnvironmentVariable('SEE_MASK_NOZONECHECKS', '1', 'Process')
+        $uacKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+        if (Test-Path $uacKey) {
+            $prop = Get-ItemProperty -Path $uacKey -Name 'ConsentPromptBehaviorAdmin' -ErrorAction SilentlyContinue
+            if ($prop -and ($null -ne $prop.ConsentPromptBehaviorAdmin)) {
+                $Global:OriginalUacConsent = [int]$prop.ConsentPromptBehaviorAdmin
+            } else {
+                $Global:OriginalUacConsent = 5
+            }
+            Set-ItemProperty -Path $uacKey -Name 'ConsentPromptBehaviorAdmin' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+        }
+    } catch {}
+}
+
+function Restore-SilentElevation {
+    try {
+        $uacKey = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+        if ((Test-Path $uacKey) -and ($null -ne $Global:OriginalUacConsent)) {
+            Set-ItemProperty -Path $uacKey -Name 'ConsentPromptBehaviorAdmin' -Value $Global:OriginalUacConsent -Type DWord -Force -ErrorAction SilentlyContinue
+        }
+    } catch {}
+}
+
 # Avviso sonoro. [console]::Beep e' un metodo .NET gestito: NON e' P/Invoke,
 # l'antivirus non lo segnala. Solo nel run reale (niente bip in Test/Diagnostica).
 # Bip di ATTESA: suona quando lo script si ferma e aspetta una TUA azione
@@ -2320,6 +2354,7 @@ if (-not $Test -and -not $Diagnostica) {
 
 $RunReale = (-not $Test -and -not $Diagnostica)
 if ($RunReale) {
+    Enable-SilentElevation
     Set-PreventSleep $true
     Open-PannelloOperatore -NomeCliente $NomeCliente
 }
@@ -5498,6 +5533,7 @@ per averlo sempre a disposizione in caso di necessita'.
 # -----------------------------------------------------------------------------
 if ($RunReale) {
     try {
+        Restore-SilentElevation
         Remove-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -ErrorAction SilentlyContinue
         Remove-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction SilentlyContinue
         # Ripristino il font della console a com'era (rimuovo le chiavi del .bat).

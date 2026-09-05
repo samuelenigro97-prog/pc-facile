@@ -29,13 +29,14 @@ set "USER_ARGS=%1 %2 %3 %4 %5 %6 %7 %8 %9"
 set "USER_ARGS=%USER_ARGS:   = %"
 set "USER_ARGS=%USER_ARGS:  = %"
 
-REM --- 2. Impostazioni console e sblocco file da blocchi Windows ---
+REM --- 2. Impostazioni console, disattivazione avvisi di sicurezza e sblocco file ---
+set "SEE_MASK_NOZONECHECKS=1"
 reg add "HKCU\Console" /v VirtualTerminalLevel /t REG_DWORD /d 1 /f >nul 2>&1
 reg add "HKCU\Console" /v FaceName /t REG_SZ /d "Consolas" /f >nul 2>&1
 reg add "HKCU\Console" /v FontWeight /t REG_DWORD /d 700 /f >nul 2>&1
 
-REM Sblocca automaticamente i file della chiavetta per eliminare gli avvisi "Apri file / SmartScreen"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -Path '%~dp0' -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue" >nul 2>&1
+REM Sblocca automaticamente tutti i file della chiavetta ed elimina gli avvisi SmartScreen / Apri file
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:SEE_MASK_NOZONECHECKS=1; Get-ChildItem -Path '%~dp0' -Recurse -ErrorAction SilentlyContinue | Unblock-File -ErrorAction SilentlyContinue" >nul 2>&1
 
 REM --- 3. Scarica l'ultima versione da GitHub (con fallback offline) ---
 set "HAS_LOCAL="

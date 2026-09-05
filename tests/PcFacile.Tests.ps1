@@ -22,7 +22,8 @@ BeforeAll {
         'Get-OfflineDirs', 'Find-OfflineInstaller', 'Install-OfflinePackage', 'Select-DestinazioneUSB',
         'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus',
         'Get-SystemHardwareDetails', 'Install-VisualCRuntime',
-        'Update-PannelloStatus', 'Open-PannelloOperatore', 'Get-CredenzialiSalvatePannello'
+        'Update-PannelloStatus', 'Open-PannelloOperatore', 'Get-CredenzialiSalvatePannello',
+        'Enable-SilentElevation', 'Restore-SilentElevation'
     )
     foreach ($nome in $script:FunzioniTestate) {
         $fn = $ast.FindAll({
@@ -336,6 +337,14 @@ Describe 'Get-CredenzialiSalvatePannello' {
         $Global:provNome | Should -Be "Google"
         
         Remove-Item $jsonFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Describe 'Enable-SilentElevation & Restore-SilentElevation' {
+    It 'esegue senza errori e gestisce le variabili di ambiente' {
+        { Enable-SilentElevation } | Should -Not -Throw
+        $env:SEE_MASK_NOZONECHECKS | Should -Be "1"
+        { Restore-SilentElevation } | Should -Not -Throw
     }
 }
 
