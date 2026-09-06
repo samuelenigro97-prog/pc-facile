@@ -407,6 +407,7 @@ function Attendi-Risposta {
 }
 
 function Pausa {
+    if ($Veloce -or $Test -or $Global:Test -or $Diagnostica -or $RunReale -or $env:PESTER_TEST) { return }
     Write-Host ""
     [void](Attendi-Risposta "Premi INVIO per continuare")
 }
@@ -453,16 +454,6 @@ function New-EmailCliente {
     }
     if ($e.Length -gt 20) { $e = $e.Substring(0, 20) }
     return "$e@$Dominio"
-}
-
-# Rileva una GPU NVIDIA: serve a capire se e' un PC da gaming e installare l'app
-# GeForce (che tiene aggiornati i driver video). Get-CimInstance e' standard,
-# niente P/Invoke.
-function Test-GpuNvidia {
-    try {
-        return @(Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -match 'NVIDIA|GeForce|RTX|GTX' }).Count -gt 0
-    } catch { return $false }
 }
 
 # Rileva la GPU DEDICATA (non l'integrata): solo per queste ha senso installare
@@ -926,41 +917,15 @@ function Set-PreventSleep {
     } catch {}
 }
 
-function Clear-TempCache {
-    Write-Info "Pulizia file temporanei e cache di installazione..."
-    try {
-        $dirs = @($env:TEMP, "$env:WINDIR\Temp", "$env:LOCALAPPDATA\Temp")
-        foreach ($d in $dirs) {
-            if ($d -and (Test-Path $d)) {
-                Get-ChildItem -Path $d -Recurse -Force -ErrorAction SilentlyContinue |
-                    Where-Object { -not $_.PSIsContainer } |
-                    Remove-Item -Force -ErrorAction SilentlyContinue
-            }
-        }
-        Write-OK "File temporanei e cache ripuliti con successo."
-        Add-Report "Pulizia file temporanei e cache" "OK"
-    } catch {
-        Add-Report "Pulizia file temporanei e cache" "SALTATO"
-    }
-}
-
-$Global:PannelloStatus = [ordered]@{
-    Percentuale   = 5
-    FaseCorrente  = "Inizializzazione Setup"
-    Dettaglio     = "Avvio pannello operatore Unieuro e preparazione ambiente..."
-    Completato    = $false
-    Tasks         = [ordered]@{
-        "pulizia"     = [ordered]@{ Nome = "Pulizia Bloatware OEM & Ottimizzazione SSD"; Stato = "pending"; Dettaglio = "In attesa" }
-        "lingua"      = [ordered]@{ Nome = "Forzatura Lingua & Regione Italiana (it-IT)"; Stato = "pending"; Dettaglio = "In attesa" }
-        "ripristino"  = [ordered]@{ Nome = "Punto di Ripristino di Sicurezza"; Stato = "pending"; Dettaglio = "In attesa" }
-        "runtime"     = [ordered]@{ Nome = "Runtime Microsoft Visual C++ (x86 & x64)"; Stato = "pending"; Dettaglio = "In attesa" }
-        "office"      = [ordered]@{ Nome = "Configurazione Icone Office / Microsoft 365"; Stato = "pending"; Dettaglio = "In attesa" }
-        "antivirus"   = [ordered]@{ Nome = "Sicurezza & Antivirus (Windows Defender / Card)"; Stato = "pending"; Dettaglio = "In attesa" }
-        "cyber"       = [ordered]@{ Nome = "Servizio Unieuro Cyber Protection"; Stato = "pending"; Dettaglio = "In attesa" }
-        "aggiorna"    = [ordered]@{ Nome = "Aggiornamenti & Driver Windows Update"; Stato = "pending"; Dettaglio = "In attesa" }
-        "app"         = [ordered]@{ Nome = "Installazione Applicazioni (Ultimo Passaggio)"; Stato = "pending"; Dettaglio = "In attesa" }
-        "diagnostica" = [ordered]@{ Nome = "Diagnostica Hardware, BitLocker & Scheda Consegna"; Stato = "pending"; Dettaglio = "In attesa" }
-    }
+function Get-EdgePath {
+    $edgeCandidates = @(
+        "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
+        "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
+        (Join-Path $env:LOCALAPPDATA "Microsoft\Edge\Application\msedge.exe"),
+        "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+    )
+    return ($edgeCandidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1)
 }
 
 function Set-SplitScreenLayout {
@@ -1031,20 +996,7 @@ public class WinSplit {
         } catch {}
 
         # 2. Avvia Edge a SINISTRA (X = 0, Y = 0, W = halfW, H = workH)
-        $edgeCandidates = @(
-            "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
-            "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
-            (Join-Path $env:LOCALAPPDATA "Microsoft\Edge\Application\msedge.exe"),
-            "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-            "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
-        )
-        $edgePath = ""
-        foreach ($cand in $edgeCandidates) {
-            if ($cand -and (Test-Path -LiteralPath $cand)) {
-                $edgePath = $cand
-                break
-            }
-        }
+        $edgePath = Get-EdgePath
 
         $uriTarget = $HtmlPath
         try {
@@ -1814,16 +1766,6 @@ function Open-PannelloOperatore {
             var text = 'Account: ' + email + ' | Password: ' + pass + ' (Provider: ' + currentProviderName + ')';
             navigator.clipboard.writeText(text).then(function() {
                 showToast('Dati account copiati per ticket!');
-            });
-        }
-
-        function copiaRiepilogoTecnico() {
-            var sn = document.getElementById('hwSerialVal') ? document.getElementById('hwSerialVal').innerText : '';
-            var email = document.getElementById('inEmail') ? document.getElementById('inEmail').value : '';
-            var pass = document.getElementById('inPass') ? document.getElementById('inPass').value : '';
-            var text = '--- UNIEURO PC FACILE ---\nModello: $hwModello\nSeriale: ' + sn + '\nCPU/RAM: $hwCpu - $hwRam\nAccount: ' + email + '\nPassword: ' + pass;
-            navigator.clipboard.writeText(text).then(function() {
-                showToast('Riepilogo tecnico completo copiato!');
             });
         }
 
@@ -4140,7 +4082,6 @@ if ($Test -or $Diagnostica) {
         Write-Host "$Prompt [AUTO => '$risposta']" -ForegroundColor Gray
         return $risposta
     }
-    function Pausa { }
 }
 
 if (-not $Test -and -not $Diagnostica -and -not $PreparaUSB -and -not $Migrazione -and -not $Manuale -and -not $AgenteIA -and -not $Espresso -and -not $Veloce) {
@@ -4219,7 +4160,6 @@ if ($PreparaUSB) {
 # Modalita' configurazione reale:
 if (-not $Test -and -not $Diagnostica) {
     $Veloce = $true
-    function Pausa { }
 }
 
 $RunReale = (-not $Test -and -not $Diagnostica)
@@ -4494,33 +4434,6 @@ function Confirm-Winget {
         $Global:WingetOk = $false
         return $false
     }
-}
-
-# Barra di attesa ANIMATA mentre un processo lavora (download/installazione).
-# winget con l'output nascosto non da' progressi: mostro una barra "a spola"
-# (un blocco che scorre avanti e indietro) col tempo trascorso, cosi' si vede
-# che sta lavorando e non e' bloccato. Non e' una percentuale reale (winget
-# silenzioso non la espone), ma un indicatore di ATTIVITA'. Si ridisegna sulla
-# stessa riga con \r. Il processo va passato gia' avviato (-PassThru).
-function Show-BarraAttesa {
-    param([string]$Testo, [System.Diagnostics.Process]$Processo)
-    $larg = 22; $span = 4
-    $period = ($larg - $span) * 2
-    $inizio = Get-Date
-    $i = 0
-    while (-not $Processo.HasExited) {
-        $phase = $i % $period
-        $pos = if ($phase -le ($larg - $span)) { $phase } else { $period - $phase }
-        $barra = (([string]$BOX_EMPTY) * $pos) + (([string]$BOX_FULL) * $span) + (([string]$BOX_EMPTY) * ($larg - $span - $pos))
-        $sec = [int]((Get-Date) - $inizio).TotalSeconds
-        $riga = "   $Testo  [$barra]  ${sec}s"
-        if ($AON) { Write-Host ("`r$AON$riga$AOFF") -NoNewline }
-        else { Write-Host ("`r$riga") -NoNewline -ForegroundColor $THEME_COL }
-        Start-Sleep -Milliseconds 120
-        $i++
-    }
-    # Cancella la riga della barra (spazi + ritorno a inizio riga).
-    Write-Host ("`r" + (" " * ($Testo.Length + $larg + 24)) + "`r") -NoNewline
 }
 
 # Lancia winget con l'output nascosto (rediretto su file temporanei) MA con la
@@ -5474,16 +5387,6 @@ if ($RunReale) {
             [void](Attendi-Risposta -Prompt "Quando sei pronto premi INVIO per continuare" -TimeoutSec 15 -Default "")
         }
     }
-}
-
-# =============================================================================
-# EDGE: salta le schermate iniziali (first-run "Benvenuti in Edge", accedi,
-# importa dati...). Cosi' quando apriamo Edge per account/Office non si perde
-# tempo. Policy di registro, impostata PRIMA di aprire Edge.
-# =============================================================================
-if ($RunReale) {
-    Set-EdgeFirstRunPolicies
-    Write-OK "Schermate iniziali di Edge e notifiche di benvenuto disattivate."
 }
 
 # =============================================================================
@@ -7706,14 +7609,7 @@ per averlo sempre a disposizione in caso di necessita'.
             # Generazione automatica PDF della Scheda di Consegna direttamente sul Desktop via Edge headless
             try {
                 $pdfDesktop = Join-Path (Get-DesktopDir) "Scheda-Consegna-Cliente.pdf"
-                $edgeCandidates = @(
-                    "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
-                    "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
-                    (Join-Path $env:LOCALAPPDATA "Microsoft\Edge\Application\msedge.exe"),
-                    "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-                    "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
-                )
-                $edgeExe = $edgeCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+                $edgeExe = Get-EdgePath
                 if ($edgeExe -and (Test-Path $htmlFile)) {
                     Start-Process -FilePath $edgeExe -ArgumentList "--headless --disable-gpu --run-all-compositor-stages-before-draw --print-to-pdf=`"$pdfDesktop`" `"$htmlFile`"" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
                     if (Test-Path $pdfDesktop) {
@@ -7782,6 +7678,7 @@ per averlo sempre a disposizione in caso di necessita'.
 # -----------------------------------------------------------------------------
 if ($RunReale) {
     try {
+        Stop-LocalCredServer
         Restore-SilentElevation
         Remove-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -ErrorAction SilentlyContinue
         Remove-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction SilentlyContinue

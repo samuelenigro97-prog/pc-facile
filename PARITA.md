@@ -20,11 +20,11 @@ allineati come flusso e funzioni.
 | App (BASE/UFFICIO/GAMING)   | winget + tool GPU se dedicata (NVIDIA/Intel Arc/AMD) | brew cask (Mac: GPU integrata) | pari |
 | Aggiornamenti               | `winget upgrade` + aggiornamenti sicurezza Windows (COM Microsoft.Update) + driver Windows Update | `brew upgrade` + `softwareupdate` | pari |
 | Chiave di ripristino disco  | **BitLocker** (`manage-bde`/cmdlet)       | **FileVault** (`fdesetup`)                    | pari |
-| Barra attesa download/install| `Show-BarraAttesa` (winget in Start-Process)| — (brew mostra gia' il progresso)             | solo Win |
+| Barra attesa download/install| `Start-BarraAnimata` / `Stop-BarraAnimata` (winget in Start-Process) | — (brew mostra gia' il progresso)             | solo Win |
 | Avviso sonoro fine passo    | `[console]::Beep`                         | `printf '\a'`                                 | pari |
 | Bip di richiamo se non rispondi| runspace: dopo 2 min bip corto ogni ~4s | —                                             | solo Win |
 | Credenziali (esist./gen.)   | `Nome123!` + `Set-Clipboard`              | `Nome123!` + `pbcopy`                         | pari |
-| Report finale .txt          | Desktop `Il tuo nuovo PC - <cliente>.txt` (credenziali IN CIMA) + `Credenziali - <cliente>.txt` dedicato | Desktop `Riepilogo-Mac_*.txt` | Win: 2 file |
+| Report finale / Scheda      | Desktop `Scheda-Consegna-Cliente.html/.pdf` + `Riepilogo-Configurazione-PC.txt` | Desktop `Riepilogo-Mac_*.txt` | pari |
 | Assist credenziali pagine   | copia email/password negli appunti quando apre Cyber Protection/antivirus | — | solo Win |
 | Pulizia finale (auto-elimina)| rimuove `%TEMP%\setup-pc.ps1` + reg colori + checkpoint | `rm` dello script scaricato in `/tmp` | pari |
 | Ripresa sessione interrotta | checkpoint JSON in `ProgramData\PCFacile` (anche fine dentro il passo App: profilo + app gia' fatte) | —          | solo Win |
