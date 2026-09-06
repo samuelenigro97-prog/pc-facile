@@ -1349,6 +1349,28 @@ function Open-PannelloOperatore {
                     </div>
                 </div>
 
+                <!-- 5. SERVIZI DA ATTIVARE NELLA SEQUENZA AUTOMATICA -->
+                <div class="cred-group" style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px; margin-top: 6px;">
+                    <div class="cred-label" style="margin-bottom: 6px; color: #fed7aa; font-weight: 700;">⚙️ Servizi Acquistati da Attivare:</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <input type="checkbox" id="chkSvcProton" checked> <span>✉️ Email Proton</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <input type="checkbox" id="chkSvcOffice"> <span>📦 Card Office 365</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <input type="checkbox" id="chkSvcMcAfee"> <span>🛡️ Card McAfee</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <input type="checkbox" id="chkSvcNorton"> <span>🛡️ Card Norton</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 5px; grid-column: span 2; cursor: pointer;">
+                            <input type="checkbox" id="chkSvcCyber" checked> <span>🔒 Unieuro Cyber Protection</span>
+                        </label>
+                    </div>
+                </div>
+
                 <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
                     <button type="button" id="btnAvviaAuto" class="btn-scheda" style="background: #16a34a; font-weight: 700; font-size: 13px; padding: 10px 14px; width: 100%; border: none; cursor: pointer; text-align: center; border-radius: 6px; color: #fff;" onclick="avviaSetupAutomatico()">🚀 AVVIA SETUP AUTOMATICO (Zero Clic)</button>
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
@@ -1710,6 +1732,12 @@ function Open-PannelloOperatore {
             var telefono = (document.getElementById('inTelefono') ? document.getElementById('inTelefono').value.trim() : '');
             var cliente = (cognome + ' ' + nome).trim() || nome || cognome || 'Utente';
             
+            var proton = document.getElementById('chkSvcProton') ? document.getElementById('chkSvcProton').checked : true;
+            var office = document.getElementById('chkSvcOffice') ? document.getElementById('chkSvcOffice').checked : false;
+            var mcafee = document.getElementById('chkSvcMcAfee') ? document.getElementById('chkSvcMcAfee').checked : false;
+            var norton = document.getElementById('chkSvcNorton') ? document.getElementById('chkSvcNorton').checked : false;
+            var cyber = document.getElementById('chkSvcCyber') ? document.getElementById('chkSvcCyber').checked : false;
+
             var payload = {
                 Email: email,
                 Password: pass,
@@ -1717,7 +1745,14 @@ function Open-PannelloOperatore {
                 Cliente: cliente,
                 Nome: nome,
                 Cognome: cognome,
-                Telefono: telefono
+                Telefono: telefono,
+                Servizi: {
+                    Proton: proton,
+                    Office: office,
+                    McAfee: mcafee,
+                    Norton: norton,
+                    Cyber: cyber
+                }
             };
             
             var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -1897,6 +1932,9 @@ function Get-CredenzialiSalvatePannello {
                 }
                 if ($content.Cognome) {
                     $Global:cognomeCliente = $content.Cognome
+                }
+                if ($content.Servizi) {
+                    $Global:serviziSelezionati = $content.Servizi
                 }
                 return $true
             } catch {}
@@ -2908,8 +2946,8 @@ function Invoke-BrowserAutoSignup {
     )
 
     Write-Titolo "AUTOMAZIONE BROWSER - REGISTRAZIONE PROTON MAIL & ATTIVAZIONI"
-    Write-Host "Automazione nativa ultra-rapida per la creazione dell'account Proton Mail." -ForegroundColor White
-    Write-Host "Compilazione automatica e avviso acustico solo su codici di verifica OTP/SMS." -ForegroundColor Yellow
+    Write-Host "Automazione nativa ultra-rapida per la creazione account e attivazione servizi." -ForegroundColor White
+    Write-Host "Compilazione automatica e avviso acustico su codici di verifica OTP/SMS/PIN." -ForegroundColor Yellow
     Write-Host ""
 
     if ($Test) {
@@ -2917,9 +2955,11 @@ function Invoke-BrowserAutoSignup {
         Add-Report "Automazione Proton Mail" "OK"
         return [PSCustomObject]@{
             Stato = "Completato"
-            ServiziTestati = @("Proton", "Microsoft", "Google", "Office365", "Antivirus")
+            ServiziTestati = @("Proton", "Microsoft", "Google", "Office365", "Antivirus", "McAfee", "Norton", "CyberProtection")
         }
     }
+
+    Get-CredenzialiSalvatePannello | Out-Null
 
     if (-not $NomeCliente -or $NomeCliente -eq "Utente") {
         if ($Global:nomeCliente -and $Global:nomeCliente -ne "Utente") {
@@ -2933,79 +2973,183 @@ function Invoke-BrowserAutoSignup {
         }
     }
 
-    $emailProton  = New-EmailCliente -Base $NomeCliente -Dominio "proton.me"
-    $passGenerata = New-PasswordCliente -Base $NomeCliente
+    $emailProton  = if ($Global:credMsAccount) { $Global:credMsAccount } else { New-EmailCliente -Base $NomeCliente -Dominio "proton.me" }
+    $passGenerata = if ($Global:credMsPassword) { $Global:credMsPassword } else { New-PasswordCliente -Base $NomeCliente }
 
-    Write-Host ""
-    Write-Titolo "CREAZIONE ACCOUNT PROTON MAIL (RAPIDO)"
-    Write-Host "Credenziali generate per il cliente ($NomeCliente):" -ForegroundColor White
-    Write-Host "  - Email/Account : $emailProton" -ForegroundColor Cyan
-    Write-Host "  - Password      : $passGenerata" -ForegroundColor Yellow
-    Write-Host ""
+    # Servizi da attivare (da JSON pannello o default)
+    $svcs = $Global:serviziSelezionati
+    $doProton = if ($null -ne $svcs -and $null -ne $svcs.Proton) { [bool]$svcs.Proton } else { $true }
+    $doOffice = if ($null -ne $svcs -and $null -ne $svcs.Office) { [bool]$svcs.Office } else { $false }
+    $doMcAfee = if ($null -ne $svcs -and $null -ne $svcs.McAfee) { [bool]$svcs.McAfee } else { $false }
+    $doNorton = if ($null -ne $svcs -and $null -ne $svcs.Norton) { [bool]$svcs.Norton } else { $false }
+    $doCyber  = if ($null -ne $svcs -and $null -ne $svcs.Cyber)  { [bool]$svcs.Cyber }  else { $true }
 
-    try { Set-Clipboard -Value "$emailProton" -ErrorAction SilentlyContinue } catch {}
-    Write-Info "Email $emailProton copiata negli appunti (Ctrl+V per incollare)."
-    Write-Info "Apertura modulo diretto Proton Mail Free in Microsoft Edge..."
-    Start-Process "https://account.proton.me/signup?plan=free"
+    # 1. CREAZIONE ACCOUNT PROTON MAIL (SE SELEZIONATO)
+    if ($doProton) {
+        Write-Host ""
+        Write-Titolo "1. CREAZIONE ACCOUNT PROTON MAIL (RAPIDO)"
+        Write-Host "Credenziali generate per il cliente ($NomeCliente):" -ForegroundColor White
+        Write-Host "  - Email/Account : $emailProton" -ForegroundColor Cyan
+        Write-Host "  - Password      : $passGenerata" -ForegroundColor Yellow
+        Write-Host ""
 
-    Beep-Attesa
-    Write-Host ""
-    Write-Host "============================================================" -ForegroundColor DarkYellow
-    Write-Host " [AUTOMAZIONE BROWSER PROTON MAIL FREE - GUIDA RAPIDA]" -ForegroundColor Green
-    Write-Host " 1. Form Gratuito: Incolla Username e Password generata." -ForegroundColor White
-    Write-Host " 2. Verifica Umana: Risolvi il puzzle/CAPTCHA visivo." -ForegroundColor White
-    Write-Host " 3. Recupero / Upsell: Clicca sempre 'Salta' o 'Forse piu tardi'." -ForegroundColor Yellow
-    Write-Host "============================================================" -ForegroundColor DarkYellow
-    Write-Host ""
+        try { Set-Clipboard -Value "$emailProton" -ErrorAction SilentlyContinue } catch {}
+        Write-Info "Email $emailProton copiata negli appunti (Ctrl+V per incollare)."
+        Write-Info "Apertura modulo diretto Proton Mail Free in Microsoft Edge..."
+        Start-Process "https://account.proton.me/signup?plan=free"
 
-    $resp = Attendi-Risposta "Premi INVIO appena sei nella casella di posta per passare alla protezione (o 'S' per saltare)"
-    if ($resp -match "^[Ss]") {
-        Write-Info "Creazione account Proton Mail saltata dall'operatore."
-        Add-Report "Account Proton Mail" "SALTATO"
-    } else {
-        Write-OK "Account Proton Mail configurato con successo per: $emailProton"
-        Add-Report "Account Proton Mail ($emailProton)" "OK"
-        $Global:credMsAccount = $emailProton
-        $Global:credMsPassword = $passGenerata
+        Beep-Attesa
+        Write-Host ""
+        Write-Host "============================================================" -ForegroundColor DarkYellow
+        Write-Host " [AUTOMAZIONE BROWSER PROTON MAIL FREE - GUIDA RAPIDA]" -ForegroundColor Green
+        Write-Host " 1. Form Gratuito: Incolla Username e Password generata." -ForegroundColor White
+        Write-Host " 2. Verifica Umana: Risolvi il puzzle/CAPTCHA visivo." -ForegroundColor White
+        Write-Host " 3. Recupero / Upsell: Clicca sempre 'Salta' o 'Forse piu tardi'." -ForegroundColor Yellow
+        Write-Host "============================================================" -ForegroundColor DarkYellow
+        Write-Host ""
+
+        $resp = Attendi-Risposta "Premi INVIO appena sei nella casella di posta (o 'S' per saltare)"
+        if ($resp -match "^[Ss]") {
+            Write-Info "Creazione account Proton Mail saltata dall'operatore."
+            Add-Report "Account Proton Mail" "SALTATO"
+        } else {
+            Write-OK "Account Proton Mail configurato con successo per: $emailProton"
+            Add-Report "Account Proton Mail ($emailProton)" "OK"
+            $Global:credMsAccount = $emailProton
+            $Global:credMsPassword = $passGenerata
+        }
     }
 
-    # 2. CATENA REGISTRAZIONE SERVIZIO UNIEURO CYBER PROTECTION (COVERCARE)
-    $tel = if ($Global:telefonoCliente) { $Global:telefonoCliente } else { "" }
-    if (-not $tel) {
-        $tIn = (Attendi-Risposta "Numero di Telefono/Cellulare Cliente per Cyber Protection (es. 3331234567, INVIO per saltare)").Trim()
-        if ($tIn) { $tel = $tIn; $Global:telefonoCliente = $tIn }
+    # 2. RISCATTO CARD OFFICE 365 / MICROSOFT 365 (SE SELEZIONATO)
+    if ($doOffice) {
+        Write-Host ""
+        Write-Titolo "2. ATTIVAZIONE CARD MICROSOFT 365 / OFFICE"
+        Write-Host "Dati per il riscatto del codice Office 365 a 25 caratteri:" -ForegroundColor White
+        Write-Host "  - Email Cliente  : $emailProton" -ForegroundColor Cyan
+        Write-Host "  - Password       : $passGenerata" -ForegroundColor Yellow
+        Write-Host ""
+
+        try { Set-Clipboard -Value "$emailProton" -ErrorAction SilentlyContinue } catch {}
+        Write-Info "Apertura portale Riscatto Office (microsoft365.com/setup)..."
+        Start-Process "https://microsoft365.com/setup"
+
+        Beep-Attesa
+        Write-Host "============================================================" -ForegroundColor DarkYellow
+        Write-Host " [ATTIVAZIONE CARD OFFICE 365 - GUIDA RAPIDA]" -ForegroundColor Green
+        Write-Host " Accedi con l'email cliente e digita la chiave da 25 caratteri." -ForegroundColor White
+        Write-Host "============================================================" -ForegroundColor DarkYellow
+        Write-Host ""
+
+        $respOff = Attendi-Risposta "Premi INVIO appena associata la chiave Office (o 'S' per saltare)"
+        if ($respOff -match "^[Ss]") {
+            Write-Info "Attivazione Office 365 saltata dall'operatore."
+            Add-Report "Card Office 365" "SALTATO"
+        } else {
+            Write-OK "Card Office 365 attivata con successo su $emailProton!"
+            Add-Report "Card Office 365 ($emailProton)" "OK"
+        }
     }
 
-    Write-Host ""
-    Write-Titolo "REGISTRAZIONE UNIEURO CYBER PROTECTION (COVERCARE)"
-    Write-Host "Dati pronti per la registrazione del servizio con l'email appena creata:" -ForegroundColor White
-    Write-Host "  - Nome / Cognome : $NomeCliente" -ForegroundColor Cyan
-    Write-Host "  - Email Cliente  : $emailProton" -ForegroundColor Cyan
-    Write-Host "  - Cellulare      : $(if ($tel) { $tel } else { 'Non specificato' })" -ForegroundColor Cyan
-    Write-Host "  - Password       : $passGenerata" -ForegroundColor Yellow
-    Write-Host ""
+    # 3. ATTIVAZIONE CARD MCAFEE ANTIVIRUS (SE SELEZIONATO)
+    if ($doMcAfee) {
+        Write-Host ""
+        Write-Titolo "3. ATTIVAZIONE CARD MCAFEE ANTIVIRUS"
+        Write-Host "Dati per l'attivazione della licenza McAfee:" -ForegroundColor White
+        Write-Host "  - Email Cliente  : $emailProton" -ForegroundColor Cyan
+        Write-Host "  - Password       : $passGenerata" -ForegroundColor Yellow
+        Write-Host ""
 
-    Write-Info "Apertura portale Unieuro Cyber Protection..."
-    Start-Process "https://unieuro-cyber-protection.covercare.it"
+        try { Set-Clipboard -Value "$emailProton" -ErrorAction SilentlyContinue } catch {}
+        Write-Info "Apertura portale McAfee Activate (mcafee.com/activate)..."
+        Start-Process "https://www.mcafee.com/activate"
 
-    Beep-Attesa
-    Write-Host "============================================================" -ForegroundColor DarkYellow
-    Write-Host " [REGISTRAZIONE CYBER PROTECTION - DATI PRONTI]" -ForegroundColor Green
-    Write-Host " Inserisci i dati a lato e il codice PIN/Card grattato." -ForegroundColor White
-    Write-Host "============================================================" -ForegroundColor DarkYellow
-    Write-Host ""
+        Beep-Attesa
+        Write-Host "============================================================" -ForegroundColor DarkYellow
+        Write-Host " [ATTIVAZIONE CARD MCAFEE - GUIDA RAPIDA]" -ForegroundColor Green
+        Write-Host " Inserisci il codice Product Key / PIN della card McAfee e l'email." -ForegroundColor White
+        Write-Host "============================================================" -ForegroundColor DarkYellow
+        Write-Host ""
 
-    $respCyber = Attendi-Risposta "Premi INVIO appena registrato Cyber Protection (o 'S' per saltare)"
-    if ($respCyber -match "^[Ss]") {
-        Write-Info "Cyber Protection saltato dall'operatore."
-        Add-Report "Unieuro Cyber Protection" "SALTATO"
-    } else {
-        Write-OK "Unieuro Cyber Protection registrato con successo per $NomeCliente!"
-        Add-Report "Unieuro Cyber Protection ($emailProton)" "OK"
+        $respMc = Attendi-Risposta "Premi INVIO appena attivato McAfee (o 'S' per saltare)"
+        if ($respMc -match "^[Ss]") {
+            Write-Info "Attivazione McAfee saltata dall'operatore."
+            Add-Report "Card McAfee" "SALTATO"
+        } else {
+            Write-OK "Card McAfee attivata con successo su $emailProton!"
+            Add-Report "Card McAfee ($emailProton)" "OK"
+        }
+    }
+
+    # 4. ATTIVAZIONE CARD NORTON ANTIVIRUS (SE SELEZIONATO)
+    if ($doNorton) {
+        Write-Host ""
+        Write-Titolo "4. ATTIVAZIONE CARD NORTON ANTIVIRUS"
+        Write-Host "Dati per l'attivazione della licenza Norton:" -ForegroundColor White
+        Write-Host "  - Email Cliente  : $emailProton" -ForegroundColor Cyan
+        Write-Host "  - Password       : $passGenerata" -ForegroundColor Yellow
+        Write-Host ""
+
+        try { Set-Clipboard -Value "$emailProton" -ErrorAction SilentlyContinue } catch {}
+        Write-Info "Apertura portale Norton Setup (norton.com/setup)..."
+        Start-Process "https://www.norton.com/setup"
+
+        Beep-Attesa
+        Write-Host "============================================================" -ForegroundColor DarkYellow
+        Write-Host " [ATTIVAZIONE CARD NORTON - GUIDA RAPIDA]" -ForegroundColor Green
+        Write-Host " Inserisci il codice Product Key della card Norton e l'email." -ForegroundColor White
+        Write-Host "============================================================" -ForegroundColor DarkYellow
+        Write-Host ""
+
+        $respNo = Attendi-Risposta "Premi INVIO appena attivato Norton (o 'S' per saltare)"
+        if ($respNo -match "^[Ss]") {
+            Write-Info "Attivazione Norton saltata dall'operatore."
+            Add-Report "Card Norton" "SALTATO"
+        } else {
+            Write-OK "Card Norton attivata con successo su $emailProton!"
+            Add-Report "Card Norton ($emailProton)" "OK"
+        }
+    }
+
+    # 5. CATENA REGISTRAZIONE SERVIZIO UNIEURO CYBER PROTECTION (COVERCARE) (SE SELEZIONATO)
+    if ($doCyber) {
+        $tel = if ($Global:telefonoCliente) { $Global:telefonoCliente } else { "" }
+        if (-not $tel) {
+            $tIn = (Attendi-Risposta "Numero di Telefono/Cellulare Cliente per Cyber Protection (es. 3331234567, INVIO per saltare)").Trim()
+            if ($tIn) { $tel = $tIn; $Global:telefonoCliente = $tIn }
+        }
+
+        Write-Host ""
+        Write-Titolo "5. REGISTRAZIONE UNIEURO CYBER PROTECTION (COVERCARE)"
+        Write-Host "Dati pronti per la registrazione del servizio con l'email appena creata:" -ForegroundColor White
+        Write-Host "  - Nome / Cognome : $NomeCliente" -ForegroundColor Cyan
+        Write-Host "  - Email Cliente  : $emailProton" -ForegroundColor Cyan
+        Write-Host "  - Cellulare      : $(if ($tel) { $tel } else { 'Non specificato' })" -ForegroundColor Cyan
+        Write-Host "  - Password       : $passGenerata" -ForegroundColor Yellow
+        Write-Host ""
+
+        try { Set-Clipboard -Value "$emailProton" -ErrorAction SilentlyContinue } catch {}
+        Write-Info "Apertura portale Unieuro Cyber Protection..."
+        Start-Process "https://unieuro-cyber-protection.covercare.it"
+
+        Beep-Attesa
+        Write-Host "============================================================" -ForegroundColor DarkYellow
+        Write-Host " [REGISTRAZIONE CYBER PROTECTION - DATI PRONTI]" -ForegroundColor Green
+        Write-Host " Inserisci i dati anagrafici e il codice PIN/Card grattato." -ForegroundColor White
+        Write-Host "============================================================" -ForegroundColor DarkYellow
+        Write-Host ""
+
+        $respCyber = Attendi-Risposta "Premi INVIO appena registrato Cyber Protection (o 'S' per saltare)"
+        if ($respCyber -match "^[Ss]") {
+            Write-Info "Cyber Protection saltato dall'operatore."
+            Add-Report "Unieuro Cyber Protection" "SALTATO"
+        } else {
+            Write-OK "Unieuro Cyber Protection registrato con successo per $NomeCliente!"
+            Add-Report "Unieuro Cyber Protection ($emailProton)" "OK"
+        }
     }
 
     Beep-Completato
-    Write-OK "Tutti gli account e le protezioni sono pronti: il setup prosegue in parallelo a piena velocita'!"
+    Write-OK "Tutti gli account e le protezioni selezionate sono pronti: il setup prosegue in parallelo a piena velocita'!"
 }
 
 # =============================================================================

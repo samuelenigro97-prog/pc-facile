@@ -27,11 +27,16 @@ BeforeAll {
         'New-WlanProfileXml', 'Connect-AutoWiFi', 'Save-StoreWiFiProfile',
         'Invoke-BrowserAutoSignup'
     )
+    $allFns = $ast.FindAll({
+        param($n)
+        $n -is [System.Management.Automation.Language.FunctionDefinitionAst]
+    }, $true)
+    $fnMap = @{}
+    foreach ($f in $allFns) {
+        if (-not $fnMap.ContainsKey($f.Name)) { $fnMap[$f.Name] = $f }
+    }
     foreach ($nome in $script:FunzioniTestate) {
-        $fn = $ast.FindAll({
-            param($n)
-            $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $nome
-        }, $true) | Select-Object -First 1
+        $fn = $fnMap[$nome]
         if (-not $fn) { throw "Funzione '$nome' non trovata in setup-pc.ps1" }
         # Definisco la funzione a scope globale: cosi' e' visibile in ogni It.
         Set-Item -Path "function:global:$nome" -Value $fn.Body.GetScriptBlock()

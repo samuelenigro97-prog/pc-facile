@@ -23,12 +23,15 @@ fi
 
 # ---- Modalita': -Test / -Diagnostica / -Veloce / -Auto -------------------------
 MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST | AUTOMATICA
-case "$1" in
-  --test|-t)                 MODO="TEST" ;;
-  --diagnostica|-d)          MODO="DIAGNOSTICA" ;;
-  --veloce|-v)               MODO="VELOCE" ;;
-  --auto|--automatica|--ia|-a) MODO="AUTOMATICA" ;;
-esac
+MODO_TEST=false
+for arg in "$@"; do
+  case "$arg" in
+    --test|-t)                   MODO_TEST=true; [[ "$MODO" == "MENU" ]] && MODO="TEST" ;;
+    --diagnostica|-d)            MODO="DIAGNOSTICA" ;;
+    --veloce|-v)                 MODO="VELOCE" ;;
+    --auto|--automatica|--ia|-a) MODO="AUTOMATICA" ;;
+  esac
+done
 
 # ---- Colori (Terminal.app: 256 colori; arancione ~208, no truecolor) --------
 C_ACC=$'\033[38;5;208m'   # arancione Unieuro
@@ -59,7 +62,7 @@ beep_attesa(){ $RUN_REALE && printf '\a'; }
 test_rete(){ curl -s --head --max-time 5 https://www.apple.com >/dev/null 2>&1 || ping -c1 -t2 8.8.8.8 >/dev/null 2>&1; }
 
 VELOCE=false;  [[ "$MODO" == "VELOCE" ]] && VELOCE=true
-MODO_TEST=false; [[ "$MODO" == "TEST" ]] && MODO_TEST=true
+$MODO_TEST || { [[ "$MODO" == "TEST" ]] && MODO_TEST=true; }
 
 chiedi(){
   if $VELOCE;   then REPLY="$2"; dim "$1  [Veloce => '$REPLY']"; return; fi
@@ -463,6 +466,28 @@ open_pannello_mac() {
                 <label style="font-size:11px; color:#93c5fd;">Password Consigliata:</label>
                 <input type="text" class="cred-input" id="inPass" value="__PASS__">
 
+                <!-- SERVIZI DA ATTIVARE NELLA SEQUENZA AUTOMATICA -->
+                <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px; margin-top: 6px; margin-bottom: 8px;">
+                    <div style="margin-bottom: 6px; color: #fed7aa; font-weight: 700; font-size: 11px;">⚙️ Servizi Acquistati da Attivare:</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <input type="checkbox" id="chkSvcProton" checked> <span>✉️ Email Proton</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <input type="checkbox" id="chkSvcOffice"> <span>📦 Card Office 365</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <input type="checkbox" id="chkSvcMcAfee"> <span>🛡️ Card McAfee</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                            <input type="checkbox" id="chkSvcNorton"> <span>🛡️ Card Norton</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 5px; grid-column: span 2; cursor: pointer;">
+                            <input type="checkbox" id="chkSvcCyber" checked> <span>🔒 Unieuro Cyber Protection</span>
+                        </label>
+                    </div>
+                </div>
+
                 <button type="button" id="btnAvviaAuto" class="btn-scheda" style="background:#16a34a; font-weight:700; font-size:13px; padding:10px 14px; width:100%; border:none; cursor:pointer; text-align:center; border-radius:6px; color:#fff; margin-top:8px;" onclick="avviaAutoMac()">🚀 AVVIA SETUP AUTOMATICO (Zero Clic)</button>
                 <a href="Scheda-Consegna-Mac.html" target="_blank" class="btn-scheda" style="margin-top:6px; background:#334155;">&#128196; Apri Scheda Consegna Mac</a>
             </div>
@@ -527,7 +552,27 @@ open_pannello_mac() {
             var c = (document.getElementById('inCognome') ? document.getElementById('inCognome').value.trim() : '');
             var n = (document.getElementById('inNome') ? document.getElementById('inNome').value.trim() : '');
             var t = (document.getElementById('inTelefono') ? document.getElementById('inTelefono').value.trim() : '');
-            var payload = { Email: email, Password: pass, Provider: currentProv, Cliente: (c + ' ' + n).trim() || 'Utente', Nome: n, Cognome: c, Telefono: t };
+            var proton = document.getElementById('chkSvcProton') ? document.getElementById('chkSvcProton').checked : true;
+            var office = document.getElementById('chkSvcOffice') ? document.getElementById('chkSvcOffice').checked : false;
+            var mcafee = document.getElementById('chkSvcMcAfee') ? document.getElementById('chkSvcMcAfee').checked : false;
+            var norton = document.getElementById('chkSvcNorton') ? document.getElementById('chkSvcNorton').checked : false;
+            var cyber = document.getElementById('chkSvcCyber') ? document.getElementById('chkSvcCyber').checked : false;
+            var payload = {
+                Email: email,
+                Password: pass,
+                Provider: currentProv,
+                Cliente: (c + ' ' + n).trim() || 'Utente',
+                Nome: n,
+                Cognome: c,
+                Telefono: t,
+                Servizi: {
+                    Proton: proton,
+                    Office: office,
+                    McAfee: mcafee,
+                    Norton: norton,
+                    Cyber: cyber
+                }
+            };
             var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
             var a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
@@ -575,80 +620,234 @@ EOF
 # =============================================================================
 # MODULO AUTOMAZIONE BROWSER (PROTON MAIL RAPIDO & MAC)
 # =============================================================================
+leggi_credenziali_salvate_mac() {
+    local paths=("$HOME/Downloads/pcfacile-cred.json" "${TMPDIR:-/tmp}/pcfacile-cred.json")
+    for p in "${paths[@]}"; do
+        if [[ -f "$p" ]]; then
+            if command -v python3 >/dev/null 2>&1; then
+                local res
+                res="$(python3 -c "
+import json
+try:
+    with open('$p', 'r', encoding='utf-8') as f:
+        d = json.load(f)
+    if d.get('Email'): print('EMAIL_CLIENTE=' + repr(str(d['Email'])))
+    if d.get('Password'): print('PASS_CLIENTE=' + repr(str(d['Password'])))
+    if d.get('Cliente'): print('NOME_CLIENTE=' + repr(str(d['Cliente'])))
+    if d.get('Telefono'): print('TELEFONO_CLIENTE=' + repr(str(d['Telefono'])))
+    svcs = d.get('Servizi', {})
+    if isinstance(svcs, dict):
+        print('SVC_PROTON=' + repr('true' if svcs.get('Proton', True) else 'false'))
+        print('SVC_OFFICE=' + repr('true' if svcs.get('Office', False) else 'false'))
+        print('SVC_MCAFEE=' + repr('true' if svcs.get('McAfee', False) else 'false'))
+        print('SVC_NORTON=' + repr('true' if svcs.get('Norton', False) else 'false'))
+        print('SVC_CYBER=' + repr('true' if svcs.get('Cyber', True) else 'false'))
+except Exception:
+    pass
+" 2>/dev/null)"
+                if [[ -n "$res" ]]; then
+                    eval "$res"
+                    return 0
+                fi
+            fi
+        fi
+    done
+    return 1
+}
+
 invoke_auto_signup_mac() {
     local nome_c="${1:-Utente}"
+    leggi_credenziali_salvate_mac
+
     titolo "AUTOMAZIONE BROWSER (MAC) - REGISTRAZIONE PROTON MAIL & ATTIVAZIONI"
-    info "Automazione nativa ultra-rapida per la creazione dell'account Proton Mail."
-    print -r -- "${C_INFO}   Compilazione rapida ed emissione avviso sonoro solo su codici OTP/SMS/Card.${C_RST}"
+    info "Automazione nativa ultra-rapida per la creazione account e attivazione servizi."
+    print -r -- "${C_INFO}   Compilazione rapida ed emissione avviso sonoro solo su codici OTP/SMS/Card/PIN.${C_RST}"
     print -r -- ""
 
     if $MODO_TEST; then
-        ok "TEST: Automazione Browser Mac simulata con successo su Proton Mail."
+        ok "TEST: Automazione Browser Mac simulata con successo su Proton Mail e servizi."
         add_report "Account Proton Mail" "OK"
         return 0
     fi
 
     if [[ -z "$nome_c" || "$nome_c" == "Utente" ]]; then
-        chiedi_sempre "Nome e Cognome del Cliente (es. Mario Rossi):"
-        [[ -n "$REPLY" ]] && nome_c="$REPLY"
-        NOME_CLIENTE="$nome_c"
+        if [[ -n "$NOME_CLIENTE" && "$NOME_CLIENTE" != "Utente" ]]; then
+            nome_c="$NOME_CLIENTE"
+        else
+            chiedi_sempre "Nome e Cognome del Cliente (es. Mario Rossi):"
+            [[ -n "$REPLY" ]] && nome_c="$REPLY"
+            NOME_CLIENTE="$nome_c"
+        fi
     fi
 
-    local email_proton="${nome_c//[^a-zA-Z0-9]/}@proton.me"
-    local pass_gen="$(password_cliente "$nome_c")"
+    local email_proton="${EMAIL_CLIENTE:-${nome_c//[^a-zA-Z0-9]/}@proton.me}"
+    local pass_gen="${PASS_CLIENTE:-$(password_cliente "$nome_c")}"
+    local do_proton="${SVC_PROTON:-true}"
+    local do_office="${SVC_OFFICE:-false}"
+    local do_mcafee="${SVC_MCAFEE:-false}"
+    local do_norton="${SVC_NORTON:-false}"
+    local do_cyber="${SVC_CYBER:-true}"
 
-    titolo "CREAZIONE ACCOUNT PROTON MAIL (RAPIDO)"
-    print -r -- "   ${C_TXT}Credenziali generate per il cliente ($nome_c):${C_RST}"
-    print -r -- "     ${C_CYAN}- Email / Account:${C_RST} $email_proton"
-    print -r -- "     ${C_INFO}- Password       :${C_RST} $pass_gen"
-    print -r -- ""
+    # 1. CREAZIONE ACCOUNT PROTON MAIL (SE SELEZIONATO)
+    if [[ "$do_proton" == "true" ]]; then
+        titolo "1. CREAZIONE ACCOUNT PROTON MAIL (RAPIDO)"
+        print -r -- "   ${C_TXT}Credenziali generate per il cliente ($nome_c):${C_RST}"
+        print -r -- "     ${C_CYAN}- Email / Account:${C_RST} $email_proton"
+        print -r -- "     ${C_INFO}- Password       :${C_RST} $pass_gen"
+        print -r -- ""
 
-    echo -n "$email_proton" | pbcopy 2>/dev/null
-    info "Email $email_proton copiata negli appunti (Cmd+V per incollare)."
-    info "Apertura modulo diretto Proton Mail Free in Safari/Browser..."
-    open "https://account.proton.me/signup?plan=free" 2>/dev/null
+        echo -n "$email_proton" | pbcopy 2>/dev/null
+        info "Email $email_proton copiata negli appunti (Cmd+V per incollare)."
+        info "Apertura modulo diretto Proton Mail Free in Safari/Browser..."
+        open "https://account.proton.me/signup?plan=free" 2>/dev/null
 
-    printf '\a'
-    print -r -- ""
-    print -r -- "${C_INFO}  ============================================================${C_RST}"
-    print -r -- "${C_OK}   [AUTOMAZIONE BROWSER PROTON MAIL FREE - GUIDA RAPIDA]${C_RST}"
-    print -r -- "${C_TXT}   1. Form Gratuito: Incolla Username e Password generata.${C_RST}"
-    print -r -- "${C_TXT}   2. Verifica Umana: Risolvi il puzzle/CAPTCHA visivo.${C_RST}"
-    print -r -- "${C_INFO}   3. Recupero / Upsell: Clicca sempre 'Salta' o 'Forse piu tardi'.${C_RST}"
-    print -r -- "${C_INFO}  ============================================================${C_RST}"
-    print -r -- ""
+        printf '\a'
+        print -r -- ""
+        print -r -- "${C_INFO}  ============================================================${C_RST}"
+        print -r -- "${C_OK}   [AUTOMAZIONE BROWSER PROTON MAIL FREE - GUIDA RAPIDA]${C_RST}"
+        print -r -- "${C_TXT}   1. Form Gratuito: Incolla Username e Password generata.${C_RST}"
+        print -r -- "${C_TXT}   2. Verifica Umana: Risolvi il puzzle/CAPTCHA visivo.${C_RST}"
+        print -r -- "${C_INFO}   3. Recupero / Upsell: Clicca sempre 'Salta' o 'Forse piu tardi'.${C_RST}"
+        print -r -- "${C_INFO}  ============================================================${C_RST}"
+        print -r -- ""
 
-    beep_attesa; print -n -- "   Premi INVIO appena sei nella casella di posta per passare alla protezione (o 'S' per saltare): "; read -r r_ok
-    if [[ "$r_ok" == [Ss]* ]]; then
-        info "Creazione account Proton Mail saltata dall'operatore."
-        add_report "Account Proton Mail" "SALTATO"
-    else
-        ok "Account Proton Mail configurato con successo: $email_proton"
-        add_report "Account Proton Mail ($email_proton)" "OK"
+        beep_attesa; print -n -- "   Premi INVIO appena sei nella casella di posta (o 'S' per saltare): "; read -r r_ok
+        if [[ "$r_ok" == [Ss]* ]]; then
+            info "Creazione account Proton Mail saltata dall'operatore."
+            add_report "Account Proton Mail" "SALTATO"
+        else
+            ok "Account Proton Mail configurato con successo: $email_proton"
+            add_report "Account Proton Mail ($email_proton)" "OK"
+        fi
     fi
 
-    # 2. Registrazione Unieuro Cyber Protection su Mac
-    titolo "REGISTRAZIONE UNIEURO CYBER PROTECTION (MAC)"
-    print -r -- "   ${C_TXT}Dati cliente pronti per l'attivazione Cyber Protection:${C_RST}"
-    print -r -- "     ${C_CYAN}- Nome / Cognome :${C_RST} $nome_c"
-    print -r -- "     ${C_CYAN}- Email Creata   :${C_RST} $email_proton"
-    print -r -- "     ${C_INFO}- Password       :${C_RST} $pass_gen"
-    print -r -- ""
-    info "Apertura portale Unieuro Cyber Protection in Safari..."
-    open "https://unieuro-cyber-protection.covercare.it" 2>/dev/null
+    # 2. RISCATTO CARD OFFICE 365 / MICROSOFT 365 (SE SELEZIONATO)
+    if [[ "$do_office" == "true" ]]; then
+        titolo "2. ATTIVAZIONE CARD MICROSOFT 365 / OFFICE"
+        print -r -- "   ${C_TXT}Dati per il riscatto del codice Office 365 a 25 caratteri:${C_RST}"
+        print -r -- "     ${C_CYAN}- Email Cliente  :${C_RST} $email_proton"
+        print -r -- "     ${C_INFO}- Password       :${C_RST} $pass_gen"
+        print -r -- ""
 
-    printf '\a'
-    beep_attesa; print -n -- "   Premi INVIO appena registrato Cyber Protection (o 'S' per saltare): "; read -r r_cyb
-    if [[ "$r_cyb" == [Ss]* ]]; then
-        info "Cyber Protection saltato dall'operatore."
-        add_report "Unieuro Cyber Protection" "SALTATO"
-    else
-        ok "Unieuro Cyber Protection registrato con successo per $nome_c ($email_proton)!"
-        add_report "Unieuro Cyber Protection ($email_proton)" "OK"
+        echo -n "$email_proton" | pbcopy 2>/dev/null
+        info "Apertura portale Riscatto Office (microsoft365.com/setup)..."
+        open "https://microsoft365.com/setup" 2>/dev/null
+
+        printf '\a'
+        print -r -- "${C_INFO}  ============================================================${C_RST}"
+        print -r -- "${C_OK}   [ATTIVAZIONE CARD OFFICE 365 - GUIDA RAPIDA]${C_RST}"
+        print -r -- "${C_TXT}   Accedi con l'email cliente e digita la chiave da 25 caratteri.${C_RST}"
+        print -r -- "${C_INFO}  ============================================================${C_RST}"
+        print -r -- ""
+
+        beep_attesa; print -n -- "   Premi INVIO appena associata la chiave Office (o 'S' per saltare): "; read -r r_off
+        if [[ "$r_off" == [Ss]* ]]; then
+            info "Attivazione Office 365 saltata dall'operatore."
+            add_report "Card Office 365" "SALTATO"
+        else
+            ok "Card Office 365 attivata con successo su $email_proton!"
+            add_report "Card Office 365 ($email_proton)" "OK"
+        fi
+    fi
+
+    # 3. ATTIVAZIONE CARD MCAFEE ANTIVIRUS (SE SELEZIONATO)
+    if [[ "$do_mcafee" == "true" ]]; then
+        titolo "3. ATTIVAZIONE CARD MCAFEE ANTIVIRUS"
+        print -r -- "   ${C_TXT}Dati per l'attivazione della licenza McAfee:${C_RST}"
+        print -r -- "     ${C_CYAN}- Email Cliente  :${C_RST} $email_proton"
+        print -r -- "     ${C_INFO}- Password       :${C_RST} $pass_gen"
+        print -r -- ""
+
+        echo -n "$email_proton" | pbcopy 2>/dev/null
+        info "Apertura portale McAfee Activate (mcafee.com/activate)..."
+        open "https://www.mcafee.com/activate" 2>/dev/null
+
+        printf '\a'
+        print -r -- "${C_INFO}  ============================================================${C_RST}"
+        print -r -- "${C_OK}   [ATTIVAZIONE CARD MCAFEE - GUIDA RAPIDA]${C_RST}"
+        print -r -- "${C_TXT}   Inserisci il codice Product Key / PIN della card McAfee e l'email.${C_RST}"
+        print -r -- "${C_INFO}  ============================================================${C_RST}"
+        print -r -- ""
+
+        beep_attesa; print -n -- "   Premi INVIO appena attivato McAfee (o 'S' per saltare): "; read -r r_mc
+        if [[ "$r_mc" == [Ss]* ]]; then
+            info "Attivazione McAfee saltata dall'operatore."
+            add_report "Card McAfee" "SALTATO"
+        else
+            ok "Card McAfee attivata con successo su $email_proton!"
+            add_report "Card McAfee ($email_proton)" "OK"
+        fi
+    fi
+
+    # 4. ATTIVAZIONE CARD NORTON ANTIVIRUS (SE SELEZIONATO)
+    if [[ "$do_norton" == "true" ]]; then
+        titolo "4. ATTIVAZIONE CARD NORTON ANTIVIRUS"
+        print -r -- "   ${C_TXT}Dati per l'attivazione della licenza Norton:${C_RST}"
+        print -r -- "     ${C_CYAN}- Email Cliente  :${C_RST} $email_proton"
+        print -r -- "     ${C_INFO}- Password       :${C_RST} $pass_gen"
+        print -r -- ""
+
+        echo -n "$email_proton" | pbcopy 2>/dev/null
+        info "Apertura portale Norton Setup (norton.com/setup)..."
+        open "https://www.norton.com/setup" 2>/dev/null
+
+        printf '\a'
+        print -r -- "${C_INFO}  ============================================================${C_RST}"
+        print -r -- "${C_OK}   [ATTIVAZIONE CARD NORTON - GUIDA RAPIDA]${C_RST}"
+        print -r -- "${C_TXT}   Inserisci il codice Product Key della card Norton e l'email.${C_RST}"
+        print -r -- "${C_INFO}  ============================================================${C_RST}"
+        print -r -- ""
+
+        beep_attesa; print -n -- "   Premi INVIO appena attivato Norton (o 'S' per saltare): "; read -r r_no
+        if [[ "$r_no" == [Ss]* ]]; then
+            info "Attivazione Norton saltata dall'operatore."
+            add_report "Card Norton" "SALTATO"
+        else
+            ok "Card Norton attivata con successo su $email_proton!"
+            add_report "Card Norton ($email_proton)" "OK"
+        fi
+    fi
+
+    # 5. REGISTRAZIONE UNIEURO CYBER PROTECTION (SE SELEZIONATO)
+    if [[ "$do_cyber" == "true" ]]; then
+        local tel="${TELEFONO_CLIENTE:-}"
+        if [[ -z "$tel" ]]; then
+            chiedi_sempre "Numero di Telefono/Cellulare Cliente per Cyber Protection (INVIO per saltare):"
+            [[ -n "$REPLY" ]] && tel="$REPLY"
+            TELEFONO_CLIENTE="$tel"
+        fi
+
+        titolo "5. REGISTRAZIONE UNIEURO CYBER PROTECTION (MAC)"
+        print -r -- "   ${C_TXT}Dati cliente pronti per l'attivazione Cyber Protection:${C_RST}"
+        print -r -- "     ${C_CYAN}- Nome / Cognome :${C_RST} $nome_c"
+        print -r -- "     ${C_CYAN}- Email Creata   :${C_RST} $email_proton"
+        print -r -- "     ${C_CYAN}- Cellulare      :${C_RST} ${tel:-Non specificato}"
+        print -r -- "     ${C_INFO}- Password       :${C_RST} $pass_gen"
+        print -r -- ""
+
+        echo -n "$email_proton" | pbcopy 2>/dev/null
+        info "Apertura portale Unieuro Cyber Protection in Safari..."
+        open "https://unieuro-cyber-protection.covercare.it" 2>/dev/null
+
+        printf '\a'
+        print -r -- "${C_INFO}  ============================================================${C_RST}"
+        print -r -- "${C_OK}   [REGISTRAZIONE CYBER PROTECTION - DATI PRONTI]${C_RST}"
+        print -r -- "${C_TXT}   Inserisci i dati anagrafici e il codice PIN/Card grattato.${C_RST}"
+        print -r -- "${C_INFO}  ============================================================${C_RST}"
+        print -r -- ""
+
+        beep_attesa; print -n -- "   Premi INVIO appena registrato Cyber Protection (o 'S' per saltare): "; read -r r_cyb
+        if [[ "$r_cyb" == [Ss]* ]]; then
+            info "Cyber Protection saltato dall'operatore."
+            add_report "Unieuro Cyber Protection" "SALTATO"
+        else
+            ok "Unieuro Cyber Protection registrato con successo per $nome_c ($email_proton)!"
+            add_report "Unieuro Cyber Protection ($email_proton)" "OK"
+        fi
     fi
 
     printf '\a'
-    ok "Account e protezioni pronti: il setup parallelo delle applicazioni e del Mac prosegue a pieno ritmo!"
+    ok "Tutti gli account e le protezioni selezionate sono pronti: il setup prosegue in parallelo a piena velocita'!"
 }
 
 # Alias compatibilita'
@@ -979,7 +1178,7 @@ update_pannello_mac_status 100 "Configurazione Mac Completata!" "Tutti i lavori 
 # =============================================================================
 # MENU DI CHIUSURA: CHECK SALUTE MAC O RIAVVIO
 # =============================================================================
-if $RUN_REALE; then
+if $RUN_REALE && ! $MODO_TEST; then
     titolo "COMPLETAMENTO PC FACILE (MAC)"
     print -r -- "${C_OK}   Tutti i lavori di setup Mac sono terminati con successo!${C_RST}"
     print -r -- ""
