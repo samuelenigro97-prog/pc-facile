@@ -2995,8 +2995,8 @@ function Invoke-BrowserAutoSignup {
 
         try { Set-Clipboard -Value "$emailProton" -ErrorAction SilentlyContinue } catch {}
         Write-Info "Email $emailProton copiata negli appunti (Ctrl+V per incollare)."
-        Write-Info "Apertura modulo diretto Proton Mail Free in Microsoft Edge..."
-        Start-Process "https://account.proton.me/signup?plan=free"
+        Write-Info "Apertura modulo diretto Proton Mail Free in Microsoft Edge a sinistra..."
+        Set-SplitScreenLayout -HtmlPath "https://account.proton.me/signup?plan=free"
 
         Beep-Attesa
         Write-Host ""
@@ -3030,8 +3030,8 @@ function Invoke-BrowserAutoSignup {
         Write-Host ""
 
         try { Set-Clipboard -Value "$emailProton" -ErrorAction SilentlyContinue } catch {}
-        Write-Info "Apertura portale Riscatto Office (microsoft365.com/setup)..."
-        Start-Process "https://microsoft365.com/setup"
+        Write-Info "Apertura portale Riscatto Office (microsoft365.com/setup) a sinistra..."
+        Set-SplitScreenLayout -HtmlPath "https://microsoft365.com/setup"
 
         Beep-Attesa
         Write-Host "============================================================" -ForegroundColor DarkYellow
@@ -3060,8 +3060,8 @@ function Invoke-BrowserAutoSignup {
         Write-Host ""
 
         try { Set-Clipboard -Value "$emailProton" -ErrorAction SilentlyContinue } catch {}
-        Write-Info "Apertura portale McAfee Activate (mcafee.com/activate)..."
-        Start-Process "https://www.mcafee.com/activate"
+        Write-Info "Apertura portale McAfee Activate (mcafee.com/activate) a sinistra..."
+        Set-SplitScreenLayout -HtmlPath "https://www.mcafee.com/activate"
 
         Beep-Attesa
         Write-Host "============================================================" -ForegroundColor DarkYellow
@@ -3090,8 +3090,8 @@ function Invoke-BrowserAutoSignup {
         Write-Host ""
 
         try { Set-Clipboard -Value "$emailProton" -ErrorAction SilentlyContinue } catch {}
-        Write-Info "Apertura portale Norton Setup (norton.com/setup)..."
-        Start-Process "https://www.norton.com/setup"
+        Write-Info "Apertura portale Norton Setup (norton.com/setup) a sinistra..."
+        Set-SplitScreenLayout -HtmlPath "https://www.norton.com/setup"
 
         Beep-Attesa
         Write-Host "============================================================" -ForegroundColor DarkYellow
@@ -3128,8 +3128,8 @@ function Invoke-BrowserAutoSignup {
         Write-Host ""
 
         try { Set-Clipboard -Value "$emailProton" -ErrorAction SilentlyContinue } catch {}
-        Write-Info "Apertura portale Unieuro Cyber Protection..."
-        Start-Process "https://unieuro-cyber-protection.covercare.it"
+        Write-Info "Apertura portale Unieuro Cyber Protection a sinistra..."
+        Set-SplitScreenLayout -HtmlPath "https://unieuro-cyber-protection.covercare.it"
 
         Beep-Attesa
         Write-Host "============================================================" -ForegroundColor DarkYellow

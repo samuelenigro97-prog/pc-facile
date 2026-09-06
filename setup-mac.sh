@@ -291,9 +291,10 @@ diagnostica_salute_mac() {
 # SPLIT SCREEN 50/50 AUTOMATICO SU MAC (Safari a Sinistra, Terminale a Destra)
 # =============================================================================
 set_split_screen_mac() {
-    local html_path="$1"
+    local target="$1"
     [[ "$MODO_TEST" == true ]] && return 0
-    osascript <<EOF 2>/dev/null
+    if [[ "$target" == http* ]]; then
+        osascript <<EOF 2>/dev/null
 tell application "Finder"
     set screenBounds to bounds of window of desktop
     set screenW to item 3 of screenBounds
@@ -305,7 +306,7 @@ set halfW to (screenW / 2) as integer
 -- 1. Safari a SINISTRA
 tell application "Safari"
     activate
-    open POSIX file "$html_path"
+    open location "$target"
     delay 0.4
     if (count of windows) > 0 then
         set bounds of front window to {0, 25, halfW, screenH}
@@ -320,6 +321,35 @@ tell application "Terminal"
     end if
 end tell
 EOF
+    else
+        osascript <<EOF 2>/dev/null
+tell application "Finder"
+    set screenBounds to bounds of window of desktop
+    set screenW to item 3 of screenBounds
+    set screenH to item 4 of screenBounds
+end tell
+
+set halfW to (screenW / 2) as integer
+
+-- 1. Safari a SINISTRA
+tell application "Safari"
+    activate
+    open POSIX file "$target"
+    delay 0.4
+    if (count of windows) > 0 then
+        set bounds of front window to {0, 25, halfW, screenH}
+    end if
+end tell
+
+-- 2. Terminal a DESTRA
+tell application "Terminal"
+    activate
+    if (count of windows) > 0 then
+        set bounds of front window to {halfW, 25, screenW, screenH}
+    end if
+end tell
+EOF
+    fi
 }
 
 # =============================================================================
@@ -698,8 +728,8 @@ invoke_auto_signup_mac() {
 
         echo -n "$email_proton" | pbcopy 2>/dev/null
         info "Email $email_proton copiata negli appunti (Cmd+V per incollare)."
-        info "Apertura modulo diretto Proton Mail Free in Safari/Browser..."
-        open "https://account.proton.me/signup?plan=free" 2>/dev/null
+        info "Apertura modulo diretto Proton Mail Free in Safari a sinistra..."
+        set_split_screen_mac "https://account.proton.me/signup?plan=free"
 
         printf '\a'
         print -r -- ""
@@ -730,8 +760,8 @@ invoke_auto_signup_mac() {
         print -r -- ""
 
         echo -n "$email_proton" | pbcopy 2>/dev/null
-        info "Apertura portale Riscatto Office (microsoft365.com/setup)..."
-        open "https://microsoft365.com/setup" 2>/dev/null
+        info "Apertura portale Riscatto Office (microsoft365.com/setup) a sinistra..."
+        set_split_screen_mac "https://microsoft365.com/setup"
 
         printf '\a'
         print -r -- "${C_INFO}  ============================================================${C_RST}"
@@ -759,8 +789,8 @@ invoke_auto_signup_mac() {
         print -r -- ""
 
         echo -n "$email_proton" | pbcopy 2>/dev/null
-        info "Apertura portale McAfee Activate (mcafee.com/activate)..."
-        open "https://www.mcafee.com/activate" 2>/dev/null
+        info "Apertura portale McAfee Activate (mcafee.com/activate) a sinistra..."
+        set_split_screen_mac "https://www.mcafee.com/activate"
 
         printf '\a'
         print -r -- "${C_INFO}  ============================================================${C_RST}"
@@ -788,8 +818,8 @@ invoke_auto_signup_mac() {
         print -r -- ""
 
         echo -n "$email_proton" | pbcopy 2>/dev/null
-        info "Apertura portale Norton Setup (norton.com/setup)..."
-        open "https://www.norton.com/setup" 2>/dev/null
+        info "Apertura portale Norton Setup (norton.com/setup) a sinistra..."
+        set_split_screen_mac "https://www.norton.com/setup"
 
         printf '\a'
         print -r -- "${C_INFO}  ============================================================${C_RST}"
@@ -826,8 +856,8 @@ invoke_auto_signup_mac() {
         print -r -- ""
 
         echo -n "$email_proton" | pbcopy 2>/dev/null
-        info "Apertura portale Unieuro Cyber Protection in Safari..."
-        open "https://unieuro-cyber-protection.covercare.it" 2>/dev/null
+        info "Apertura portale Unieuro Cyber Protection in Safari a sinistra..."
+        set_split_screen_mac "https://unieuro-cyber-protection.covercare.it"
 
         printf '\a'
         print -r -- "${C_INFO}  ============================================================${C_RST}"
@@ -1083,8 +1113,8 @@ update_pannello_mac_status 88 "Unieuro Cyber Protection" "Configurazione servizi
 titolo "7. Unieuro Cyber Protection"
 chiedi "Attivare Unieuro Cyber Protection? (S = si / INVIO = no)" "N"
 if [[ "$REPLY" == [Ss]* ]] && $RUN_REALE; then
-    open "https://unieuro-cyber-protection.covercare.it" 2>/dev/null
-    ok "Portale Cyber Protection aperto nel browser."
+    set_split_screen_mac "https://unieuro-cyber-protection.covercare.it"
+    ok "Portale Cyber Protection aperto nel browser a sinistra."
     add_report "Unieuro Cyber Protection" "OK"
 else
     add_report "Unieuro Cyber Protection" "SALTATO"
