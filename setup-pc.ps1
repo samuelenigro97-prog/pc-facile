@@ -632,7 +632,7 @@ function Get-StorageHealthInfo {
                         $info.Usura = "Usura SSD: $($counter.Wear)%"
                     }
                     if ($counter.Temperature -gt 0) {
-                        $info.Temperatura = "$($counter.Temperature)°C"
+                        $info.Temperatura = "$($counter.Temperature) C"
                     }
                 }
             }
@@ -2197,7 +2197,7 @@ function Get-CredenzialiSalvatePannello {
         }
     } catch {}
 
-    # 3. Canale File System (pcfacile-cred*.json più recente)
+    # 3. Canale File System (pcfacile-cred*.json piu' recente)
     $candidateDirs = [System.Collections.Generic.List[string]]::new()
     $userProf = [Environment]::GetFolderPath('UserProfile')
     if ($userProf) {
@@ -2499,7 +2499,7 @@ function Find-OfflineInstaller {
         $searchList += "*$cleanNome*.exe"
     }
 
-    # Preferisci pacchetti .msi prima di .exe per massima affidabilità silent
+    # Preferisci pacchetti .msi prima di .exe per massima affidabilita' silent
     $orderedSearchList = @($searchList | Sort-Object { if ($_ -like "*.msi") { 0 } else { 1 } })
 
     foreach ($d in $dirs) {
@@ -4181,7 +4181,7 @@ if (-not $Test -and -not $Diagnostica -and -not $PreparaUSB -and -not $Migrazion
     if ($vtOn) {
         Write-Host "  $U_ORANGE$([char]0x2554)$boxLine$([char]0x2557)$U_RESET"
         Write-Host "  $U_ORANGE$([char]0x2551)$U_RESET  $U_ORANGE_BG UNIEURO $U_RESET $U_WHITE PC FACILE  -  Assistenza & Configurazione PC      $U_ORANGE$([char]0x2551)$U_RESET"
-        Write-Host "  $U_ORANGE$([char]0x2551)$U_RESET  $U_ORANGE Batte. Forte. Sempre.$U_RESET $U_PEACH • Setup Tecnico Dedicato v$SCRIPT_VERSION      $U_ORANGE$([char]0x2551)$U_RESET"
+        Write-Host "  $U_ORANGE$([char]0x2551)$U_RESET  $U_ORANGE Batte. Forte. Sempre.$U_RESET $U_PEACH - Setup Tecnico Dedicato v$SCRIPT_VERSION      $U_ORANGE$([char]0x2551)$U_RESET"
         Write-Host "  $U_ORANGE$([char]0x255A)$boxLine$([char]0x255D)$U_RESET"
         Write-Host ""
         Write-Host "  $U_GREEN$SYM_OK$U_RESET $U_WHITE CONFIGURAZIONE AUTOMATICA AVVIATA A MASSIMA VELOCITA'!$U_RESET"
@@ -5083,7 +5083,7 @@ function Installa-Pacchetto {
         [string]$WingetId
     )
 
-    # 0. Verifica preventiva istantanea: se l'app è già installata, SALTA SUBITO (evita popup e reinstallazioni)
+    # 0. Verifica preventiva istantanea: se l'app e' gia' installata, SALTA SUBITO (evita popup e reinstallazioni)
     if (Test-IsAppInstalled -Nome $Nome -WingetId $WingetId) {
         Write-OK "$Nome gia' installato. Salto."
         Add-Report "$Nome (installazione)" "OK"
@@ -5092,7 +5092,7 @@ function Installa-Pacchetto {
         return
     }
 
-    # 1. Prova prima l'installazione offline ad altissima velocità da USB se presente
+    # 1. Prova prima l'installazione offline ad altissima velocita' da USB se presente
     $offlineFile = Find-OfflineInstaller -WingetId $WingetId -Nome $Nome
     if ($offlineFile) {
         if (Install-OfflinePackage -FilePath $offlineFile -Nome $Nome) {
@@ -6425,7 +6425,7 @@ if (Test-FaseFatta 5) {
     Write-Info "Punto di ripristino: gia' fatto nella sessione precedente, salto."
     Update-PannelloStatus -TaskId "ripristino" -Stato "skipped" -Percentuale 45 -FaseCorrente "Baseline" -Dettaglio "Ottimizzato per SSD"
 } elseif ($skipRestore -or -not $CreaRipristino) {
-    # Richiesta esplicita operatore: "questo puoi saltarlo, è super opzionale".
+    # Richiesta esplicita operatore: "questo puoi saltarlo, e' super opzionale".
     # Su macchine nuove in negozio risparmia fino a 25 GB su SSD ed evita attese VSS inutili.
     Write-Info "Punto di ripristino: saltato (super opzionale, ottimizzazione spazio SSD)."
     Update-PannelloStatus -TaskId "ripristino" -Stato "skipped" -Percentuale 45 -FaseCorrente "Baseline" -Dettaglio "Ottimizzato per SSD"
