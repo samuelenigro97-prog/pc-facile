@@ -25,7 +25,8 @@ BeforeAll {
         'Update-PannelloStatus', 'Open-PannelloOperatore', 'Set-SplitScreenLayout', 'Get-CredenzialiSalvatePannello',
         'Enable-SilentElevation', 'Restore-SilentElevation',
         'New-WlanProfileXml', 'Connect-AutoWiFi', 'Save-StoreWiFiProfile',
-        'Invoke-BrowserAutoSignup', 'Wait-CredenzialiPannello'
+        'Invoke-BrowserAutoSignup', 'Wait-CredenzialiPannello',
+        'Install-WindowsUpdateDrivers'
     )
     $allFns = $ast.FindAll({
         param($n)
@@ -431,6 +432,16 @@ Describe 'Wait-CredenzialiPannello' {
     It 'completa immediatamente in modalita test' {
         $res = Wait-CredenzialiPannello -Test
         $res | Should -BeTrue
+    }
+}
+
+Describe 'Install-WindowsUpdateDrivers' {
+    It 'completa con successo in modalita test senza bloccare l''esecuzione' {
+        $Global:Report = [System.Collections.ArrayList]::new()
+        $res = Install-WindowsUpdateDrivers -Test
+        $res | Should -Not -BeNullOrEmpty
+        $res.Esito | Should -BeExactly 'OK'
+        @($Global:Report | Where-Object { $_.Voce -eq "Driver (Windows Update)" -and $_.Esito -eq "OK" }).Count | Should -Be 1
     }
 }
 

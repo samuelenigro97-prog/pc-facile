@@ -187,7 +187,12 @@ function Add-Report {
         [string]$Voce,
         [string]$Esito  # OK | ERRORE | SALTATO
     )
-    if ($null -eq $Report) { $Report = [System.Collections.ArrayList]::new() }
+    if ($null -eq $Report -or $Report.IsFixedSize) {
+        $nuovo = [System.Collections.ArrayList]::new()
+        if ($Report) { foreach ($elem in $Report) { [void]$nuovo.Add($elem) } }
+        $Report = $nuovo
+        $Global:Report = $nuovo
+    }
     [void]$Report.Add([pscustomobject]@{ Voce = $Voce; Esito = $Esito })
 }
 
@@ -2416,6 +2421,156 @@ function Install-VisualCRuntime {
     return $allOk
 }
 
+function Install-WindowsUpdateDrivers {
+    param(
+        [int]$TimeoutSec = 360,
+        [switch]$Test
+    )
+    if ($Test -or -not $RunReale) {
+        Write-OK "TEST: simulazione ricerca/aggiornamento driver Windows Update completata."
+        Add-Report "Driver (Windows Update)" "OK"
+        Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 72 -Dettaglio "Completato (test)"
+        return @{ Esito = "OK"; Trovati = 0; Installati = 0; RebootRequired = $false }
+    }
+
+    Write-Info "Ricerca e installazione driver su Windows Update in corso (max $([math]::Round($TimeoutSec/60)) min)..."
+    Write-Host "  (Puoi premere 'S' o 'Esc' in qualsiasi momento per saltare e andare subito alle app)" -ForegroundColor Yellow
+    Start-BarraAnimata "Driver Windows Update [Premi S per saltare]"
+
+    $jobDriver = Start-Job -ScriptBlock {
+        $esito = [ordered]@{
+            Trovati        = 0
+            NomiDriver     = @()
+            Scaricati      = 0
+            Installati     = 0
+            ResultCode     = 0
+            RebootRequired = $false
+            Errore         = $null
+        }
+        try {
+            $sess = New-Object -ComObject Microsoft.Update.Session
+            $searcher = $sess.CreateUpdateSearcher()
+            $result = $searcher.Search("Type='Driver' and IsInstalled=0")
+            if (-not $result -or -not $result.Updates -or $result.Updates.Count -eq 0) {
+                return $esito
+            }
+            $daInstallare = New-Object -ComObject Microsoft.Update.UpdateColl
+            $titoli = @()
+            foreach ($u in $result.Updates) {
+                if ($u.InstallationBehavior -and $u.InstallationBehavior.CanRequestUserInput) { continue }
+                if (-not $u.EulaAccepted) { try { $u.AcceptEula() } catch {} }
+                $daInstallare.Add($u) | Out-Null
+                $titoli += [string]$u.Title
+            }
+            $esito.Trovati = $daInstallare.Count
+            $esito.NomiDriver = $titoli
+            if ($daInstallare.Count -eq 0) {
+                return $esito
+            }
+
+            # Download
+            $downloader = $sess.CreateUpdateDownloader()
+            $downloader.Updates = $daInstallare
+            $null = $downloader.Download()
+            $esito.Scaricati = $daInstallare.Count
+
+            # Install
+            $installer = $sess.CreateUpdateInstaller()
+            $installer.Updates = $daInstallare
+            $resInst = $installer.Install()
+            $esito.Installati = $daInstallare.Count
+            $esito.ResultCode = $resInst.ResultCode
+            $esito.RebootRequired = [bool]$resInst.RebootRequired
+            return $esito
+        } catch {
+            $esito.Errore = $_.Exception.Message
+            return $esito
+        }
+    }
+
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    $saltatoOperatore = $false
+    $scadutoTimeout = $false
+
+    while ($jobDriver.State -eq 'Running') {
+        if ($sw.Elapsed.TotalSeconds -ge $TimeoutSec) {
+            $scadutoTimeout = $true
+            break
+        }
+        try {
+            if ([Console]::KeyAvailable) {
+                $k = [Console]::ReadKey($true)
+                if ($k.Key -eq [ConsoleKey]::S -or $k.Key -eq [ConsoleKey]::Escape) {
+                    $saltatoOperatore = $true
+                    break
+                }
+            }
+        } catch {}
+        Start-Sleep -Milliseconds 400
+    }
+
+    Stop-BarraAnimata
+
+    if ($saltatoOperatore) {
+        try { Stop-Job $jobDriver -ErrorAction SilentlyContinue } catch {}
+        try { Remove-Job $jobDriver -Force -ErrorAction SilentlyContinue } catch {}
+        Write-Host ""
+        Write-Info "Installazione driver interrotta dall'operatore (tasto S/Esc): proseguo con le app."
+        Add-Report "Driver (Windows Update)" "SALTATO (dall'operatore)"
+        Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 72 -Dettaglio "Driver saltati da operatore"
+        return @{ Esito = "SALTATO"; Trovati = 0; Installati = 0; RebootRequired = $false }
+    } elseif ($scadutoTimeout) {
+        try { Stop-Job $jobDriver -ErrorAction SilentlyContinue } catch {}
+        try { Remove-Job $jobDriver -Force -ErrorAction SilentlyContinue } catch {}
+        Write-Host ""
+        Write-Errore "Tempo massimo ricerca/download driver superato ($([math]::Round($TimeoutSec/60)) min): proseguo per non bloccare il setup notturno."
+        Add-Report "Driver (Windows Update)" "AVVISO (timeout superato)"
+        Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 72 -Dettaglio "Driver parziali (timeout superato)"
+        return @{ Esito = "TIMEOUT"; Trovati = 0; Installati = 0; RebootRequired = $false }
+    } else {
+        $datiJob = $null
+        try {
+            $datiJob = Receive-Job $jobDriver -ErrorAction SilentlyContinue | Select-Object -Last 1
+        } catch {}
+        try { Remove-Job $jobDriver -Force -ErrorAction SilentlyContinue } catch {}
+
+        if ($datiJob -and $datiJob.Errore) {
+            Write-Errore "Ricerca/installazione driver non riuscita: $($datiJob.Errore)"
+            Add-Report "Driver (Windows Update)" "ERRORE"
+            Update-PannelloStatus -TaskId "aggiorna" -Stato "error" -Percentuale 72 -Dettaglio "Non riuscito (proseguo)"
+            return @{ Esito = "ERRORE"; Trovati = 0; Installati = 0; RebootRequired = $false; Errore = $datiJob.Errore }
+        } elseif ($datiJob -and $datiJob.Trovati -eq 0) {
+            Write-OK "Nessun driver da installare: risultano gia' tutti aggiornati."
+            Add-Report "Driver (Windows Update)" "OK"
+            Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 72 -Dettaglio "Tutti i driver gia' aggiornati"
+            return @{ Esito = "OK"; Trovati = 0; Installati = 0; RebootRequired = $false }
+        } elseif ($datiJob -and $datiJob.Installati -gt 0) {
+            if ($datiJob.NomiDriver) {
+                foreach ($t in $datiJob.NomiDriver) {
+                    Write-Info "Driver installato: $t"
+                }
+            }
+            if ($datiJob.ResultCode -eq 2) {
+                Write-OK "Driver installati con successo ($($datiJob.Installati))."
+                Add-Report "Driver installati ($($datiJob.Installati))" "OK"
+            } else {
+                Write-Info "Installazione driver conclusa (codice $($datiJob.ResultCode)): alcuni potrebbero richiedere riavvio."
+                Add-Report "Driver (Windows Update)" "AVVISO"
+            }
+            if ($datiJob.RebootRequired) {
+                Write-Info "Alcuni driver richiedono un RIAVVIO per completare."
+            }
+            Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 72 -Dettaglio "Driver installati ($($datiJob.Installati))"
+            return @{ Esito = "OK"; Trovati = $datiJob.Trovati; Installati = $datiJob.Installati; RebootRequired = $datiJob.RebootRequired }
+        } else {
+            Write-OK "Controllo driver completato."
+            Add-Report "Driver (Windows Update)" "OK"
+            Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 72 -Dettaglio "Completato"
+            return @{ Esito = "OK"; Trovati = 0; Installati = 0; RebootRequired = $false }
+        }
+    }
+}
+
 function Select-DestinazioneUSB {
     param(
         [string]$DefaultDir,
@@ -3380,10 +3535,11 @@ $credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
 # ricordo nel checkpoint, cosi' su una ripresa il riepilogo mostra il provider
 # GIUSTO (es. Proton) e non ripiega su Microsoft/outlook.it.
 $Global:credProvider = ""; $Global:credDominio = ""
-# Job in background per il DOWNLOAD degli aggiornamenti di Windows: parte durante
-# il passo Aggiornamenti e scarica mentre lo script prosegue; l'installazione
-# vera avviene alla fine, giusto prima del riavvio (che la finalizza).
+# Job in background per il DOWNLOAD degli aggiornamenti di Windows: programmato
+# al passo Aggiornamenti, parte all'inizio del passo App (dopo i driver per evitare
+# collisioni COM su wuauserv), scaricando mentre installiamo le applicazioni.
 $Global:JobWinUpdate = $null
+$Global:AvviaWinUpdateDopoDriver = $false
 
 # Contatore app che NON si sono installate (per l'avviso rete a fine passo App).
 $Global:AppFallite = 0
@@ -5290,8 +5446,12 @@ Write-Info "Lingua/regione attuale: $culturaAttuale"
                         Stop-Job $jobLingua -ErrorAction SilentlyContinue
                         $timeoutLingua = $true
                     }
-                    Remove-Job $jobLingua -Force -ErrorAction SilentlyContinue
-                } finally { Stop-BarraAnimata }
+                } finally {
+                    Stop-BarraAnimata
+                    try { Remove-Job $jobLingua -Force -ErrorAction SilentlyContinue } catch {}
+                    try { Write-Progress -Activity "Installing language" -Completed -ErrorAction SilentlyContinue } catch {}
+                    try { Write-Progress -Activity "Installazione lingua" -Completed -ErrorAction SilentlyContinue } catch {}
+                }
             } catch {}
             if ($timeoutLingua) {
                 Write-Errore "Installazione lingua troppo lunga (oltre 12 min): interrompo e proseguo."
@@ -5792,39 +5952,19 @@ if ($vuoiUpgrade -match "^[Ss]") {
         Add-Report "Aggiornamento app installate" "ERRORE"
     }
 
-    # 2) AGGIORNAMENTI DI SICUREZZA DI WINDOWS - in BACKGROUND.
+    # 2) AGGIORNAMENTI DI SICUREZZA DI WINDOWS: programmati in background per il Passo 5 (dopo i driver).
+    # In questo modo si evita qualsiasi contesa di lock/sessione sul servizio Windows Update (wuauserv)
+    # durante il passo driver!
     Write-Host ""
-    Write-Info "Aggiornamenti di Windows: li SCARICO in background mentre proseguo."
+    Write-Info "Aggiornamenti Windows: programmati in background (partiranno durante le app, dopo i driver)."
+    $Global:AvviaWinUpdateDopoDriver = $true
     if ($Test) {
-        Write-OK "TEST: simulazione download aggiornamenti Windows avviato in background."
+        Write-OK "TEST: simulazione download aggiornamenti Windows programmato in background."
         Add-Report "Aggiornamenti Windows (scaricati in background)" "OK"
-    } else {
-        try {
-            $Global:JobWinUpdate = Start-Job -ScriptBlock {
-                try {
-                    $s    = New-Object -ComObject Microsoft.Update.Session
-                    $res  = $s.CreateUpdateSearcher().Search("IsInstalled=0 and Type='Software' and IsHidden=0")
-                    $coll = New-Object -ComObject Microsoft.Update.UpdateColl
-                    foreach ($u in $res.Updates) {
-                        if ($u.InstallationBehavior -and $u.InstallationBehavior.CanRequestUserInput) { continue }
-                        if (-not $u.EulaAccepted) { try { $u.AcceptEula() } catch {} }
-                        $coll.Add($u) | Out-Null
-                    }
-                    if ($coll.Count -gt 0) {
-                        $dl = $s.CreateUpdateDownloader(); $dl.Updates = $coll; $dl.Download() | Out-Null
-                    }
-                    return $coll.Count
-                } catch { return -1 }
-            }
-            Write-OK "Download aggiornamenti Windows avviato in background."
-            Add-Report "Aggiornamenti Windows (scaricati in background)" "OK"
-        } catch {
-            Write-Errore "Impossibile avviare gli aggiornamenti di Windows: $_"
-            Add-Report "Aggiornamenti di sicurezza Windows" "ERRORE"
-        }
     }
-    Update-PannelloStatus -TaskId "aggiorna" -Stato "running" -Percentuale 62 -Dettaglio "Aggiornamenti avviati in background"
+    Update-PannelloStatus -TaskId "aggiorna" -Stato "running" -Percentuale 62 -Dettaglio "Aggiornamenti app completati"
 } else {
+    $Global:AvviaWinUpdateDopoDriver = $false
     Write-Info "Aggiornamenti saltati (app e Windows)."
     Add-Report "Aggiornamento app installate" "SALTATO"
     Add-Report "Aggiornamenti di sicurezza Windows" "SALTATO"
@@ -5890,58 +6030,7 @@ switch ($gpuDed) {
 
     $vuoiDriver = "S"
 if ($vuoiDriver -match "^[Ss]") {
-    if ($Test) {
-        Write-OK "TEST: simulazione ricerca/aggiornamento driver Windows Update completata."
-        Add-Report "Driver (Windows Update)" "OK"
-        Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 72 -Dettaglio "Completato (test)"
-    } else {
-        try {
-            Write-Info "Ricerca driver su Windows Update (puo' richiedere qualche minuto)..."
-            Start-BarraAnimata "Cerco i driver su Windows Update"
-            try {
-                $sess = New-Object -ComObject Microsoft.Update.Session
-                $searcher = $sess.CreateUpdateSearcher()
-                $result = $searcher.Search("Type='Driver' and IsInstalled=0")
-            } finally { Stop-BarraAnimata }
-            if ($result.Updates.Count -eq 0) {
-                Write-OK "Nessun driver da installare: risultano gia' tutti aggiornati."
-                Add-Report "Driver (Windows Update)" "OK"
-            } else {
-                $daInstallare = New-Object -ComObject Microsoft.Update.UpdateColl
-                foreach ($u in $result.Updates) {
-                    Write-Info "Driver trovato: $($u.Title)"
-                    $daInstallare.Add($u) | Out-Null
-                }
-                Write-Info "Download driver..."
-                Start-BarraAnimata "Scarico i driver"
-                try {
-                    $downloader = $sess.CreateUpdateDownloader()
-                    $downloader.Updates = $daInstallare
-                    $downloader.Download() | Out-Null
-                } finally { Stop-BarraAnimata }
-                Write-Info "Installazione driver..."
-                Start-BarraAnimata "Installo i driver"
-                try {
-                    $installer = $sess.CreateUpdateInstaller()
-                    $installer.Updates = $daInstallare
-                    $esito = $installer.Install()
-                } finally { Stop-BarraAnimata }
-                if ($esito.ResultCode -eq 2) {
-                    Write-OK "Driver installati ($($daInstallare.Count))."
-                    Add-Report "Driver installati ($($daInstallare.Count))" "OK"
-                } else {
-                    Write-Info "Installazione driver conclusa (codice $($esito.ResultCode)): alcuni potrebbero richiedere riavvio."
-                    Add-Report "Driver (Windows Update)" "AVVISO"
-                }
-                if ($esito.RebootRequired) { Write-Info "Alcuni driver richiedono un RIAVVIO per completare." }
-            }
-            Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 72 -Dettaglio "Completato"
-        } catch {
-            Write-Errore "Ricerca/installazione driver non riuscita: $_"
-            Add-Report "Driver (Windows Update)" "ERRORE"
-            Update-PannelloStatus -TaskId "aggiorna" -Stato "error" -Percentuale 72 -Dettaglio "Non riuscito (proseguo)"
-        }
-    }
+    $resDrv = Install-WindowsUpdateDrivers -TimeoutSec 360 -Test:$Test
 } else {
     Write-Info "Installazione driver saltata."
     Add-Report "Driver (Windows Update)" "SALTATO"
@@ -5957,6 +6046,35 @@ $passo++   # dopo la scelta si va dritti al passo successivo (niente attesa INVI
 
 Write-Titolo "Applicazioni"
 Update-PannelloStatus -TaskId "app" -Stato "running" -Percentuale 74 -FaseCorrente "Installazione Applicazioni" -Dettaglio "Avvio installazione app..."
+
+# Avvio del download di Windows Update in background (se programmato al Passo 3).
+# Ora che i driver sono terminati e le risorse COM sono libere, puo' girare
+# in background in parallelo a Winget e alle ottimizzazioni senza alcun conflitto.
+if ($Global:AvviaWinUpdateDopoDriver -and -not $Global:JobWinUpdate -and -not $Test) {
+    try {
+        $Global:JobWinUpdate = Start-Job -ScriptBlock {
+            try {
+                $s    = New-Object -ComObject Microsoft.Update.Session
+                $res  = $s.CreateUpdateSearcher().Search("IsInstalled=0 and Type='Software' and IsHidden=0")
+                $coll = New-Object -ComObject Microsoft.Update.UpdateColl
+                foreach ($u in $res.Updates) {
+                    if ($u.InstallationBehavior -and $u.InstallationBehavior.CanRequestUserInput) { continue }
+                    if (-not $u.EulaAccepted) { try { $u.AcceptEula() } catch {} }
+                    $coll.Add($u) | Out-Null
+                }
+                if ($coll.Count -gt 0) {
+                    $dl = $s.CreateUpdateDownloader(); $dl.Updates = $coll; $dl.Download() | Out-Null
+                }
+                return $coll.Count
+            } catch { return -1 }
+        }
+        Write-OK "Download aggiornamenti Windows avviato in background (in parallelo alle app)."
+        Add-Report "Aggiornamenti Windows (scaricati in background)" "OK"
+    } catch {
+        Write-Errore "Impossibile avviare gli aggiornamenti di Windows: $_"
+        Add-Report "Aggiornamenti di sicurezza Windows" "ERRORE"
+    }
+}
 
 $appsDisponibili = $CatalogoApp
 $profili = [ordered]@{
@@ -6769,19 +6887,36 @@ if ($RunReale -and $Global:JobWinUpdate) {
     Remove-Job $Global:JobWinUpdate -Force -ErrorAction SilentlyContinue
     if ($nWU -gt 0) {
         Write-Info "Installo gli aggiornamenti scaricati (si completano al riavvio)..."
-        Start-BarraAnimata "Installo gli aggiornamenti di Windows"
+        Start-BarraAnimata "Installo gli aggiornamenti di Windows (max 5 min)"
         try {
-            $sFin = New-Object -ComObject Microsoft.Update.Session
-            $rFin = $sFin.CreateUpdateSearcher().Search("IsInstalled=0 and Type='Software' and IsHidden=0")
-            $cFin = New-Object -ComObject Microsoft.Update.UpdateColl
-            foreach ($u in $rFin.Updates) {
-                if ($u.InstallationBehavior -and $u.InstallationBehavior.CanRequestUserInput) { continue }
-                if (-not $u.EulaAccepted) { try { $u.AcceptEula() } catch {} }
-                if ($u.IsDownloaded) { $cFin.Add($u) | Out-Null }
+            $jobFinInstall = Start-Job -ScriptBlock {
+                try {
+                    $sFin = New-Object -ComObject Microsoft.Update.Session
+                    $rFin = $sFin.CreateUpdateSearcher().Search("IsInstalled=0 and Type='Software' and IsHidden=0")
+                    $cFin = New-Object -ComObject Microsoft.Update.UpdateColl
+                    foreach ($u in $rFin.Updates) {
+                        if ($u.InstallationBehavior -and $u.InstallationBehavior.CanRequestUserInput) { continue }
+                        if (-not $u.EulaAccepted) { try { $u.AcceptEula() } catch {} }
+                        if ($u.IsDownloaded) { $cFin.Add($u) | Out-Null }
+                    }
+                    if ($cFin.Count -gt 0) {
+                        $iFin = $sFin.CreateUpdateInstaller()
+                        $iFin.Updates = $cFin
+                        $res = $iFin.Install()
+                        return $res.ResultCode
+                    }
+                    return 0
+                } catch { return -1 }
             }
-            if ($cFin.Count -gt 0) { $iFin = $sFin.CreateUpdateInstaller(); $iFin.Updates = $cFin; $iFin.Install() | Out-Null }
+            if (Wait-Job $jobFinInstall -Timeout 300) {
+                Receive-Job $jobFinInstall -ErrorAction SilentlyContinue | Out-Null
+                Write-OK "Aggiornamenti di Windows applicati: il riavvio li completa."
+            } else {
+                Stop-Job $jobFinInstall -ErrorAction SilentlyContinue
+                Write-Info "Tempo massimo installazione aggiornamenti raggiunto: il riavvio finale finalizzera' l'installazione."
+            }
+            Remove-Job $jobFinInstall -Force -ErrorAction SilentlyContinue
         } catch {} finally { Stop-BarraAnimata }
-        Write-OK "Aggiornamenti di Windows applicati: il riavvio li completa."
     } else {
         Write-OK "Windows e' gia' aggiornato (nessun aggiornamento da installare)."
     }
