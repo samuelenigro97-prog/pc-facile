@@ -68,16 +68,35 @@ $MODO_TEST || { [[ "$MODO" == "TEST" ]] && MODO_TEST=true; }
 chiedi(){
   if $VELOCE;   then REPLY="$2"; dim "$1  [Veloce => '$REPLY']"; return; fi
   if $MODO_TEST; then [[ "$1" == *"S/N"* ]] && REPLY="N" || REPLY=""; dim "$1  [test => '$REPLY']"; return; fi
-  beep_attesa; print -n -- "   $1 "; read -r REPLY
+  beep_attesa; print -n -- "   $1 "
+  local def="${2:-}"
+  local t=45
+  [[ "$MODO" == "AUTO" ]] && t=30
+  if read -t "$t" -r REPLY; then
+    :
+  else
+    print ""
+    dim "   [Auto-prosecuzione dopo ${t}s]"
+    REPLY="$def"
+  fi
 }
 
 chiedi_sempre(){
   if $MODO_TEST; then REPLY=""; dim "$1  [test => vuoto]"; return; fi
-  beep_attesa; print -n -- "   $1 "; read -r REPLY
+  beep_attesa; print -n -- "   $1 "
+  local t=45
+  [[ "$MODO" == "AUTO" ]] && t=30
+  if read -t "$t" -r REPLY; then
+    :
+  else
+    print ""
+    dim "   [Auto-prosecuzione dopo ${t}s]"
+    REPLY=""
+  fi
 }
 
 pausa(){ return 0; }
-pausa_web(){ { $VELOCE || [[ "$MODO" == "TEST" || "$MODO" == "DIAGNOSTICA" ]]; } && return; beep_attesa; print -n -- "   Premi INVIO per continuare "; read -r _; }
+pausa_web(){ { $VELOCE || [[ "$MODO" == "TEST" || "$MODO" == "DIAGNOSTICA" ]]; } && return; beep_attesa; print -n -- "   Premi INVIO per continuare "; read -t 15 -r _ || true; }
 
 password_cliente(){
   local b="${1//[^A-Za-z]/}"; [[ -z "$b" ]] && b="Cliente"
@@ -770,7 +789,12 @@ invoke_auto_signup_mac() {
         print -r -- "${C_INFO}  ============================================================${C_RST}"
         print -r -- ""
 
-        beep_attesa; print -n -- "   Premi INVIO appena sei nella casella di posta (o 'S' per saltare): "; read -r r_ok
+        beep_attesa; print -n -- "   Premi INVIO appena sei nella casella di posta (o 'S' per saltare): "
+        if ! read -t 45 -r r_ok; then
+            print ""
+            dim "   [Auto-prosecuzione dopo 45s]"
+            r_ok=""
+        fi
         if [[ "$r_ok" == [Ss]* ]]; then
             info "Creazione account Proton Mail saltata dall'operatore."
             add_report "Account Proton Mail" "SALTATO"
@@ -799,7 +823,12 @@ invoke_auto_signup_mac() {
         print -r -- "${C_INFO}  ============================================================${C_RST}"
         print -r -- ""
 
-        beep_attesa; print -n -- "   Premi INVIO appena associata la chiave Office (o 'S' per saltare): "; read -r r_off
+        beep_attesa; print -n -- "   Premi INVIO appena associata la chiave Office (o 'S' per saltare): "
+        if ! read -t 45 -r r_off; then
+            print ""
+            dim "   [Auto-prosecuzione dopo 45s]"
+            r_off=""
+        fi
         if [[ "$r_off" == [Ss]* ]]; then
             info "Attivazione Office 365 saltata dall'operatore."
             add_report "Card Office 365" "SALTATO"
@@ -828,7 +857,12 @@ invoke_auto_signup_mac() {
         print -r -- "${C_INFO}  ============================================================${C_RST}"
         print -r -- ""
 
-        beep_attesa; print -n -- "   Premi INVIO appena attivato McAfee (o 'S' per saltare): "; read -r r_mc
+        beep_attesa; print -n -- "   Premi INVIO appena attivato McAfee (o 'S' per saltare): "
+        if ! read -t 45 -r r_mc; then
+            print ""
+            dim "   [Auto-prosecuzione dopo 45s]"
+            r_mc=""
+        fi
         if [[ "$r_mc" == [Ss]* ]]; then
             info "Attivazione McAfee saltata dall'operatore."
             add_report "Card McAfee" "SALTATO"
@@ -857,7 +891,12 @@ invoke_auto_signup_mac() {
         print -r -- "${C_INFO}  ============================================================${C_RST}"
         print -r -- ""
 
-        beep_attesa; print -n -- "   Premi INVIO appena attivato Norton (o 'S' per saltare): "; read -r r_no
+        beep_attesa; print -n -- "   Premi INVIO appena attivato Norton (o 'S' per saltare): "
+        if ! read -t 45 -r r_no; then
+            print ""
+            dim "   [Auto-prosecuzione dopo 45s]"
+            r_no=""
+        fi
         if [[ "$r_no" == [Ss]* ]]; then
             info "Attivazione Norton saltata dall'operatore."
             add_report "Card Norton" "SALTATO"
@@ -895,7 +934,12 @@ invoke_auto_signup_mac() {
         print -r -- "${C_INFO}  ============================================================${C_RST}"
         print -r -- ""
 
-        beep_attesa; print -n -- "   Premi INVIO appena registrato Cyber Protection (o 'S' per saltare): "; read -r r_cyb
+        beep_attesa; print -n -- "   Premi INVIO appena registrato Cyber Protection (o 'S' per saltare): "
+        if ! read -t 45 -r r_cyb; then
+            print ""
+            dim "   [Auto-prosecuzione dopo 45s]"
+            r_cyb=""
+        fi
         if [[ "$r_cyb" == [Ss]* ]]; then
             info "Cyber Protection saltato dall'operatore."
             add_report "Unieuro Cyber Protection" "SALTATO"
@@ -939,7 +983,12 @@ if [[ "$MODO" == "MENU" ]]; then
   print -r -- "   ${C_CYAN}[4] CHECK SALUTE & DIAGNOSTICA HARDWARE (Report Batteria, SSD, FileVault)${C_RST}"
   print -r -- "   ${C_DIM}[Q] Esci${C_RST}"
   print -r -- ""
-  print -n -- "   Scelta [1-4 / Q] (default = 1): "; read -r t
+  print -n -- "   Scelta [1-4 / Q] (default = 1 - auto in 30s): "
+  if ! read -t 30 -r t; then
+    print ""
+    dim "   [Auto-selezione opzione 1 dopo 30s]"
+    t="1"
+  fi
   case "${(U)t}" in
     2)
       MODO_AUTOMATICO=true
@@ -979,10 +1028,14 @@ if $RUN_REALE; then
     titolo "ATTENZIONE: Connessione Internet assente"
     errore "Il Mac non e' connesso a Internet. Collega il Wi-Fi per proseguire."
     print -r -- ""
+    local tentativi_r=0
     while true; do
-      beep_attesa; print -n -- "   Collega Internet e premi INVIO (o S = continua senza): "; read -r rnet
+      ((tentativi_r++))
+      beep_attesa; print -n -- "   Collega Internet e premi INVIO (o S = continua senza): "
+      read -t 30 -r rnet || rnet="S"
       [[ "$rnet" == [Ss]* ]] && break
       test_rete && break
+      [[ $tentativi_r -ge 3 ]] && break
     done
   fi
 fi
@@ -1256,7 +1309,12 @@ if $RUN_REALE && ! $MODO_TEST; then
         print -r -- "     ${C_INFO}3) Esci senza riavviare${C_RST}"
         print -r -- ""
         
-        beep_attesa; print -n -- "   Scelta (1-3): "; read -r scelta_fine
+        beep_attesa; print -n -- "   Scelta (1-3) (default = 3 - auto in 45s): "
+        if ! read -t 45 -r scelta_fine; then
+            print ""
+            dim "   [Auto-selezione opzione 3 dopo 45s]"
+            scelta_fine="3"
+        fi
         case "$scelta_fine" in
             1)
                 diagnostica_salute_mac

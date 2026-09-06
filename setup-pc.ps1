@@ -296,21 +296,85 @@ function Stop-BarraAnimata {
     }
 }
 
-# Attesa di una risposta CON bip iniziale + bip ripetuto ogni 2 min se non
-# rispondi. Sostituisce il vecchio schema "Beep-Attesa; Read-Host". Il beeper
-# si ferma SEMPRE appena Read-Host ritorna (anche con Ctrl+C), grazie a finally.
+# Attesa di una risposta CON WATCHDOG DI SICUREZZA:
+# Se l'operatore non risponde entro il tempo limite (es. PC lasciato solo la notte),
+# lo script NON si blocca: sceglie automaticamente l'opzione predefinita o prosegue!
 function Attendi-Risposta {
-    param([string]$Prompt)
-    Beep-Attesa            # primo bip subito
-    Start-BipRipetuto      # poi ogni 2 min finche' non rispondi
-    try { $r = Read-Host $Prompt }
-    finally { Stop-BipRipetuto }
-    return $r
+    param(
+        [string]$Prompt,
+        [int]$TimeoutSec = 0,
+        [string]$Default = ""
+    )
+    if ($Test -or $Global:Test -or $env:PESTER_TEST) {
+        if ($Default) { return $Default }
+        if ($Prompt -match 'S/N') { return "N" }
+        return ""
+    }
+
+    # Calcolo del timeout watchdog in base alla modalita':
+    if ($TimeoutSec -le 0) {
+        if ($Global:ModoAutomatico) { $TimeoutSec = 30 }
+        elseif ($Global:ModoEspresso) { $TimeoutSec = 45 }
+        elseif ($RunReale) { $TimeoutSec = 60 }
+        else { $TimeoutSec = 45 }
+    }
+
+    Beep-Attesa
+    $inputStr = ""
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+
+    $indicatoreDefault = if ($Default) { " [default: $Default - auto in ${TimeoutSec}s]" } else { " [auto in ${TimeoutSec}s]" }
+    Write-Host -NoNewline "${Prompt}${indicatoreDefault}: "
+
+    $supportaConsole = $false
+    try {
+        $null = [Console]::KeyAvailable
+        $supportaConsole = $true
+    } catch {
+        $supportaConsole = $false
+    }
+
+    if (-not $supportaConsole) {
+        Write-Host ""
+        return $Default
+    }
+
+    while ($sw.Elapsed.TotalSeconds -lt $TimeoutSec) {
+        try {
+            if ([Console]::KeyAvailable) {
+                $keyInfo = [Console]::ReadKey($false)
+                if ($keyInfo.Key -eq [ConsoleKey]::Enter) {
+                    Write-Host ""
+                    if ([string]::IsNullOrWhiteSpace($inputStr)) { return $Default }
+                    return $inputStr
+                } elseif ($keyInfo.Key -eq [ConsoleKey]::Backspace) {
+                    if ($inputStr.Length -gt 0) {
+                        $inputStr = $inputStr.Substring(0, $inputStr.Length - 1)
+                        [Console]::Write("`b `b")
+                    }
+                } elseif ($keyInfo.Key -eq [ConsoleKey]::Escape) {
+                    Write-Host " [SALTO RAPIDO]" -ForegroundColor Yellow
+                    return $(if ($Default) { $Default } else { "S" })
+                } elseif (-not [char]::IsControl($keyInfo.KeyChar)) {
+                    $inputStr += $keyInfo.KeyChar
+                }
+            }
+        } catch {
+            break
+        }
+        Start-Sleep -Milliseconds 100
+    }
+
+    Write-Host ""
+    Write-Host "   [AUTO-CONTINUA] Nessuna risposta dopo ${TimeoutSec}s: proseguo automaticamente.$(if ($Default) { " Valore applicato: '$Default'" })" -ForegroundColor DarkCyan
+    if ([string]::IsNullOrWhiteSpace($inputStr)) { return $Default }
+    return $inputStr
 }
 
 function Pausa {
+    param([int]$TimeoutSec = 15)
     Write-Host ""
-    [void](Attendi-Risposta "Premi INVIO per continuare")
+    [void](Attendi-Risposta -Prompt "Premi INVIO per continuare" -TimeoutSec $TimeoutSec -Default "")
 }
 
 # Password = nome cliente + "123!" (sempre, cosi' e' prevedibile e facile da
@@ -800,15 +864,30 @@ function Invoke-PcFacileDiagnostics {
 
 function Set-PreventSleep {
     param([bool]$Enable = $true)
+    if ($Test -or $Global:Test -or $env:PESTER_TEST) { return }
     try {
         if ($Enable) {
-            # Evita spegnimento schermo e sospensione durante il lavoro
+            # Evita spegnimento schermo, standby e sospensione sia su AC che su BATTERIA (DC)
             powercfg /change standby-timeout-ac 0 2>$null | Out-Null
+            powercfg /change standby-timeout-dc 0 2>$null | Out-Null
             powercfg /change monitor-timeout-ac 0 2>$null | Out-Null
+            powercfg /change monitor-timeout-dc 0 2>$null | Out-Null
+            powercfg /change hibernate-timeout-ac 0 2>$null | Out-Null
+            powercfg /change hibernate-timeout-dc 0 2>$null | Out-Null
+            # Non andare MAI in sospensione alla chiusura del coperchio (essenziale per setup notturni in negozio)
+            powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0 2>$null | Out-Null
+            powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0 2>$null | Out-Null
+            powercfg /setactive SCHEME_CURRENT 2>$null | Out-Null
+            Enable-PreventSleep
         } else {
-            # Ripristina valori standard (15 min schermo, 30 min sospensione)
+            # Ripristina valori standard
             powercfg /change monitor-timeout-ac 15 2>$null | Out-Null
             powercfg /change standby-timeout-ac 30 2>$null | Out-Null
+            powercfg /change monitor-timeout-dc 10 2>$null | Out-Null
+            powercfg /change standby-timeout-dc 15 2>$null | Out-Null
+            powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 1 2>$null | Out-Null
+            powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 1 2>$null | Out-Null
+            powercfg /setactive SCHEME_CURRENT 2>$null | Out-Null
         }
     } catch {}
 }
@@ -3248,7 +3327,7 @@ function Invoke-BrowserAutoSignup {
         Write-Host "============================================================" -ForegroundColor DarkYellow
         Write-Host ""
 
-        $resp = Attendi-Risposta "Premi INVIO appena sei nella casella di posta (o 'S' per saltare)"
+        $resp = Attendi-Risposta -Prompt "Premi INVIO appena sei nella casella di posta (o 'S' per saltare)" -TimeoutSec 45 -Default ""
         if ($resp -match "^[Ss]") {
             Write-Info "Creazione account Proton Mail saltata dall'operatore."
             Add-Report "Account Proton Mail" "SALTATO"
@@ -3280,7 +3359,7 @@ function Invoke-BrowserAutoSignup {
         Write-Host "============================================================" -ForegroundColor DarkYellow
         Write-Host ""
 
-        $respOff = Attendi-Risposta "Premi INVIO appena associata la chiave Office (o 'S' per saltare)"
+        $respOff = Attendi-Risposta -Prompt "Premi INVIO appena associata la chiave Office (o 'S' per saltare)" -TimeoutSec 45 -Default ""
         if ($respOff -match "^[Ss]") {
             Write-Info "Attivazione Office 365 saltata dall'operatore."
             Add-Report "Card Office 365" "SALTATO"
@@ -3310,7 +3389,7 @@ function Invoke-BrowserAutoSignup {
         Write-Host "============================================================" -ForegroundColor DarkYellow
         Write-Host ""
 
-        $respMc = Attendi-Risposta "Premi INVIO appena attivato McAfee (o 'S' per saltare)"
+        $respMc = Attendi-Risposta -Prompt "Premi INVIO appena attivato McAfee (o 'S' per saltare)" -TimeoutSec 45 -Default ""
         if ($respMc -match "^[Ss]") {
             Write-Info "Attivazione McAfee saltata dall'operatore."
             Add-Report "Card McAfee" "SALTATO"
@@ -3340,7 +3419,7 @@ function Invoke-BrowserAutoSignup {
         Write-Host "============================================================" -ForegroundColor DarkYellow
         Write-Host ""
 
-        $respNo = Attendi-Risposta "Premi INVIO appena attivato Norton (o 'S' per saltare)"
+        $respNo = Attendi-Risposta -Prompt "Premi INVIO appena attivato Norton (o 'S' per saltare)" -TimeoutSec 45 -Default ""
         if ($respNo -match "^[Ss]") {
             Write-Info "Attivazione Norton saltata dall'operatore."
             Add-Report "Card Norton" "SALTATO"
@@ -3354,7 +3433,7 @@ function Invoke-BrowserAutoSignup {
     if ($doCyber) {
         $tel = if ($Global:telefonoCliente) { $Global:telefonoCliente } else { "" }
         if (-not $tel) {
-            $tIn = (Attendi-Risposta "Numero di Telefono/Cellulare Cliente per Cyber Protection (es. 3331234567, INVIO per saltare)").Trim()
+            $tIn = (Attendi-Risposta -Prompt "Numero di Telefono/Cellulare Cliente per Cyber Protection (es. 3331234567, INVIO per saltare)" -TimeoutSec 30 -Default "").Trim()
             if ($tIn) { $tel = $tIn; $Global:telefonoCliente = $tIn }
         }
 
@@ -3378,7 +3457,7 @@ function Invoke-BrowserAutoSignup {
         Write-Host "============================================================" -ForegroundColor DarkYellow
         Write-Host ""
 
-        $respCyber = Attendi-Risposta "Premi INVIO appena registrato Cyber Protection (o 'S' per saltare)"
+        $respCyber = Attendi-Risposta -Prompt "Premi INVIO appena registrato Cyber Protection (o 'S' per saltare)" -TimeoutSec 45 -Default ""
         if ($respCyber -match "^[Ss]") {
             Write-Info "Cyber Protection saltato dall'operatore."
             Add-Report "Unieuro Cyber Protection" "SALTATO"
@@ -3442,8 +3521,7 @@ if ($Menu) {
     Write-Host "  [3] PREPARA USB OFFLINE (Scarica tutti i programmi sulla chiavetta)" -ForegroundColor Yellow
     Write-Host "  [4] CHECK SALUTE & DIAGNOSTICA HARDWARE (Report SSD SMART, Batteria, Driver)" -ForegroundColor Blue
     Write-Host "  [Q] Esci" -ForegroundColor DarkGray
-    Write-Host ""
-    $sceltaMenu = (Attendi-Risposta "Scegli opzione [1-4 / Q] (default = 1)").Trim().ToUpper()
+    $sceltaMenu = (Attendi-Risposta -Prompt "Scegli opzione [1-4 / Q]" -TimeoutSec 30 -Default "1").Trim().ToUpper()
     switch ($sceltaMenu) {
         "2" {
             $Global:ModoAutomatico = $true
@@ -4209,17 +4287,42 @@ function Show-BarraAttesa {
 # barra animata a schermo. Ritorna il codice di uscita di winget. Se per qualche
 # motivo non riesce ad avviare il processo, ripiega sulla chiamata classica.
 function Invoke-WingetConBarra {
-    param([string]$Nome, [string[]]$WingetArgs)
-    # winget DIRETTO nel thread principale, con il SUO progresso di download a
-    # schermo (niente barra animata sopra: quella girava in un runspace a parte
-    # e "litigava" con winget sulla stessa console -> app come Chrome si
-    # impallavano e davano errore). Cosi': $LASTEXITCODE affidabile, nessun
-    # conflitto, e si vede il download reale (utile quando la rete e' lenta).
-    Write-Info "Scarico e installo $Nome (vedi il progresso qui sotto)..."
-    winget @WingetArgs
-    $code = $LASTEXITCODE
-    if ($null -eq $code) { $code = -1 }
-    return $code
+    param(
+        [string]$Nome,
+        [string[]]$WingetArgs,
+        [int]$TimeoutSec = 300 # 5 minuti massimo per singola operazione/app
+    )
+    if ($Test -or $Global:Test -or $env:PESTER_TEST) {
+        Write-OK "TEST: simulazione winget $Nome completata."
+        return 0
+    }
+
+    Write-Info "Scarico e installo $Nome (max $([math]::Round($TimeoutSec/60)) min)..."
+    try {
+        $p = Start-Process -FilePath "winget" -ArgumentList $WingetArgs -NoNewWindow -PassThru -ErrorAction Stop
+        $sw = [System.Diagnostics.Stopwatch]::StartNew()
+        while (-not $p.HasExited) {
+            if ($sw.Elapsed.TotalSeconds -ge $TimeoutSec) {
+                Write-Errore "Tempo massimo superato ($($TimeoutSec)s) per ${Nome}: interrompo il processo per non bloccare il setup notturno."
+                try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch {}
+                try {
+                    Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq $p.Id } | ForEach-Object {
+                        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+                    }
+                } catch {}
+                return -9999
+            }
+            Start-Sleep -Milliseconds 500
+        }
+        return $p.ExitCode
+    } catch {
+        try {
+            winget @WingetArgs
+            $code = $LASTEXITCODE
+            if ($null -eq $code) { $code = -1 }
+            return $code
+        } catch { return -1 }
+    }
 }
 
 # --- ICONA SUL DESKTOP per ogni app installata (cosi' il cliente vede cosa e'
@@ -4473,9 +4576,13 @@ function Installa-Pacchetto {
         $tentativiFatti = $tentativo
         Write-Info "Installo $Nome...$(if ($tentativo -gt 1) { " (tentativo $tentativo)" })"
         $codeInstall = Invoke-WingetConBarra -Nome $Nome -WingetArgs (@('install', '--exact', '--id', $WingetId) + $sorgente + @('--silent', '--disable-interactivity', '--accept-package-agreements', '--accept-source-agreements'))
-        # Con winget ora lanciato DIRETTO, l'exit code e' affidabile: se e' un
-        # successo NON serve la seconda 'winget list' di verifica (era li' per il
-        # vecchio bug -999) -> un'interrogazione lenta in meno per ogni app.
+        if ($codeInstall -eq -9999) {
+            Write-Info "Installazione di $Nome interrotta per timeout (5 min): salto l'app per completare il setup."
+            Add-Report "$Nome (installazione)" "AVVISO (timeout 5 min)"
+            $Global:AppFallite++
+            $Global:UltimaInstallOk = $false
+            return
+        }
         if ($successo -contains $codeInstall) {
             if ($codeInstall -eq 3010 -or $codeInstall -eq 1641) {
                 Write-OK "$Nome installato (richiede riavvio)."
@@ -4697,7 +4804,7 @@ if ($RunReale) {
                     $Global:AppFatteRipresa   = @($st.AppFatte)
                 }
             } else {
-                $rRip = Attendi-Risposta "Riprendere da dove eri arrivato? (S = riprendi / N = ricomincia da capo)"
+                $rRip = Attendi-Risposta -Prompt "Riprendere da dove eri arrivato? (S = riprendi / N = ricomincia da capo)" -TimeoutSec 30 -Default "S"
                 if ($rRip -match '^[Ss]') {
                     $Global:FaseRipresa = [int]$st.Fase
                     if ($st.NomeCliente)  { $nomeCliente    = [string]$st.NomeCliente }
@@ -4732,9 +4839,11 @@ if ($RunReale) {
         Write-Host "Per lingua e aggiornamenti online, connetti il Wi-Fi appena possibile." -ForegroundColor White
         Write-Host ""
         if (-not $Global:ModoEspresso) {
+            $tentativiRete = 0
             do {
-                $rNet = Attendi-Risposta "Collega Internet e premi INVIO per riprovare  (oppure S = prosegui senza)"
-                if ($rNet -match '^[Ss]') { break }
+                $tentativiRete++
+                $rNet = Attendi-Risposta -Prompt "Collega Internet e premi INVIO per riprovare (oppure S = prosegui senza)" -TimeoutSec 30 -Default "S"
+                if ($rNet -match '^[Ss]' -or $tentativiRete -ge 3) { break }
             } while (-not (Test-Rete))
         }
         if (Test-Rete) { Write-OK "Connessione a Internet OK." }
@@ -4757,7 +4866,7 @@ if ($RunReale) {
         Write-Host "Un antivirus attivo puo' bloccare lo script: se compare un avviso, seleziona 'Consenti'." -ForegroundColor Yellow
         Write-Host ""
         if (-not $Global:ModoEspresso) {
-            [void](Attendi-Risposta "Quando sei pronto premi INVIO per continuare")
+            [void](Attendi-Risposta -Prompt "Quando sei pronto premi INVIO per continuare" -TimeoutSec 15 -Default "")
         }
     }
 }
@@ -4834,7 +4943,7 @@ if (-not $nomeCliente -and ($Global:ModoEspresso -or $Global:ModoAutomatico)) {
 
 if (-not $nomeCliente -and -not $Global:ModoEspresso -and -not $Global:ModoAutomatico) {
     $defaultSuggerito = if ($isOemUser) { "Utente" } else { $env:USERNAME }
-    $nomeCliente = (Attendi-Risposta "Nome del cliente (account E nome PC) [default: $defaultSuggerito]").Trim()
+    $nomeCliente = (Attendi-Risposta -Prompt "Nome del cliente (account E nome PC) [default: $defaultSuggerito]" -TimeoutSec 30 -Default $defaultSuggerito).Trim()
     if (-not $nomeCliente) { $nomeCliente = $defaultSuggerito }
 }
 
@@ -4929,7 +5038,7 @@ if ($Global:ModoEspresso -or $Global:ModoAutomatico) {
 
     # Domanda ESSENZIALE: cambia da cliente a cliente, quindi la chiedo SEMPRE.
     # INVIO = Microsoft (il caso piu' comune).
-    $sceltaAcc = Attendi-Risposta "Scelta (1-4, INVIO = Microsoft, S = salta)"
+    $sceltaAcc = Attendi-Risposta -Prompt "Scelta (1-4, INVIO = Microsoft, S = salta)" -TimeoutSec 30 -Default "1"
     if ($RunReale -and [string]::IsNullOrWhiteSpace($sceltaAcc)) { $sceltaAcc = "1" }
 
     # Mappa scelta -> nome provider, pagina da aprire e dominio email suggerito.
@@ -4954,10 +5063,10 @@ if ($Global:ModoEspresso -or $Global:ModoAutomatico) {
 
         # Credenziali per il riepilogo.
         if ($RunReale) {
-            $haAccount = Attendi-Risposta "Il cliente ha GIA' una sua email/password che usa? (S = le inserisco io / N = ne genero una nuova)"
+            $haAccount = Attendi-Risposta -Prompt "Il cliente ha GIA' una sua email/password che usa? (S = le inserisco io / N = ne genero una nuova)" -TimeoutSec 30 -Default "N"
             if ($haAccount -match "^[Ss]") {
-                $credMsAccount  = (Attendi-Risposta "  Email del cliente").Trim()
-                $credMsPassword = (Attendi-Risposta "  Password del cliente").Trim()
+                $credMsAccount  = (Attendi-Risposta -Prompt "  Email del cliente" -TimeoutSec 30 -Default (New-EmailCliente -Base $nomeCliente -Dominio $prov.Dominio)).Trim()
+                $credMsPassword = (Attendi-Risposta -Prompt "  Password del cliente" -TimeoutSec 30 -Default (New-PasswordCliente -Base $nomeCliente)).Trim()
                 Write-OK "Uso le credenziali del cliente (finiscono nel riepilogo)."
             } else {
                 $credMsAccount  = New-EmailCliente -Base $nomeCliente -Dominio $prov.Dominio
@@ -5710,7 +5819,7 @@ if ($Global:ModoEspresso) {
 
     # Domanda ESSENZIALE: dipende dalla card che ha in mano l'operatore, la chiedo
     # SEMPRE. INVIO = Microsoft 365. Metti 5 se il cliente non ha Office da attivare.
-    $sceltaAtt = Attendi-Risposta "Scelta (1-5, INVIO = Microsoft 365, 5 = salta)"
+    $sceltaAtt = Attendi-Risposta -Prompt "Scelta (1-5, INVIO = Microsoft 365, 5 = salta)" -TimeoutSec 30 -Default "1"
     if ($RunReale -and [string]::IsNullOrWhiteSpace($sceltaAtt)) { $sceltaAtt = "1" }
     switch ($sceltaAtt) {
         "1" {
@@ -5801,16 +5910,22 @@ function Mostra-CredenzialiPagina {
     $opz += "INVIO = ho finito"
     Write-Host ("  Premi:  " + ($opz -join "    ")) -ForegroundColor Cyan
     if ($Utente) { Write-OK "Email gia' copiata: incolla con CTRL+V." }
-    while ($true) {
+    $timeoutSec = if ($Global:ModoAutomatico) { 20 } elseif ($Global:ModoEspresso) { 30 } else { 45 }
+    Write-Host "  (Auto-prosecuzione automatica tra $timeoutSec secondi se incustodito)" -ForegroundColor DarkGray
+    $swClip = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($swClip.Elapsed.TotalSeconds -lt $timeoutSec) {
         $ch = ""; $isEnter = $false
         try {
-            $key = [Console]::ReadKey($true)
-            $ch = "$($key.KeyChar)".ToUpper()
-            if ($key.Key -eq 'Enter') { $isEnter = $true }
+            if ([Console]::KeyAvailable) {
+                $key = [Console]::ReadKey($true)
+                $ch = "$($key.KeyChar)".ToUpper()
+                if ($key.Key -eq [ConsoleKey]::Enter) { $isEnter = $true }
+            } else {
+                Start-Sleep -Milliseconds 100
+                continue
+            }
         } catch {
-            # Fallback senza ReadKey: riga di testo, vuoto = ho finito.
-            $ch = (Read-Host "  E / P / INVIO").ToUpper()
-            if ($ch -eq "") { $isEnter = $true }
+            break
         }
         if ($isEnter) { break }
         elseif ($ch -eq "E") {
@@ -5848,10 +5963,19 @@ function Installa-Antivirus {
     # ORA) e il download e' finito (dimensione stabile), lo avvio da solo.
     $cartelle = @((Join-Path $env:USERPROFILE "Downloads"), (Get-DesktopDir)) | Select-Object -Unique
     $inizio = Get-Date
-    $timeoutMin = 12
-    Write-Info "In attesa dell'installer di $Nome (max $timeoutMin min). CTRL+C per annullare."
+    $timeoutMin = if ($Global:ModoAutomatico) { 3 } elseif ($Global:ModoEspresso) { 5 } else { 8 }
+    Write-Info "In attesa dell'installer di $Nome (max $timeoutMin min). Premi 'S' per saltare."
     $installer = $null
     while (((Get-Date) - $inizio).TotalMinutes -lt $timeoutMin) {
+        try {
+            if ([Console]::KeyAvailable) {
+                $k = [Console]::ReadKey($true)
+                if ($k.Key -eq [ConsoleKey]::S -or $k.Key -eq [ConsoleKey]::Escape) {
+                    Write-Info "Attesa installer interrotta dall'operatore."
+                    break
+                }
+            }
+        } catch {}
         $cand = Get-ChildItem -Path $cartelle -Filter "*.exe" -ErrorAction SilentlyContinue |
             Where-Object { $_.LastWriteTime -gt $inizio -and $_.Length -gt 100KB } |
             Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -5894,7 +6018,7 @@ function Attiva-ServizioWeb {
     # Registrazione col cliente: uso la sua email come utente (pronta da incollare).
     # La password del portale spesso la crea il sito e la manda via email.
     Mostra-CredenzialiPagina -Utente $Utente -Password $Password
-    $fatto = Attendi-Risposta "Attivazione completata e credenziali annotate? (S/N)"
+    $fatto = Attendi-Risposta -Prompt "Attivazione completata e credenziali annotate? (S/N)" -TimeoutSec 30 -Default "N"
     if ($fatto -match "^[Ss]") {
         Write-OK "$Nome attivato."
         Add-Report "$Nome (protezione)" "OK"
@@ -5943,8 +6067,7 @@ Write-Host ""
 if ($vuoiUpgrade -match "^[Ss]") {
     # 1) APP INSTALLATE (winget)
     if (Confirm-Winget) {
-        Write-Info "Aggiornamento app in corso (puo' richiedere diversi minuti)..."
-        $null = Invoke-WingetConBarra -Nome "aggiornamenti app" -WingetArgs @('upgrade', '--all', '--silent', '--disable-interactivity', '--accept-package-agreements', '--accept-source-agreements', '--include-unknown')
+        $null = Invoke-WingetConBarra -Nome "aggiornamenti app" -WingetArgs @('upgrade', '--all', '--silent', '--disable-interactivity', '--accept-package-agreements', '--accept-source-agreements', '--include-unknown') -TimeoutSec 600
         Write-OK "Aggiornamento app completato."
         Add-Report "Aggiornamento app installate" "OK"
     } else {
@@ -6130,7 +6253,7 @@ if ($Global:AppProfiloRipresa) {
     Write-Host "  S) Salta"
     Write-Host ""
 
-    $sceltaApps = Attendi-Risposta "Scelta (1-5 - S salta - B indietro)"
+    $sceltaApps = Attendi-Risposta -Prompt "Scelta (1-5 - S salta - B indietro, default: 1)" -TimeoutSec 30 -Default "1"
     if (Test-Indietro $sceltaApps) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 
     switch -Regex ($sceltaApps) {
@@ -6146,7 +6269,7 @@ if ($Global:AppProfiloRipresa) {
             for ($i = 0; $i -lt $appsDisponibili.Count; $i++) {
                 Write-Host "  $($i + 1)) $($appsDisponibili[$i].Nome)"
             }
-            $sceltaManuale = Attendi-Risposta "Numeri separati da virgola (es: 1,3,5)"
+            $sceltaManuale = Attendi-Risposta -Prompt "Numeri separati da virgola (es: 1,3,5)" -TimeoutSec 30 -Default ""
             $indici = $sceltaManuale -split "," | ForEach-Object { $_.Trim() }
             foreach ($indice in $indici) {
                 $num = 0
@@ -6240,7 +6363,7 @@ if ($Global:ModoEspresso) {
     Write-Host "  3) Salta (Windows Defender attivo)"
     Write-Host ""
 
-    $sceltaAV = Attendi-Risposta "Scelta (1-3, B=indietro)"
+    $sceltaAV = Attendi-Risposta -Prompt "Scelta (1-3, B=indietro, default: 3)" -TimeoutSec 30 -Default "3"
     if (Test-Indietro $sceltaAV) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
 
     switch ($sceltaAV) {
@@ -6284,7 +6407,7 @@ if ($Global:ModoEspresso) {
     Write-Host "Servizio venduto solo su richiesta: INVIO per saltare se non l'ha comprato." -ForegroundColor White
     Write-Host ""
 
-    $vuoiUnieuro = Attendi-Risposta "Attivare Unieuro Cyber Protection? (S = si / INVIO = no, B=indietro)"
+    $vuoiUnieuro = Attendi-Risposta -Prompt "Attivare Unieuro Cyber Protection? (S = si / INVIO = no, B=indietro)" -TimeoutSec 30 -Default ""
     if (Test-Indietro $vuoiUnieuro) { $passo = [Math]::Max(3, $passo - 1); continue wizard }
     if ($vuoiUnieuro -match "^[Ss]") {
         Attiva-ServizioWeb -Nome "Unieuro Cyber Protection" -UrlAttivazione "https://unieuro-cyber-protection.covercare.it" -Utente $credMsAccount
@@ -6938,7 +7061,7 @@ if ($RunReale) {
         Write-Host "  3) Esci senza riavviare (Riavvio manuale in seguito)" -ForegroundColor Yellow
         Write-Host ""
 
-        $sceltaFine = Attendi-Risposta "Scelta (1-3)"
+        $sceltaFine = Attendi-Risposta -Prompt "Scelta (1-3)" -TimeoutSec 45 -Default "3"
         switch ($sceltaFine) {
             "1" {
                 Invoke-PcFacileDiagnostics -MostraDettagli | Out-Null
