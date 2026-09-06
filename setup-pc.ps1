@@ -3602,7 +3602,7 @@ $Global:AppFatteRipresa   = @()
 # 7..11 = passi wizard 3..7 (Unieuro, App+browser, Aggiornamento, Driver,
 # Antivirus). Solo nel run reale.
 # =============================================================================
-$Global:StatoFile   = Join-Path (if ($env:ProgramData) { $env:ProgramData } else { [System.IO.Path]::GetTempPath() }) "PCFacile\stato.json"
+$Global:StatoFile   = Join-Path $(if ($env:ProgramData) { $env:ProgramData } else { [System.IO.Path]::GetTempPath() }) "PCFacile\stato.json"
 $Global:FaseRipresa = 0
 
 # Segna un passo come completato (sovrascrive il checkpoint precedente).
@@ -3918,9 +3918,17 @@ function Get-DesktopDir {
 # VERIFICA PRIVILEGI AMMINISTRATORE
 # =============================================================================
 
-$currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+$isAdmin = $false
+try {
+    $currentUser = [Security.Principal.WindowsIdentity]::GetCurrent()
+    if ($currentUser) {
+        $principal = New-Object Security.Principal.WindowsPrincipal($currentUser)
+        $isAdmin = $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    }
+} catch {
+    if ($Test) { $isAdmin = $true }
+}
+if (-not $isAdmin) {
     Write-Errore "Questo script richiede privilegi di amministratore."
     if ($Test) {
         Write-Info "Modalita' TEST: proseguo comunque (nessuna operazione admin verra' eseguita)."
@@ -4429,7 +4437,8 @@ function Get-AppxPackageIcon {
         [string]$NomeApp = ""
     )
     try {
-        $iconDir = Join-Path (if ($env:ProgramData) { $env:ProgramData } else { "C:\ProgramData" }) "PCFacile\Icons"
+        $baseData = if ($env:ProgramData) { $env:ProgramData } elseif ([System.IO.Directory]::Exists("C:\ProgramData")) { "C:\ProgramData" } else { [System.IO.Path]::GetTempPath() }
+        $iconDir = Join-Path $baseData "PCFacile\Icons"
         if (-not (Test-Path $iconDir)) {
             New-Item -Path $iconDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
             try { & icacls.exe "$iconDir" /grant "Users:(OI)(CI)RX" /T 2>$null | Out-Null } catch {}
@@ -5932,7 +5941,7 @@ Update-PannelloStatus -TaskId "office" -Stato "running" -Percentuale 50 -FaseCor
 
 # 0) Installazione Runtime Essenziali (Microsoft Visual C++ 2015-2022 x86 & x64)
 Update-PannelloStatus -TaskId "runtime" -Stato "running" -Percentuale 53 -FaseCorrente "Runtime Essenziali" -Dettaglio "Installazione Microsoft Visual C++ (x86 & x64)..."
-Install-VisualCRuntime
+[void](Install-VisualCRuntime)
 Update-PannelloStatus -TaskId "runtime" -Stato "done" -Percentuale 56 -Dettaglio "Completato"
 
 function Get-OsppPath {
