@@ -1313,16 +1313,16 @@ function Open-PannelloOperatore {
                 </div>
             </div>
             <div class="header-actions">
-                <button type="button" id="btnSoundToggle" class="btn-audio" onclick="toggleAudio()" title="Suono fine configurazione">🔔 Audio</button>
+                <button type="button" id="btnSoundToggle" class="btn-audio" onclick="toggleAudio()" title="Suono fine configurazione">&#128276; Audio</button>
                 <div id="badgeLive" class="badge-live">&#9889; Setup in corso</div>
             </div>
         </div>
 
         <!-- MINI DASHBOARD HARDWARE E SISTEMA -->
         <div class="hw-bar">
-            <div class="hw-item">💻 <strong>PC:</strong> <span class="hw-val">$hwModello</span></div>
-            <div class="hw-item">⚙️ <strong>CPU/RAM:</strong> <span class="hw-val">$hwCpu &bull; $hwRam</span></div>
-            <div class="hw-item">🏷️ <strong>Seriale:</strong> <span class="hw-val" id="hwSerialVal">$hwSeriale</span> <span class="hw-copy-sn" onclick="copiaSeriale()">[copia]</span></div>
+            <div class="hw-item">&#128187; <strong>PC:</strong> <span class="hw-val">$hwModello</span></div>
+            <div class="hw-item">&#9881; <strong>CPU/RAM:</strong> <span class="hw-val">$hwCpu &bull; $hwRam</span></div>
+            <div class="hw-item">&#127991; <strong>Seriale:</strong> <span class="hw-val" id="hwSerialVal">$hwSeriale</span> <span class="hw-copy-sn" onclick="copiaSeriale()">[copia]</span></div>
         </div>
 
         <!-- HERO PROGRESS CARD SINCRONIZZATA IN TEMPO REALE -->
@@ -1531,28 +1531,28 @@ function Open-PannelloOperatore {
 
                 <!-- 5. SERVIZI DA ATTIVARE NELLA SEQUENZA AUTOMATICA -->
                 <div class="cred-group" style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px; margin-top: 6px;">
-                    <div class="cred-label" style="margin-bottom: 6px; color: #fed7aa; font-weight: 700;">⚙️ Servizi Acquistati da Attivare:</div>
+                    <div class="cred-label" style="margin-bottom: 6px; color: #fed7aa; font-weight: 700;">&#9881; Servizi Acquistati da Attivare:</div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
                         <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                            <input type="checkbox" id="chkSvcProton" checked> <span>✉️ Email Proton</span>
+                            <input type="checkbox" id="chkSvcProton" checked> <span>&#9993; Email Proton</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                            <input type="checkbox" id="chkSvcOffice"> <span>📦 Card Office 365</span>
+                            <input type="checkbox" id="chkSvcOffice"> <span>&#128230; Card Office 365</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                            <input type="checkbox" id="chkSvcMcAfee"> <span>🛡️ Card McAfee</span>
+                            <input type="checkbox" id="chkSvcMcAfee"> <span>&#128737; Card McAfee</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                            <input type="checkbox" id="chkSvcNorton"> <span>🛡️ Card Norton</span>
+                            <input type="checkbox" id="chkSvcNorton"> <span>&#128737; Card Norton</span>
                         </label>
                         <label style="display: flex; align-items: center; gap: 5px; grid-column: span 2; cursor: pointer;">
-                            <input type="checkbox" id="chkSvcCyber" checked> <span>🔒 Unieuro Cyber Protection</span>
+                            <input type="checkbox" id="chkSvcCyber" checked> <span>&#128274; Unieuro Cyber Protection</span>
                         </label>
                     </div>
                 </div>
 
                 <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
-                    <button type="button" id="btnAvviaAuto" class="btn-scheda" style="background: #16a34a; font-weight: 700; font-size: 13px; padding: 10px 14px; width: 100%; border: none; cursor: pointer; text-align: center; border-radius: 6px; color: #fff;" onclick="avviaSetupAutomatico()">🚀 AVVIA SETUP AUTOMATICO (Zero Clic)</button>
+                    <button type="button" id="btnAvviaAuto" class="btn-scheda" style="background: #16a34a; font-weight: 700; font-size: 13px; padding: 10px 14px; width: 100%; border: none; cursor: pointer; text-align: center; border-radius: 6px; color: #fff;" onclick="avviaSetupAutomatico()">&#128640; AVVIA SETUP AUTOMATICO (Zero Clic)</button>
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
                         <button type="button" id="btnSalvaCred" class="btn-scheda" style="background: #EE7203; border: none; font-size: 11px; padding: 6px 12px; cursor: pointer;" onclick="salvaCredenziali()">&#128190; Salva per Scheda Consegna</button>
                         <button type="button" class="btn-quick" onclick="copiaRiepilogoCred()">&#128203; Copia Tutto per Ticket</button>
@@ -1710,7 +1710,7 @@ function Open-PannelloOperatore {
             audioEnabled = !audioEnabled;
             var btn = document.getElementById('btnSoundToggle');
             if (btn) {
-                btn.innerHTML = audioEnabled ? '🔔 Audio' : '🔕 Muto';
+                btn.innerHTML = audioEnabled ? '&#128276; Audio' : '&#128277; Muto';
                 btn.style.color = audioEnabled ? '#93c5fd' : '#64748b';
             }
             showToast(audioEnabled ? 'Audio notifiche attivo' : 'Audio notifiche disattivato');
@@ -1943,7 +1943,7 @@ function Open-PannelloOperatore {
             a.click();
             document.body.removeChild(a);
             
-            showToast('✓ Credenziali salvate per la Scheda!');
+            showToast('\u2713 Credenziali salvate per la Scheda!');
             var btn = document.getElementById('btnSalvaCred');
             if (btn) {
                 var old = btn.innerHTML;
@@ -1958,7 +1958,7 @@ function Open-PannelloOperatore {
 
         function avviaSetupAutomatico() {
             salvaCredenziali();
-            showToast('🚀 Setup Automatico Avviato! Il sistema procede in autonomia.');
+            showToast('\uD83D\uDE80 Setup Automatico Avviato! Il sistema procede in autonomia.');
             var btn = document.getElementById('btnAvviaAuto');
             if (btn) {
                 btn.innerHTML = '&#10003; Setup in corso...';
@@ -2077,10 +2077,19 @@ function Open-PannelloOperatore {
 function Get-CredenzialiSalvatePannello {
     $tempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { [System.IO.Path]::GetTempPath() }
     $userProf = [Environment]::GetFolderPath('UserProfile')
-    $paths = @(
-        (Join-Path $userProf "Downloads\pcfacile-cred.json"),
-        (Join-Path $tempDir "pcfacile-cred.json")
-    )
+    $paths = [System.Collections.Generic.List[string]]::new()
+    if ($userProf) { $paths.Add((Join-Path $userProf "Downloads\pcfacile-cred.json")) }
+    if ($tempDir) { $paths.Add((Join-Path $tempDir "pcfacile-cred.json")) }
+    if ($env:USERPROFILE -and $env:USERPROFILE -ne $userProf) {
+        $paths.Add((Join-Path $env:USERPROFILE "Downloads\pcfacile-cred.json"))
+    }
+    if (Test-Path "C:\Users") {
+        $userDirs = Get-ChildItem -Path "C:\Users" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notin @('Public', 'Default', 'Default User', 'All Users') }
+        foreach ($ud in $userDirs) {
+            $candidate = Join-Path $ud.FullName "Downloads\pcfacile-cred.json"
+            if (-not $paths.Contains($candidate)) { $paths.Add($candidate) }
+        }
+    }
     foreach ($p in $paths) {
         if ($p -and (Test-Path -LiteralPath $p)) {
             try {
@@ -2139,7 +2148,7 @@ function Wait-CredenzialiPannello {
     Write-Host ""
     Write-Titolo "IN ATTESA DATI DAL PANNELLO OPERATORE (A SINISTRA)"
     Write-Host "  -> Compila Cognome, Nome, Telefono e spunta i servizi nel Pannello Web a SINISTRA." -ForegroundColor Cyan
-    Write-Host "  -> Clicca sul pulsante verde '🚀 AVVIA SETUP AUTOMATICO (Zero Clic)' per partire." -ForegroundColor Green
+    Write-Host "  -> Clicca sul pulsante verde 'AVVIA SETUP AUTOMATICO (Zero Clic)' per partire." -ForegroundColor Green
     Write-Host "     (Oppure premi INVIO in questa console per usare i valori correnti)" -ForegroundColor Gray
     Write-Host ""
 
