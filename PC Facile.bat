@@ -20,7 +20,10 @@ if /i "%~1"=="run" (
 
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath 'cmd.exe' -ArgumentList '/c \"\"%~f0\" elevated %*\"' -Verb RunAs"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Start-Process -FilePath 'cmd.exe' -ArgumentList '/c \"\"%~f0\" elevated %*\"' -Verb RunAs } catch { Write-Host '' ; Write-Host '  [!] Richiesta privilegi amministratore annullata o non concessa.' -ForegroundColor Yellow ; Write-Host '  Per avviare: fai click destro su \"PC Facile.bat\" e scegli \"Esegui come amministratore\", poi clicca \"SI\".' -ForegroundColor Cyan ; Write-Host '' ; exit 1 }"
+    if %errorlevel% neq 0 (
+        pause
+    )
     exit /b 0
 )
 
