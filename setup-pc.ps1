@@ -952,7 +952,7 @@ $Global:PannelloStatus = [ordered]@{
     Tasks         = [ordered]@{
         "pulizia"     = [ordered]@{ Nome = "Pulizia Bloatware OEM & Ottimizzazione SSD"; Stato = "pending"; Dettaglio = "In attesa" }
         "lingua"      = [ordered]@{ Nome = "Forzatura Lingua & Regione Italiana (it-IT)"; Stato = "pending"; Dettaglio = "In attesa" }
-        "ripristino"  = [ordered]@{ Nome = "Punto di Ripristino di Sicurezza (5% SSD)"; Stato = "pending"; Dettaglio = "In attesa" }
+        "ripristino"  = [ordered]@{ Nome = "Punto di Ripristino di Sicurezza"; Stato = "pending"; Dettaglio = "In attesa" }
         "runtime"     = [ordered]@{ Nome = "Runtime Microsoft Visual C++ (x86 & x64)"; Stato = "pending"; Dettaglio = "In attesa" }
         "office"      = [ordered]@{ Nome = "Configurazione Icone Office / Microsoft 365"; Stato = "pending"; Dettaglio = "In attesa" }
         "antivirus"   = [ordered]@{ Nome = "Sicurezza & Antivirus (Windows Defender / Card)"; Stato = "pending"; Dettaglio = "In attesa" }
@@ -1097,7 +1097,7 @@ function Update-PannelloStatus {
                 Tasks         = [ordered]@{
                     "pulizia"     = [ordered]@{ Nome = "Pulizia Bloatware OEM & Ottimizzazione SSD"; Stato = "pending"; Dettaglio = "In attesa" }
                     "lingua"      = [ordered]@{ Nome = "Forzatura Lingua & Regione Italiana (it-IT)"; Stato = "pending"; Dettaglio = "In attesa" }
-                    "ripristino"  = [ordered]@{ Nome = "Punto di Ripristino di Sicurezza (5% SSD)"; Stato = "pending"; Dettaglio = "In attesa" }
+                    "ripristino"  = [ordered]@{ Nome = "Punto di Ripristino di Sicurezza"; Stato = "pending"; Dettaglio = "In attesa" }
                     "runtime"     = [ordered]@{ Nome = "Runtime Microsoft Visual C++ (x86 & x64)"; Stato = "pending"; Dettaglio = "In attesa" }
                     "office"      = [ordered]@{ Nome = "Configurazione Icone Office / Microsoft 365"; Stato = "pending"; Dettaglio = "In attesa" }
                     "aggiorna"    = [ordered]@{ Nome = "Aggiornamenti & Driver Windows Update"; Stato = "pending"; Dettaglio = "In attesa" }
@@ -1330,9 +1330,9 @@ function Open-PannelloOperatore {
         .task-item.error .task-icon { color: #ef4444; font-weight: bold; }
         .badge-error { background: #ef4444; color: #fff; }
         
-        .task-item.skipped { color: #94a3b8; }
-        .task-item.skipped .task-icon { color: #94a3b8; }
-        .badge-skipped { background: #00122B; color: #94a3b8; border: 1px solid #003B7A; }
+        .task-item.skipped { color: #cbd5e1; }
+        .task-item.skipped .task-icon { color: #38bdf8; font-weight: bold; }
+        .badge-skipped { background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); font-weight: 700; }
 
         .spinner { display: inline-block; width: 10px; height: 10px; border: 1.5px solid #EE7203; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -1453,7 +1453,7 @@ function Open-PannelloOperatore {
                     <li id="task-ripristino" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">3. Punto di Ripristino di Sicurezza (5% SSD)</span>
+                            <span class="task-name">3. Punto di Ripristino di Sicurezza</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -2110,7 +2110,7 @@ function Open-PannelloOperatore {
                     var row = document.getElementById('task-' + key);
                     var stato = (task.Stato || task.stato || 'pending').toLowerCase();
                     var dettaglio = task.Dettaglio || task.dettaglio || '';
-                    if (stato === 'done') doneCount++;
+                    if (stato === 'done' || stato === 'skipped') doneCount++;
                     
                     if (row) {
                         var iconEl = row.querySelector('.task-icon');
@@ -2124,7 +2124,7 @@ function Open-PannelloOperatore {
                             if (stato === 'done') { badgeClass = 'badge-done-task'; badgeText = 'Completato'; }
                             else if (stato === 'running') { badgeClass = 'badge-running'; badgeText = 'In corso (' + pct + '%)'; }
                             else if (stato === 'error') { badgeClass = 'badge-error'; badgeText = 'Errore'; }
-                            else if (stato === 'skipped') { badgeClass = 'badge-skipped'; badgeText = 'Saltato'; }
+                            else if (stato === 'skipped') { badgeClass = 'badge-skipped'; badgeText = (key === 'ripristino' ? 'Ottimizzato SSD' : 'Saltato'); }
                             
                             statusBadge.className = 'task-badge ' + badgeClass;
                             statusBadge.innerText = badgeText;
@@ -2133,11 +2133,11 @@ function Open-PannelloOperatore {
                             if (stato === 'done') iconEl.innerHTML = '&#10003;';
                             else if (stato === 'running') iconEl.innerHTML = '<span class=\"spinner\"></span>';
                             else if (stato === 'error') iconEl.innerHTML = '&#10007;';
-                            else if (stato === 'skipped') iconEl.innerHTML = '&rarr;';
+                            else if (stato === 'skipped') iconEl.innerHTML = '<span style=\"color:#38bdf8; font-weight:bold;\">&#10003;</span>';
                             else iconEl.innerHTML = '&#9675;';
                         }
                         if (detailEl) {
-                            if (dettaglio && stato === 'running') {
+                            if (dettaglio && (stato === 'running' || stato === 'skipped')) {
                                 detailEl.innerText = ' - ' + dettaglio;
                             } else {
                                 detailEl.innerText = '';
@@ -5438,44 +5438,62 @@ try { Clear-Host } catch {}
 if ($RunReale) {
     try {
         if (Test-Path $Global:StatoFile) {
-            $st = Get-Content $Global:StatoFile -Raw -ErrorAction Stop | ConvertFrom-Json
-            Write-Titolo "Sessione precedente trovata"
-            Write-Host "  VERSIONE PROGRAMMA      : $SCRIPT_VERSION" -ForegroundColor $THEME_COL
-            Write-Host "  Interrotta il           : $($st.Data)" -ForegroundColor White
-            Write-Host "  Ultimo passo completato : $($st.FaseNome)" -ForegroundColor White
-            if ($st.NomeCliente) { Write-Host "  Cliente                 : $($st.NomeCliente)" -ForegroundColor White }
-            Write-Host ""
-            if ($Global:ModoEspresso) {
-                Write-OK "Ripresa automatica attiva: i passi gia' completati verranno saltati."
-                $Global:FaseRipresa = [int]$st.Fase
-                if ($st.NomeCliente)  { $nomeCliente    = [string]$st.NomeCliente }
-                if ($st.CredAccount)  { $credMsAccount  = [string]$st.CredAccount }
-                if ($st.CredPassword) { $credMsPassword = [string]$st.CredPassword }
-                if ($st.PSObject.Properties.Name -contains 'CredProvider' -and $st.CredProvider) { $Global:credProvider = [string]$st.CredProvider }
-                if ($st.PSObject.Properties.Name -contains 'CredDominio'  -and $st.CredDominio)  { $Global:credDominio  = [string]$st.CredDominio }
-                if ($st.PSObject.Properties.Name -contains 'AppProfilo' -and $st.AppProfilo) {
-                    $Global:AppProfiloRipresa = [string]$st.AppProfilo
-                    $Global:AppListaRipresa   = @($st.AppLista)
-                    $Global:AppFatteRipresa   = @($st.AppFatte)
-                }
-            } else {
-                $rRip = Attendi-Risposta "Riprendere da dove eri arrivato? (S = riprendi / N = ricomincia da capo)"
-                if ($rRip -match '^[Ss]') {
-                    $Global:FaseRipresa = [int]$st.Fase
-                    if ($st.NomeCliente)  { $nomeCliente    = [string]$st.NomeCliente }
-                    if ($st.CredAccount)  { $credMsAccount  = [string]$st.CredAccount }
-                    if ($st.CredPassword) { $credMsPassword = [string]$st.CredPassword }
-                    if ($st.PSObject.Properties.Name -contains 'CredProvider' -and $st.CredProvider) { $Global:credProvider = [string]$st.CredProvider }
-                    if ($st.PSObject.Properties.Name -contains 'CredDominio'  -and $st.CredDominio)  { $Global:credDominio  = [string]$st.CredDominio }
-                    if ($st.PSObject.Properties.Name -contains 'AppProfilo' -and $st.AppProfilo) {
-                        $Global:AppProfiloRipresa = [string]$st.AppProfilo
-                        $Global:AppListaRipresa   = @($st.AppLista)
-                        $Global:AppFatteRipresa   = @($st.AppFatte)
+            $st = $null
+            try { $st = Get-Content $Global:StatoFile -Raw -ErrorAction Stop | ConvertFrom-Json } catch {}
+            if ($st) {
+                $isOld = $false
+                try {
+                    $fi = Get-Item $Global:StatoFile -ErrorAction SilentlyContinue
+                    if ($fi -and (Get-Date).Subtract($fi.LastWriteTime).TotalHours -gt 2) {
+                        $isOld = $true
                     }
-                    Write-OK "Riprendo: i passi gia' completati verranno saltati."
-                } else {
+                } catch {}
+
+                if ($isOld) {
                     Remove-Item $Global:StatoFile -Force -ErrorAction SilentlyContinue
-                    Write-Info "Si ricomincia da capo."
+                    Write-Info "Sessione precedente obsoleta (> 2 ore) rimossa: si parte da zero."
+                } else {
+                    Write-Titolo "Sessione precedente trovata"
+                    Write-Host "  VERSIONE PROGRAMMA      : $SCRIPT_VERSION" -ForegroundColor $THEME_COL
+                    Write-Host "  Interrotta il           : $($st.Data)" -ForegroundColor White
+                    Write-Host "  Ultimo passo completato : $($st.FaseNome)" -ForegroundColor White
+                    if ($st.NomeCliente) { Write-Host "  Cliente                 : $($st.NomeCliente)" -ForegroundColor White }
+                    Write-Host ""
+
+                    $vuoiRiprendere = $false
+                    if ($Global:ModoEspresso) {
+                        $rRip = Attendi-Risposta "Riprendere dal passo '$($st.FaseNome)'? (S = riprendi / INVIO = ricomincia da zero)"
+                        $vuoiRiprendere = ($rRip -match '^[Ss]')
+                    } else {
+                        $rRip = Attendi-Risposta "Riprendere da dove eri arrivato? (S = riprendi / N = ricomincia da capo)"
+                        $vuoiRiprendere = ($rRip -match '^[Ss]')
+                    }
+
+                    if ($vuoiRiprendere) {
+                        $Global:FaseRipresa = [int]$st.Fase
+                        if ($st.NomeCliente)  { $nomeCliente    = [string]$st.NomeCliente }
+                        if ($st.CredAccount)  { $credMsAccount  = [string]$st.CredAccount }
+                        if ($st.CredPassword) { $credMsPassword = [string]$st.CredPassword }
+                        if ($st.PSObject.Properties.Name -contains 'CredProvider' -and $st.CredProvider) { $Global:credProvider = [string]$st.CredProvider }
+                        if ($st.PSObject.Properties.Name -contains 'CredDominio'  -and $st.CredDominio)  { $Global:credDominio  = [string]$st.CredDominio }
+                        if ($st.PSObject.Properties.Name -contains 'AppProfilo' -and $st.AppProfilo) {
+                            $Global:AppProfiloRipresa = [string]$st.AppProfilo
+                            $Global:AppListaRipresa   = @($st.AppLista)
+                            $Global:AppFatteRipresa   = @($st.AppFatte)
+                        }
+                        # Sincronizza subito i task nel pannello operatore
+                        if ($Global:FaseRipresa -ge 3) { Update-PannelloStatus -TaskId "pulizia" -Stato "done" -Percentuale 20 -Dettaglio "Gia' completato" }
+                        if ($Global:FaseRipresa -ge 4) { Update-PannelloStatus -TaskId "lingua" -Stato "done" -Percentuale 35 -Dettaglio "Gia' completato" }
+                        if ($Global:FaseRipresa -ge 5) { Update-PannelloStatus -TaskId "ripristino" -Stato "skipped" -Percentuale 45 -Dettaglio "Ottimizzato per SSD" }
+                        if ($Global:FaseRipresa -ge 6) {
+                            Update-PannelloStatus -TaskId "office" -Stato "done" -Percentuale 62 -Dettaglio "Gia' completato"
+                            Update-PannelloStatus -TaskId "runtime" -Stato "done" -Percentuale 56 -Dettaglio "Gia' completato"
+                        }
+                        Write-OK "Riprendo: i passi gia' completati verranno saltati."
+                    } else {
+                        Remove-Item $Global:StatoFile -Force -ErrorAction SilentlyContinue
+                        Write-Info "Sessione precedente azzerata: configurazione avviata da capo."
+                    }
                 }
             }
         }
@@ -5736,8 +5754,10 @@ Save-Fase 2 "Account/email cliente"
 #   3/3 comodita' Windows (estensioni, Questo PC) + disinstalla OneDrive
 # =============================================================================
 
-if (Test-FaseFatta 3) { Write-Info "Pulizia e ottimizzazione: gia' fatto nella sessione precedente, salto." }
-else {
+if (Test-FaseFatta 3) {
+    Write-Info "Pulizia e ottimizzazione: gia' fatto nella sessione precedente, salto."
+    Update-PannelloStatus -TaskId "pulizia" -Stato "done" -Percentuale 20 -Dettaglio "Gia' completato"
+} else {
 
 Write-Titolo "Pulizia e Ottimizzazione Iniziale"
 Update-PannelloStatus -TaskId "pulizia" -Stato "running" -Percentuale 15 -FaseCorrente "Pulizia Bloatware & Ottimizzazione SSD" -Dettaglio "Rimozione bloatware e antivirus di prova..."
@@ -6309,8 +6329,10 @@ Save-Fase 3 "Pulizia e ottimizzazione"
 # LINGUA E REGIONE (ITALIANO)
 # =============================================================================
 
-if (Test-FaseFatta 4) { Write-Info "Lingua e regione: gia' fatto nella sessione precedente, salto." }
-else {
+if (Test-FaseFatta 4) {
+    Write-Info "Lingua e regione: gia' fatto nella sessione precedente, salto."
+    Update-PannelloStatus -TaskId "lingua" -Stato "done" -Percentuale 35 -Dettaglio "Gia' completato"
+} else {
 
 Write-Titolo "Lingua e Regione (Italiano)"
 Update-PannelloStatus -TaskId "lingua" -Stato "running" -Percentuale 30 -FaseCorrente "Forzatura Lingua & Regione (it-IT)" -Dettaglio "Configurazione lingua italiana..."
@@ -6469,18 +6491,18 @@ Save-Fase 4 "Lingua e regione"
 
 if (Test-FaseFatta 5) {
     Write-Info "Punto di ripristino: gia' fatto nella sessione precedente, salto."
-    Update-PannelloStatus -TaskId "ripristino" -Stato "skipped" -Percentuale 45 -FaseCorrente "Baseline" -Dettaglio "Gia' completato"
+    Update-PannelloStatus -TaskId "ripristino" -Stato "skipped" -Percentuale 45 -FaseCorrente "Baseline" -Dettaglio "Ottimizzato per SSD"
 } elseif ($skipRestore -or -not $CreaRipristino) {
     # Richiesta esplicita operatore: "questo puoi saltarlo, è super opzionale".
     # Su macchine nuove in negozio risparmia fino a 25 GB su SSD ed evita attese VSS inutili.
     Write-Info "Punto di ripristino: saltato (super opzionale, ottimizzazione spazio SSD)."
-    Update-PannelloStatus -TaskId "ripristino" -Stato "skipped" -Percentuale 45 -FaseCorrente "Baseline" -Dettaglio "Saltato (ottimizzazione SSD)"
-    Add-Report "Punto di ripristino" "SALTATO (opzionale)"
+    Update-PannelloStatus -TaskId "ripristino" -Stato "skipped" -Percentuale 45 -FaseCorrente "Baseline" -Dettaglio "Ottimizzato per SSD"
+    Add-Report "Punto di ripristino" "SALTATO (ottimizzazione SSD)"
     Save-Fase 5 "Punto di ripristino"
 } else {
 
 Write-Titolo "Punto di Ripristino"
-Update-PannelloStatus -TaskId "ripristino" -Stato "running" -Percentuale 40 -FaseCorrente "Punto di Ripristino" -Dettaglio "Creazione punto di ripristino di sicurezza (5% SSD)..."
+Update-PannelloStatus -TaskId "ripristino" -Stato "running" -Percentuale 40 -FaseCorrente "Punto di Ripristino" -Dettaglio "Creazione punto di ripristino di sicurezza..."
 
 Write-Host "Crea un punto di ripristino: se qualcosa va storto puoi tornare indietro." -ForegroundColor White
 Write-Host ""
@@ -6544,8 +6566,11 @@ Save-Fase 5 "Punto di ripristino"
 # secondo passo, resta attivo nel browser per il riscatto.
 # =============================================================================
 
-if (Test-FaseFatta 6) { Write-Info "App Office: gia' fatto nella sessione precedente, salto." }
-else {
+if (Test-FaseFatta 6) {
+    Write-Info "App Office: gia' fatto nella sessione precedente, salto."
+    Update-PannelloStatus -TaskId "office" -Stato "done" -Percentuale 62 -Dettaglio "Gia' completato"
+    Update-PannelloStatus -TaskId "runtime" -Stato "done" -Percentuale 56 -Dettaglio "Gia' completato"
+} else {
 Write-Titolo "Installazione App Office"
 Update-PannelloStatus -TaskId "office" -Stato "running" -Percentuale 50 -FaseCorrente "Configurazione Office & Runtime" -Dettaglio "Configurazione icone Office e runtime..."
 

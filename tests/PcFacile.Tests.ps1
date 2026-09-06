@@ -574,4 +574,11 @@ Describe 'Sincronizzazione Credenziali Multi-Canale & Salvataggio Report Desktop
         $content | Should -Match 'Start-LocalCredServer'
         $content | Should -Match 'Stop-LocalCredServer'
     }
+
+    It 'Punto di Ripristino non contiene stringhe fuorvianti 5% SSD nel titolo ed e conteggiato come risolto' {
+        $content = Get-Content $script:SetupPath -Raw
+        $content | Should -Not -Match 'Punto di Ripristino di Sicurezza \(5% SSD\)'
+        $content | Should -Match 'stato === ''done'' \|\| stato === ''skipped'''
+        $content | Should -Match 'Ottimizzato SSD'
+    }
 }
