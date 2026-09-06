@@ -1261,7 +1261,6 @@ function Open-PannelloOperatore {
         /* SEZIONI E CARD */
         .section-view { display: none; }
         .section-view.active-view { display: block; }
-        .grid-view-all { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
         
         .card { background: rgba(0, 31, 72, 0.85); backdrop-filter: blur(8px); border: 1px solid #003B7A; border-radius: 10px; padding: 12px 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); margin-bottom: 10px; }
         .card h2 { font-size: 13.5px; color: #f8fafc; margin-bottom: 10px; border-bottom: 1.5px solid #003B7A; padding-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
@@ -1296,11 +1295,6 @@ function Open-PannelloOperatore {
         .portal-btn .arrow { color: #EE7203; font-weight: bold; font-size: 11px; }
         .portal-btn.highlight { border-color: #EE7203; background: rgba(238, 114, 3, 0.12); box-shadow: 0 0 8px rgba(238,114,3,0.2); }
 
-        /* CHECKLIST */
-        .checklist { list-style: none; display: flex; flex-direction: column; gap: 6px; }
-        .checklist li { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: #e2e8f0; background: #00142E; padding: 6px 10px; border-radius: 6px; border: 1px solid #003B7A; }
-        .checklist input[type="checkbox"] { width: 15px; height: 15px; accent-color: #EE7203; cursor: pointer; }
-        .checklist-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
         .btn-quick { background: #001f48; border: 1px solid #00458C; color: #cbd5e1; font-size: 10.5px; font-weight: 700; padding: 5px 10px; border-radius: 5px; cursor: pointer; transition: all 0.2s; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
         .btn-quick:hover { background: #003B7A; border-color: #EE7203; color: #fff; }
 
@@ -1347,7 +1341,6 @@ function Open-PannelloOperatore {
         /* RESPONSIVE SPECIFICO PER SCHERMI RIDOTTI / SPLIT SCREEN */
         @media (max-width: 900px) {
             body { padding: 8px; }
-            .grid-view-all { grid-template-columns: 1fr; }
             .header { padding: 10px 12px; }
             .brand-titles h1 { font-size: 14px; }
             .brand-titles p { display: none; }
@@ -1415,12 +1408,6 @@ function Open-PannelloOperatore {
             </button>
             <button type="button" class="tab-btn" onclick="switchView('tab-portali', this)">
                 <span>&#127760; Portali 1-Click</span>
-            </button>
-            <button type="button" class="tab-btn" onclick="switchView('tab-checklist', this)">
-                <span>&#9745; Checklist &amp; Tool</span>
-            </button>
-            <button type="button" class="tab-btn" onclick="switchView('tab-all', this)">
-                <span>&#9638; Vista Completa</span>
             </button>
         </div>
 
@@ -1682,35 +1669,6 @@ function Open-PannelloOperatore {
             </div>
         </div>
 
-        <!-- VISTA 4: CHECKLIST & STRUMENTI -->
-        <div id="view-tab-checklist" class="section-view">
-            <div class="card">
-                <h2>
-                    <span class="title-left"><span class="bar"></span> &#9745; Checklist Operatore &amp; Strumenti Rapidi</span>
-                    <span style="font-size: 10px; color: #94a3b8;">Salvataggio automatico</span>
-                </h2>
-                <ul class="checklist">
-                    <li><input type="checkbox" id="chk1" onchange="salvaChecklist()"> <label for="chk1">Account cliente configurato / verificato (Microsoft/Google/Proton/Libero)</label></li>
-                    <li><input type="checkbox" id="chk2" onchange="salvaChecklist()"> <label for="chk2">Codice PIN Office riscattato (se acquistato con il PC)</label></li>
-                    <li><input type="checkbox" id="chk3" onchange="salvaChecklist()"> <label for="chk3">Antivirus attivato con card cliente (McAfee / Norton)</label></li>
-                    <li><input type="checkbox" id="chk4" onchange="salvaChecklist()"> <label for="chk4">Servizio Unieuro Cyber Protection registrato (se acquistato)</label></li>
-                </ul>
-
-                <div class="checklist-actions">
-                    <a href="Scheda-Consegna-Cliente.html" target="_blank" class="btn-quick">&#128196; Scheda Consegna HTML</a>
-                    <button type="button" class="btn-quick" onclick="copiaRiepilogoTecnico()">&#128203; Copia Dati PC Completi</button>
-                    <button type="button" class="btn-quick" onclick="pollStatus()">&#128260; Sincronizza Ora</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- VISTA 5: VISTA COMPLETA (TUTTO A SCHERMO IN GRIGLIA) -->
-        <div id="view-tab-all" class="section-view">
-            <div id="gridAllContainer" class="grid-view-all">
-                <!-- Il contenuto viene clonato dinamicamente o visualizzato in griglia per schermi ampi -->
-            </div>
-        </div>
-
         <div class="footer">
             Piattaforma Assistenza Tecnica <strong>PC Facile</strong> &bull; Servizio <strong>Unieuro</strong> &bull; Batte. Forte. Sempre.
         </div>
@@ -1788,25 +1746,8 @@ function Open-PannelloOperatore {
             var views = document.querySelectorAll('.section-view');
             for (var j = 0; j < views.length; j++) views[j].classList.remove('active-view');
 
-            if (tabId === 'tab-all') {
-                var allView = document.getElementById('view-tab-all');
-                var grid = document.getElementById('gridAllContainer');
-                if (allView && grid) {
-                    grid.innerHTML = '';
-                    var liveCard = document.querySelector('#view-tab-live .card');
-                    var credCard = document.querySelector('#view-tab-cred .card');
-                    var portaliCard = document.querySelector('#view-tab-portali .card');
-                    var chkCard = document.querySelector('#view-tab-checklist .card');
-                    if (liveCard) grid.appendChild(liveCard.cloneNode(true));
-                    if (credCard) grid.appendChild(credCard.cloneNode(true));
-                    if (portaliCard) grid.appendChild(portaliCard.cloneNode(true));
-                    if (chkCard) grid.appendChild(chkCard.cloneNode(true));
-                    allView.classList.add('active-view');
-                }
-            } else {
-                var target = document.getElementById('view-' + tabId);
-                if (target) target.classList.add('active-view');
-            }
+            var target = document.getElementById('view-' + tabId);
+            if (target) target.classList.add('active-view');
         }
 
         function setDomain(dom, provName, btn) {
@@ -1886,32 +1827,6 @@ function Open-PannelloOperatore {
                 links[i].style.display = (q === '' || dname.indexOf(q) !== -1) ? 'flex' : 'none';
             }
         }
-
-        function salvaChecklist() {
-            try {
-                var st = {
-                    c1: document.getElementById('chk1') ? document.getElementById('chk1').checked : false,
-                    c2: document.getElementById('chk2') ? document.getElementById('chk2').checked : false,
-                    c3: document.getElementById('chk3') ? document.getElementById('chk3').checked : false,
-                    c4: document.getElementById('chk4') ? document.getElementById('chk4').checked : false
-                };
-                localStorage.setItem('pcfacile_checklist', JSON.stringify(st));
-            } catch(e) {}
-        }
-
-        function caricaChecklist() {
-            try {
-                var raw = localStorage.getItem('pcfacile_checklist');
-                if (raw) {
-                    var st = JSON.parse(raw);
-                    if (document.getElementById('chk1') && st.c1) document.getElementById('chk1').checked = true;
-                    if (document.getElementById('chk2') && st.c2) document.getElementById('chk2').checked = true;
-                    if (document.getElementById('chk3') && st.c3) document.getElementById('chk3').checked = true;
-                    if (document.getElementById('chk4') && st.c4) document.getElementById('chk4').checked = true;
-                }
-            } catch(e) {}
-        }
-        caricaChecklist();
 
         function aggiornaCred() {
             var cognome = (document.getElementById('inCognome') ? document.getElementById('inCognome').value.trim() : '');

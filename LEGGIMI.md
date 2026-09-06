@@ -53,9 +53,9 @@ https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps
 - avvia con ExecutionPolicy Bypass ed esegue la **Configurazione Automatica Parallela**:
   1. **PARTE SUBITO**: senza pause o questionari, la console inizia subito la pulizia bloatware/AV trial, lingua italiana, ottimizzazioni, installazione app e update driver.
   2. **NEL FRATTEMPO LAVORI TU**: apre in parallelo nel browser il **Pannello Operatore Tecnico** con:
-     - 🔑 Credenziali cliente generate con pulsanti **Copia Email** e **Copia Password** a 1 click.
-     - 🌐 Accesso rapido ai portali: Account Microsoft, Riscatto Office 365 (`microsoft365.com/setup`), Attivazione McAfee/Norton e Unieuro Cyber Protection.
-     - 📋 Checklist per non dimenticare nessun passaggio card/cliente.
+      - 🔑 Credenziali cliente generate con pulsanti **Copia Email** e **Copia Password** a 1 click.
+      - 🌐 Accesso rapido ai portali: Account Microsoft, Riscatto Office 365 (`microsoft365.com/setup`), Attivazione McAfee/Norton e Unieuro Cyber Protection.
+      - ⚡ Monitoraggio live sincronizzato con PowerShell e automazione con avvisi sonori.
   3. **CONSEGNA PRONTA**: genera sul Desktop la **Scheda Consegna Cliente HTML**, il promemoria **`NON CANCELLARE - Chiave di Ripristino BitLocker.txt`** e suona a lavoro ultimato.
 
 > **Consiglio per il banco:** La prima volta che crei la chiavetta USB, avvia con il parametro `-PreparaUSB` (o da menu con `-Menu`): scaricherà tutti i programmi (Chrome, VLC, Adobe Reader, 7-Zip, AnyDesk, Zoom, LibreOffice, tool rimozione AV) direttamente nella cartella `installers` della USB. Così i successivi PC dei clienti si installeranno al **100% OFFLINE** e in pochissimi minuti!

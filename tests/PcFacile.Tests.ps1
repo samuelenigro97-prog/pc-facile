@@ -341,6 +341,11 @@ Describe 'Open-PannelloOperatore' {
         $content | Should -Match "mcafee\.com/activate"
         $content | Should -Match "norton\.com/setup"
         $content | Should -Match "unieuro-cyber-protection\.covercare\.it"
+        # Tabs rimosse (Checklist e Vista Completa)
+        $content | Should -Not -Match "tab-checklist"
+        $content | Should -Not -Match "tab-all"
+        $content | Should -Not -Match "view-tab-checklist"
+        $content | Should -Not -Match "view-tab-all"
     }
 }
 
