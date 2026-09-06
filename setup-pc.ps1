@@ -931,6 +931,12 @@ public class WinSplit {
 
     [DllImport("user32.dll")]
     public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
 }
 "@ -ErrorAction SilentlyContinue
 
@@ -948,26 +954,53 @@ public class WinSplit {
 
         # 1. Posiziona la console a DESTRA (X = halfW, Y = 0, W = halfW, H = workH)
         try {
-            $hConsole = [WinSplit]::GetConsoleWindow()
+            $hConsole = [IntPtr]::Zero
+            try { $hConsole = [WinSplit]::GetConsoleWindow() } catch {}
+            if (-not $hConsole -or $hConsole -eq [IntPtr]::Zero) {
+                try { $hConsole = (Get-Process -Id $PID).MainWindowHandle } catch {}
+            }
             if ($hConsole -and $hConsole -ne [IntPtr]::Zero) {
-                [WinSplit]::ShowWindow($hConsole, 9)
+                try {
+                    $rootH = [WinSplit]::GetAncestor($hConsole, 2) # GA_ROOT = 2
+                    if ($rootH -and $rootH -ne [IntPtr]::Zero) { $hConsole = $rootH }
+                } catch {}
+                [WinSplit]::ShowWindow($hConsole, 9) # SW_RESTORE
                 [WinSplit]::MoveWindow($hConsole, $halfW, 0, $halfW, $workH, $true) | Out-Null
+                [WinSplit]::SetWindowPos($hConsole, [IntPtr]::Zero, $halfW, 0, $halfW, $workH, 0x0040) | Out-Null
             }
         } catch {}
 
         # 2. Avvia Edge a SINISTRA (X = 0, Y = 0, W = halfW, H = workH)
-        $edgePath = "$env:ProgramFiles (x86)\Microsoft\Edge\Application\msedge.exe"
-        if (-not (Test-Path $edgePath)) {
-            $edgePath = "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe"
+        $edgeCandidates = @(
+            "$env:ProgramFiles (x86)\Microsoft\Edge\Application\msedge.exe",
+            "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
+            (Join-Path $env:LOCALAPPDATA "Microsoft\Edge\Application\msedge.exe")
+        )
+        $edgePath = ""
+        foreach ($cand in $edgeCandidates) {
+            if ($cand -and (Test-Path -LiteralPath $cand)) {
+                $edgePath = $cand
+                break
+            }
         }
-        
-        if (Test-Path $edgePath) {
-            Start-Process -FilePath $edgePath -ArgumentList "--new-window --window-position=0,0 --window-size=$halfW,$workH `"$HtmlPath`"" -ErrorAction SilentlyContinue
+
+        $uriTarget = $HtmlPath
+        try {
+            if ($HtmlPath -notmatch '^https?://' -and (Test-Path -LiteralPath $HtmlPath)) {
+                $uriTarget = ([System.Uri]::new($HtmlPath)).AbsoluteUri
+            }
+        } catch {
+            $uriTarget = $HtmlPath
+        }
+
+        if ($edgePath) {
+            $edgeArgs = "--new-window --window-position=0,0 --window-size=$halfW,$workH `"$uriTarget`""
+            Start-Process -FilePath $edgePath -ArgumentList $edgeArgs -ErrorAction SilentlyContinue
         } else {
-            Start-Process $HtmlPath
+            Start-Process -FilePath $uriTarget -ErrorAction SilentlyContinue
         }
     } catch {
-        try { Start-Process $HtmlPath } catch {}
+        try { Start-Process -FilePath $HtmlPath -ErrorAction SilentlyContinue } catch {}
     }
 }
 
@@ -3455,248 +3488,8 @@ function Invoke-BrowserAutoSignup {
 }
 
 # =============================================================================
-# MODALITA' DI AVVIO E MENU INIZIALE
+# CONNETTIVITA' E RETE (VERIFICA ENDPOINT E TEST-RETE)
 # =============================================================================
-
-# Modalita' TEST (-Test): rende lo script non interattivo e non distruttivo.
-if ($Test -or $Diagnostica) {
-    if ($Test) { Write-Host "*** MODALITA' TEST: nessuna modifica reale, risposte automatiche ***" -ForegroundColor Magenta }
-    function Read-Host {
-        param([Parameter(Position = 0)][string]$Prompt)
-        $risposta = if ($Prompt -match 'S/N') { "N" } else { "" }
-        Write-Host "$Prompt [AUTO => '$risposta']" -ForegroundColor Gray
-        return $risposta
-    }
-    function Pausa { }
-}
-
-if (-not $Test -and -not $Diagnostica -and -not $PreparaUSB -and -not $Migrazione -and -not $Manuale -and -not $AgenteIA -and -not $Espresso -and -not $Veloce) {
-    Write-Titolo "PC FACILE   -   UNIEURO"
-    Write-Host "Versione $SCRIPT_VERSION - Assistenza & Configurazione Professionale PC" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "Seleziona Modalita' Operativa:" -ForegroundColor White
-    Write-Host ""
-    Write-Host "  [1] MODALITA' SEMI-AUTOMATICA (Standard Unieuro - Consigliata)" -ForegroundColor Green
-    Write-Host "      -> Setup parallelo a massima velocita' + Pannello Operatore 50% con portali 1-Click" -ForegroundColor DarkGray
-    Write-Host "  [2] MODALITA' AUTOMATICA (Proton Mail Rapido + Setup Completo)" -ForegroundColor Cyan
-    Write-Host "      -> Registrazione rapida Proton Mail + installazione app e ottimizzazioni in parallelo" -ForegroundColor DarkGray
-    Write-Host "  [3] PREPARA USB OFFLINE (Scarica tutti i programmi sulla chiavetta)" -ForegroundColor Yellow
-    Write-Host "  [4] CHECK SALUTE & DIAGNOSTICA HARDWARE (Report SSD SMART, Batteria, Driver)" -ForegroundColor Blue
-    Write-Host "  [Q] Esci" -ForegroundColor DarkGray
-    $sceltaMenu = (Attendi-Risposta "Scegli opzione [1-4 / Q]").Trim().ToUpper()
-    switch ($sceltaMenu) {
-        "2" {
-            $Global:ModoAutomatico = $true
-            $Espresso = $true
-            $Global:ModoEspresso = $true
-        }
-        "3" { $PreparaUSB = $true; $Global:ModoEspresso = $false }
-        "P" { $PreparaUSB = $true; $Global:ModoEspresso = $false }
-        "4" { Invoke-PcFacileDiagnostics -MostraDettagli; return }
-        "D" { Invoke-PcFacileDiagnostics -MostraDettagli; return }
-        "Q" { Write-Host "Uscita."; return }
-        default { $Espresso = $true; $Global:ModoEspresso = $true }
-    }
-} else {
-    try { Clear-Host } catch {}
-    $larg = 64
-    $titoloB = "PC FACILE   -   versione $SCRIPT_VERSION"
-    $padSx = [int](($larg - $titoloB.Length) / 2)
-    $padDx = $larg - $padSx - $titoloB.Length
-    $boxLine = ([string][char]0x2550) * $larg
-    Write-Host ""
-    if ($vtOn) {
-        Write-Host "  $U_ORANGE$([char]0x2554)$boxLine$([char]0x2557)$U_RESET"
-        Write-Host "  $U_ORANGE$([char]0x2551)$U_RESET  $U_ORANGE_BG UNIEURO $U_RESET $U_WHITE PC FACILE  -  Assistenza & Configurazione PC      $U_ORANGE$([char]0x2551)$U_RESET"
-        Write-Host "  $U_ORANGE$([char]0x2551)$U_RESET  $U_ORANGE Batte. Forte. Sempre.$U_RESET $U_PEACH • Setup Tecnico Dedicato v$SCRIPT_VERSION      $U_ORANGE$([char]0x2551)$U_RESET"
-        Write-Host "  $U_ORANGE$([char]0x255A)$boxLine$([char]0x255D)$U_RESET"
-        Write-Host ""
-        Write-Host "  $U_GREEN$SYM_OK$U_RESET $U_WHITE CONFIGURAZIONE AUTOMATICA AVVIATA A MASSIMA VELOCITA'!$U_RESET"
-        Write-Host "  $U_ORANGE$SYM_INFO$U_RESET $U_PEACH Tutte le ottimizzazioni, pulizie e aggiornamenti sono in esecuzione.$U_RESET"
-        Write-Host "  $U_BLUE$SYM_INFO$U_RESET $U_WHITE Pannello Operatore aperto su Microsoft Edge per gestire credenziali e portali.$U_RESET"
-        Write-Host ""
-    } else {
-        Write-Host "  $([char]0x2554)$boxLine$([char]0x2557)" -ForegroundColor DarkYellow
-        Write-Host "  $([char]0x2551)$(" " * $padSx)$titoloB$(" " * $padDx)$([char]0x2551)" -ForegroundColor White
-        Write-Host "  $([char]0x255A)$boxLine$([char]0x255D)" -ForegroundColor DarkYellow
-        Write-Host ""
-        Write-Host "  CONFIGURAZIONE AUTOMATICA AVVIATA A MASSIMA VELOCITA'!" -ForegroundColor Green
-        Write-Host "  Tutte le ottimizzazioni, pulizie e installazioni sono partite in tempo reale." -ForegroundColor White
-        Write-Host "  Pannello Operatore aperto nel browser per gestire account, Office e antivirus." -ForegroundColor Cyan
-        Write-Host ""
-    }
-}
-
-if ($Espresso) {
-    $Global:ModoEspresso = $true
-}
-
-# Se e' richiesta la migrazione dei dati:
-if ($Migrazione) {
-    Invoke-MigrazioneDati -Test:$Test
-    return
-}
-
-# Se e' richiesta la preparazione della USB Offline:
-if ($PreparaUSB) {
-    Invoke-PreparaUSBOffline -TargetDir $TargetDir
-    return
-}
-
-# Modalita' configurazione reale:
-if (-not $Test -and -not $Diagnostica) {
-    $Veloce = $true
-    function Pausa { }
-}
-
-$RunReale = (-not $Test -and -not $Diagnostica)
-if ($RunReale) {
-    Enable-SilentElevation
-    Set-PreventSleep $true
-    Connect-AutoWiFi -TargetDir $TargetDir
-    Open-PannelloOperatore -NomeCliente $NomeCliente
-    if ($Global:ModoAutomatico) {
-        [void](Wait-CredenzialiPannello -Test:$Test)
-        [void](Invoke-BrowserAutoSignup -NomeCliente $Global:nomeCliente -Test:$Test)
-    }
-} elseif ($Test -and $Global:ModoAutomatico) {
-    Open-PannelloOperatore -NomeCliente $NomeCliente
-    [void](Wait-CredenzialiPannello -Test:$Test)
-    [void](Invoke-BrowserAutoSignup -NomeCliente $Global:nomeCliente -Test:$Test)
-}
-
-
-
-# Credenziali del nuovo account, generate dallo script allo step Account
-# Microsoft e scritte nel riepilogo. Init qui cosi' esistono anche se quel
-# passo viene saltato (restano vuote nel file).
-$credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
-# Provider account scelto (Microsoft/Google/Proton/Outlook) + dominio email: li
-# ricordo nel checkpoint, cosi' su una ripresa il riepilogo mostra il provider
-# GIUSTO (es. Proton) e non ripiega su Microsoft/outlook.it.
-$Global:credProvider = ""; $Global:credDominio = ""
-# Job in background per il DOWNLOAD degli aggiornamenti di Windows: programmato
-# al passo Aggiornamenti, parte all'inizio del passo App (dopo i driver per evitare
-# collisioni COM su wuauserv), scaricando mentre installiamo le applicazioni.
-$Global:JobWinUpdate = $null
-$Global:AvviaWinUpdateDopoDriver = $false
-
-# Contatore app che NON si sono installate (per l'avviso rete a fine passo App).
-$Global:AppFallite = 0
-# Esito dell'ultima Installa-Pacchetto ($true = installata o gia' presente).
-# Serve al passo App per segnare come "fatta" solo cio' che e' andato a buon
-# fine, cosi' su una ripresa si riscaricano SOLO le app davvero mancanti.
-$Global:UltimaInstallOk = $false
-# Ripresa FINE dentro il passo App: profilo scelto, piano di installazione e
-# app gia' completate nella sessione interrotta (caricati dal checkpoint).
-$Global:AppProfiloRipresa = ""
-$Global:AppListaRipresa   = @()
-$Global:AppFatteRipresa   = @()
-
-# =============================================================================
-# RIPRESA SESSIONE: se lo script viene chiuso a meta' (crash, riavvio, blocco
-# antivirus), al lancio successivo riparte da dove era arrivato. Dopo ogni
-# passo completato lo stato (numero passo + nome cliente + credenziali
-# generate) finisce in un file JSON in ProgramData, ELIMINATO a fine lavoro.
-# Fasi: 1=Nome 2=Account 3=Pulizia 4=Lingua 5=Ripristino 6=Office,
-# 7..11 = passi wizard 3..7 (Unieuro, App+browser, Aggiornamento, Driver,
-# Antivirus). Solo nel run reale.
-# =============================================================================
-$Global:StatoFile   = Join-Path $(if ($env:ProgramData) { $env:ProgramData } else { [System.IO.Path]::GetTempPath() }) "PCFacile\stato.json"
-$Global:FaseRipresa = 0
-
-# Segna un passo come completato (sovrascrive il checkpoint precedente).
-function Save-Fase {
-    param([int]$Fase, [string]$Nome)
-    if (-not $RunReale) { return }
-    try {
-        $dir = Split-Path $Global:StatoFile
-        if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
-        # PRESERVO i valori gia' salvati se quelli correnti sono vuoti (es. dopo
-        # una ripresa in cui il passo Account e' stato saltato): altrimenti un
-        # Save-Fase di un passo successivo azzererebbe credenziali/provider gia'
-        # registrati (era la causa di email/provider sbagliati nel riepilogo).
-        $prev = $null
-        if (Test-Path $Global:StatoFile) { try { $prev = Get-Content $Global:StatoFile -Raw | ConvertFrom-Json } catch {} }
-        $nc  = if ($nomeCliente)         { $nomeCliente }         elseif ($prev) { $prev.NomeCliente } else { "" }
-        $ca  = if ($credMsAccount)       { $credMsAccount }       elseif ($prev) { $prev.CredAccount } else { "" }
-        $cp  = if ($credMsPassword)      { $credMsPassword }      elseif ($prev) { $prev.CredPassword } else { "" }
-        $cpr = if ($Global:credProvider) { $Global:credProvider } elseif ($prev -and $prev.PSObject.Properties.Name -contains 'CredProvider') { $prev.CredProvider } else { "" }
-        $cdo = if ($Global:credDominio)  { $Global:credDominio }  elseif ($prev -and $prev.PSObject.Properties.Name -contains 'CredDominio')  { $prev.CredDominio } else { "" }
-        [pscustomobject]@{
-            Fase = $Fase; FaseNome = $Nome
-            Data = (Get-Date -Format 'dd/MM/yyyy HH:mm')
-            NomeCliente = $nc
-            CredAccount = $ca; CredPassword = $cp
-            CredProvider = $cpr; CredDominio = $cdo
-        } | ConvertTo-Json | Set-Content -Path $Global:StatoFile -Encoding UTF8
-    } catch {}
-}
-
-# Vero se il passo era gia' stato completato nella sessione ripresa.
-function Test-FaseFatta { param([int]$Fase) return ($Global:FaseRipresa -ge $Fase) }
-
-# Sotto-checkpoint DENTRO il passo App: salva profilo scelto, piano completo e
-# app gia' installate, senza chiudere il passo (Fase resta 7 = si riparte dal
-# passo App). Cosi' una chiusura a meta' installazione riparte dall'app esatta.
-function Save-AppProgresso {
-    param([string]$Profilo, [array]$Lista, [string[]]$Fatte)
-    if (-not $RunReale) { return }
-    try {
-        $dir = Split-Path $Global:StatoFile
-        if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
-        [pscustomobject]@{
-            Fase = 7; FaseNome = "Applicazioni (installazione in corso)"
-            Data = (Get-Date -Format 'dd/MM/yyyy HH:mm')
-            NomeCliente = $nomeCliente
-            CredAccount = $credMsAccount; CredPassword = $credMsPassword
-            CredProvider = $Global:credProvider; CredDominio = $Global:credDominio
-            AppProfilo = $Profilo
-            AppLista   = @($Lista)
-            AppFatte   = @($Fatte)
-        } | ConvertTo-Json -Depth 4 | Set-Content -Path $Global:StatoFile -Encoding UTF8
-    } catch {}
-}
-
-# =============================================================================
-# CATALOGO PACCHETTI - UNICA FONTE (usato da STEP 3/5/6 e dalla Diagnostica)
-# Cambi un ID QUI e vale ovunque. Profili: BASE / UFFICIO / GAMING.
-# =============================================================================
-$CatalogoOffice = @(
-    @{ Nome = "Microsoft 365"; Id = "Microsoft.Office" },
-    @{ Nome = "OpenOffice";    Id = "Apache.OpenOffice" },
-    @{ Nome = "LibreOffice";   Id = "TheDocumentFoundation.LibreOffice" }
-)
-$CatalogoBrowser = @(
-    @{ Nome = "Google Chrome";   Id = "Google.Chrome" },
-    @{ Nome = "Mozilla Firefox"; Id = "Mozilla.Firefox" },
-    @{ Nome = "Microsoft Edge";  Id = "Microsoft.Edge" },
-    @{ Nome = "Brave";           Id = "Brave.Brave" },
-    @{ Nome = "Opera";           Id = "Opera.Opera" },
-    @{ Nome = "Opera GX";        Id = "Opera.OperaGX" },
-    @{ Nome = "Vivaldi";         Id = "Vivaldi.Vivaldi" }
-)
-$CatalogoApp = @(
-    @{ Nome = "VLC Media Player";     Id = "VideoLAN.VLC";                 Profili = @("BASE","UFFICIO","GAMING") },
-    @{ Nome = "Adobe Acrobat Reader"; Id = "Adobe.Acrobat.Reader.64-bit";  Profili = @("BASE","UFFICIO","GAMING") },
-    @{ Nome = "Sumatra PDF";          Id = "SumatraPDF.SumatraPDF";        Profili = @("UFFICIO") },
-    @{ Nome = "Spotify";              Id = "Spotify.Spotify";              Profili = @("BASE","UFFICIO","GAMING") },
-    @{ Nome = "AIMP";                 Id = "AIMP.AIMP";                    Profili = @("BASE","UFFICIO","GAMING") },
-    @{ Nome = "7-Zip";                Id = "7zip.7zip";                    Profili = @("BASE","UFFICIO","GAMING") },
-    @{ Nome = "WhatsApp";             Id = "9NKSQGP7F2NH";                 Profili = @("BASE","UFFICIO","GAMING") },  # Microsoft Store (la versione winget falliva spesso)
-    @{ Nome = "GIMP";                 Id = "GIMP.GIMP";                    Profili = @("UFFICIO") },
-    @{ Nome = "Steam";                Id = "Valve.Steam";                  Profili = @("GAMING") },
-    @{ Nome = "Epic Games Launcher";  Id = "EpicGames.EpicGamesLauncher";  Profili = @("GAMING") },
-    @{ Nome = "AnyDesk";              Id = "AnyDesk.AnyDesk";              Profili = @("BASE","UFFICIO","GAMING") },
-    @{ Nome = "Discord";              Id = "Discord.Discord";              Profili = @("GAMING") },
-    @{ Nome = "Zoom";                 Id = "Zoom.Zoom";                    Profili = @("BASE","UFFICIO","GAMING") }
-)
-
-# =============================================================================
-# REPORT FINALE + CONNETTIVITA'
-# =============================================================================
-
-
 
 function Test-Rete {
     # 1) Ping veloce
@@ -3914,8 +3707,151 @@ function Get-DesktopDir {
     return $env:TEMP
 }
 
+# Disattiva schermate iniziali di benvenuto e tour di Edge per un avvio immediato
+function Set-EdgeFirstRunPolicies {
+    if (-not $RunReale) { return }
+    try {
+        Enable-PreventSleep
+        $edgePol = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
+        if (-not (Test-Path $edgePol)) { New-Item -Path $edgePol -Force | Out-Null }
+        Set-ItemProperty -Path $edgePol -Name 'HideFirstRunExperience'        -Value 1 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'BrowserSignin'                 -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'SyncDisabled'                  -Value 1 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'ImportOnEachLaunch'            -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'AutoImportAtFirstRun'          -Value 4 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'DefaultBrowserSettingEnabled'  -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'HubsSidebarEnabled'            -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'ShowMicrosoftRewards'          -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $edgePol -Name 'EdgeShoppingAssistantEnabled'  -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+        $userProfileKey = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\UserProfileEngagement'
+        if (-not (Test-Path $userProfileKey)) { New-Item -Path $userProfileKey -Force | Out-Null }
+        Set-ItemProperty -Path $userProfileKey -Name 'ScoobeSystemSettingEnabled' -Value 0 -Type DWord -ErrorAction SilentlyContinue
+
+        $cdmKey = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
+        if (-not (Test-Path $cdmKey)) { New-Item -Path $cdmKey -Force | Out-Null }
+        Set-ItemProperty -Path $cdmKey -Name 'SubscribedContent-310093Enabled' -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmKey -Name 'SubscribedContent-338389Enabled' -Value 0 -Type DWord -ErrorAction SilentlyContinue
+    } catch {}
+}
+
 # =============================================================================
-# VERIFICA PRIVILEGI AMMINISTRATORE
+# INIZIALIZZAZIONE VARIABILI GLOBALI E RIPRESA SESSIONE
+# =============================================================================
+
+# Credenziali del nuovo account, generate dallo script allo step Account
+# Microsoft e scritte nel riepilogo. Init qui cosi' esistono anche se quel
+# passo viene saltato (restano vuote nel file).
+$credMsAccount = ""; $credMsPassword = ""; $credAltro = ""
+# Provider account scelto (Microsoft/Google/Proton/Outlook) + dominio email: li
+# ricordo nel checkpoint, cosi' su una ripresa il riepilogo mostra il provider
+# GIUSTO (es. Proton) e non ripiega su Microsoft/outlook.it.
+$Global:credProvider = ""; $Global:credDominio = ""
+# Job in background per il DOWNLOAD degli aggiornamenti di Windows: programmato
+# al passo Aggiornamenti, parte all'inizio del passo App (dopo i driver per evitare
+# collisioni COM su wuauserv), scaricando mentre installiamo le applicazioni.
+$Global:JobWinUpdate = $null
+$Global:AvviaWinUpdateDopoDriver = $false
+
+# Contatore app che NON si sono installate (per l'avviso rete a fine passo App).
+$Global:AppFallite = 0
+# Esito dell'ultima Installa-Pacchetto ($true = installata o gia' presente).
+# Serve al passo App per segnare come "fatta" solo cio' che e' andato a buon
+# fine, cosi' su una ripresa si riscaricano SOLO le app davvero mancanti.
+$Global:UltimaInstallOk = $false
+# Ripresa FINE dentro il passo App: profilo scelto, piano di installazione e
+# app gia' completate nella sessione interrotta (caricati dal checkpoint).
+$Global:AppProfiloRipresa = ""
+$Global:AppListaRipresa   = @()
+$Global:AppFatteRipresa   = @()
+
+$Global:StatoFile   = Join-Path $(if ($env:ProgramData) { $env:ProgramData } else { [System.IO.Path]::GetTempPath() }) "PCFacile\stato.json"
+$Global:FaseRipresa = 0
+
+# Segna un passo come completato (sovrascrive il checkpoint precedente).
+function Save-Fase {
+    param([int]$Fase, [string]$Nome)
+    if (-not $RunReale) { return }
+    try {
+        $dir = Split-Path $Global:StatoFile
+        if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
+        $prev = $null
+        if (Test-Path $Global:StatoFile) { try { $prev = Get-Content $Global:StatoFile -Raw | ConvertFrom-Json } catch {} }
+        $nc  = if ($nomeCliente)         { $nomeCliente }         elseif ($prev) { $prev.NomeCliente } else { "" }
+        $ca  = if ($credMsAccount)       { $credMsAccount }       elseif ($prev) { $prev.CredAccount } else { "" }
+        $cp  = if ($credMsPassword)      { $credMsPassword }      elseif ($prev) { $prev.CredPassword } else { "" }
+        $cpr = if ($Global:credProvider) { $Global:credProvider } elseif ($prev -and $prev.PSObject.Properties.Name -contains 'CredProvider') { $prev.CredProvider } else { "" }
+        $cdo = if ($Global:credDominio)  { $Global:credDominio }  elseif ($prev -and $prev.PSObject.Properties.Name -contains 'CredDominio')  { $prev.CredDominio } else { "" }
+        [pscustomobject]@{
+            Fase = $Fase; FaseNome = $Nome
+            Data = (Get-Date -Format 'dd/MM/yyyy HH:mm')
+            NomeCliente = $nc
+            CredAccount = $ca; CredPassword = $cp
+            CredProvider = $cpr; CredDominio = $cdo
+        } | ConvertTo-Json | Set-Content -Path $Global:StatoFile -Encoding UTF8
+    } catch {}
+}
+
+# Vero se il passo era gia' stato completato nella sessione ripresa.
+function Test-FaseFatta { param([int]$Fase) return ($Global:FaseRipresa -ge $Fase) }
+
+# Sotto-checkpoint DENTRO il passo App: salva profilo scelto, piano completo e
+# app gia' installate, senza chiudere il passo (Fase resta 7 = si riparte dal
+# passo App). Cosi' una chiusura a meta' installazione riparte dall'app esatta.
+function Save-AppProgresso {
+    param([string]$Profilo, [array]$Lista, [string[]]$Fatte)
+    if (-not $RunReale) { return }
+    try {
+        $dir = Split-Path $Global:StatoFile
+        if (-not (Test-Path $dir)) { New-Item -Path $dir -ItemType Directory -Force | Out-Null }
+        [pscustomobject]@{
+            Fase = 7; FaseNome = "Applicazioni (installazione in corso)"
+            Data = (Get-Date -Format 'dd/MM/yyyy HH:mm')
+            NomeCliente = $nomeCliente
+            CredAccount = $credMsAccount; CredPassword = $credMsPassword
+            CredProvider = $Global:credProvider; CredDominio = $Global:credDominio
+            AppProfilo = $Profilo
+            AppLista   = @($Lista)
+            AppFatte   = @($Fatte)
+        } | ConvertTo-Json -Depth 4 | Set-Content -Path $Global:StatoFile -Encoding UTF8
+    } catch {}
+}
+
+# =============================================================================
+# CATALOGO PACCHETTI - UNICA FONTE (usato da STEP 3/5/6 e dalla Diagnostica)
+# =============================================================================
+$CatalogoOffice = @(
+    @{ Nome = "Microsoft 365"; Id = "Microsoft.Office" },
+    @{ Nome = "OpenOffice";    Id = "Apache.OpenOffice" },
+    @{ Nome = "LibreOffice";   Id = "TheDocumentFoundation.LibreOffice" }
+)
+$CatalogoBrowser = @(
+    @{ Nome = "Google Chrome";   Id = "Google.Chrome" },
+    @{ Nome = "Mozilla Firefox"; Id = "Mozilla.Firefox" },
+    @{ Nome = "Microsoft Edge";  Id = "Microsoft.Edge" },
+    @{ Nome = "Brave";           Id = "Brave.Brave" },
+    @{ Nome = "Opera";           Id = "Opera.Opera" },
+    @{ Nome = "Opera GX";        Id = "Opera.OperaGX" },
+    @{ Nome = "Vivaldi";         Id = "Vivaldi.Vivaldi" }
+)
+$CatalogoApp = @(
+    @{ Nome = "VLC Media Player";     Id = "VideoLAN.VLC";                 Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "Adobe Acrobat Reader"; Id = "Adobe.Acrobat.Reader.64-bit";  Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "Sumatra PDF";          Id = "SumatraPDF.SumatraPDF";        Profili = @("UFFICIO") },
+    @{ Nome = "Spotify";              Id = "Spotify.Spotify";              Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "AIMP";                 Id = "AIMP.AIMP";                    Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "7-Zip";                Id = "7zip.7zip";                    Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "WhatsApp";             Id = "9NKSQGP7F2NH";                 Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "GIMP";                 Id = "GIMP.GIMP";                    Profili = @("UFFICIO") },
+    @{ Nome = "Steam";                Id = "Valve.Steam";                  Profili = @("GAMING") },
+    @{ Nome = "Epic Games Launcher";  Id = "EpicGames.EpicGamesLauncher";  Profili = @("GAMING") },
+    @{ Nome = "AnyDesk";              Id = "AnyDesk.AnyDesk";              Profili = @("BASE","UFFICIO","GAMING") },
+    @{ Nome = "Discord";              Id = "Discord.Discord";              Profili = @("GAMING") },
+    @{ Nome = "Zoom";                 Id = "Zoom.Zoom";                    Profili = @("BASE","UFFICIO","GAMING") }
+)
+
+# =============================================================================
+# VERIFICA PRIVILEGI AMMINISTRATORE E AMBIENTE
 # =============================================================================
 
 $isAdmin = $false
@@ -3935,29 +3871,22 @@ if (-not $isAdmin) {
     } else {
         Write-Info "Riavvia PowerShell come amministratore e riprova."
         Pausa
-        return  # return (non exit) per non chiudere la finestra se eseguito in memoria
+        return
     }
 }
 
-# =============================================================================
-# CONTROLLO AMBIENTE (blocchi Windows)
-# =============================================================================
-
-# Rimuove il "mark-of-the-web" dallo script stesso (file scaricato da Internet)
 try {
     if ($MyInvocation.MyCommand.Path) {
         Unblock-File -Path $MyInvocation.MyCommand.Path -ErrorAction SilentlyContinue
     }
 } catch {}
 
-# ExecutionPolicy: se lo script gira gia' e' ok, ma segnalo per chiarezza
 $ep = Get-ExecutionPolicy
 if ($ep -eq 'Restricted' -or $ep -eq 'AllSigned') {
     Write-Info "ExecutionPolicy: $ep. Se hai avuto errori di avvio, rilancia con:"
     Write-Host "  powershell -ExecutionPolicy Bypass -File `"$($MyInvocation.MyCommand.Path)`"" -ForegroundColor Yellow
 }
 
-# Smart App Control (Controllo intelligente delle app): puo' bloccare .ps1/installer
 try {
     $sac = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy" `
             -Name VerifiedAndReputablePolicyState -ErrorAction SilentlyContinue).VerifiedAndReputablePolicyState
@@ -3971,22 +3900,133 @@ try {
 } catch {}
 
 # =============================================================================
+# MODALITA' DI AVVIO E MENU INIZIALE
+# =============================================================================
+
+# Modalita' TEST (-Test): rende lo script non interattivo e non distruttivo.
+if ($Test -or $Diagnostica) {
+    if ($Test) { Write-Host "*** MODALITA' TEST: nessuna modifica reale, risposte automatiche ***" -ForegroundColor Magenta }
+    function Read-Host {
+        param([Parameter(Position = 0)][string]$Prompt)
+        $risposta = if ($Prompt -match 'S/N') { "N" } else { "" }
+        Write-Host "$Prompt [AUTO => '$risposta']" -ForegroundColor Gray
+        return $risposta
+    }
+    function Pausa { }
+}
+
+if (-not $Test -and -not $Diagnostica -and -not $PreparaUSB -and -not $Migrazione -and -not $Manuale -and -not $AgenteIA -and -not $Espresso -and -not $Veloce) {
+    Write-Titolo "PC FACILE   -   UNIEURO"
+    Write-Host "Versione $SCRIPT_VERSION - Assistenza & Configurazione Professionale PC" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "Seleziona Modalita' Operativa:" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  [1] MODALITA' SEMI-AUTOMATICA (Standard Unieuro - Consigliata)" -ForegroundColor Green
+    Write-Host "      -> Setup parallelo a massima velocita' + Pannello Operatore 50% con portali 1-Click" -ForegroundColor DarkGray
+    Write-Host "  [2] MODALITA' AUTOMATICA (Proton Mail Rapido + Setup Completo)" -ForegroundColor Cyan
+    Write-Host "      -> Registrazione rapida Proton Mail + installazione app e ottimizzazioni in parallelo" -ForegroundColor DarkGray
+    Write-Host "  [3] PREPARA USB OFFLINE (Scarica tutti i programmi sulla chiavetta)" -ForegroundColor Yellow
+    Write-Host "  [4] CHECK SALUTE & DIAGNOSTICA HARDWARE (Report SSD SMART, Batteria, Driver)" -ForegroundColor Blue
+    Write-Host "  [Q] Esci" -ForegroundColor DarkGray
+    $sceltaMenu = (Attendi-Risposta "Scegli opzione [1-4 / Q]").Trim().ToUpper()
+    switch ($sceltaMenu) {
+        "2" {
+            $Global:ModoAutomatico = $true
+            $Espresso = $true
+            $Global:ModoEspresso = $true
+        }
+        "3" { $PreparaUSB = $true; $Global:ModoEspresso = $false }
+        "P" { $PreparaUSB = $true; $Global:ModoEspresso = $false }
+        "4" { Invoke-PcFacileDiagnostics -MostraDettagli; return }
+        "D" { Invoke-PcFacileDiagnostics -MostraDettagli; return }
+        "Q" { Write-Host "Uscita."; return }
+        default { $Espresso = $true; $Global:ModoEspresso = $true }
+    }
+} else {
+    try { Clear-Host } catch {}
+    $larg = 64
+    $titoloB = "PC FACILE   -   versione $SCRIPT_VERSION"
+    $padSx = [int](($larg - $titoloB.Length) / 2)
+    $padDx = $larg - $padSx - $titoloB.Length
+    $boxLine = ([string][char]0x2550) * $larg
+    Write-Host ""
+    if ($vtOn) {
+        Write-Host "  $U_ORANGE$([char]0x2554)$boxLine$([char]0x2557)$U_RESET"
+        Write-Host "  $U_ORANGE$([char]0x2551)$U_RESET  $U_ORANGE_BG UNIEURO $U_RESET $U_WHITE PC FACILE  -  Assistenza & Configurazione PC      $U_ORANGE$([char]0x2551)$U_RESET"
+        Write-Host "  $U_ORANGE$([char]0x2551)$U_RESET  $U_ORANGE Batte. Forte. Sempre.$U_RESET $U_PEACH • Setup Tecnico Dedicato v$SCRIPT_VERSION      $U_ORANGE$([char]0x2551)$U_RESET"
+        Write-Host "  $U_ORANGE$([char]0x255A)$boxLine$([char]0x255D)$U_RESET"
+        Write-Host ""
+        Write-Host "  $U_GREEN$SYM_OK$U_RESET $U_WHITE CONFIGURAZIONE AUTOMATICA AVVIATA A MASSIMA VELOCITA'!$U_RESET"
+        Write-Host "  $U_ORANGE$SYM_INFO$U_RESET $U_PEACH Tutte le ottimizzazioni, pulizie e aggiornamenti sono in esecuzione.$U_RESET"
+        Write-Host "  $U_BLUE$SYM_INFO$U_RESET $U_WHITE Pannello Operatore aperto su Microsoft Edge per gestire credenziali e portali.$U_RESET"
+        Write-Host ""
+    } else {
+        Write-Host "  $([char]0x2554)$boxLine$([char]0x2557)" -ForegroundColor DarkYellow
+        Write-Host "  $([char]0x2551)$(" " * $padSx)$titoloB$(" " * $padDx)$([char]0x2551)" -ForegroundColor White
+        Write-Host "  $([char]0x255A)$boxLine$([char]0x255D)" -ForegroundColor DarkYellow
+        Write-Host ""
+        Write-Host "  CONFIGURAZIONE AUTOMATICA AVVIATA A MASSIMA VELOCITA'!" -ForegroundColor Green
+        Write-Host "  Tutte le ottimizzazioni, pulizie e installazioni sono partite in tempo reale." -ForegroundColor White
+        Write-Host "  Pannello Operatore aperto nel browser per gestire account, Office e antivirus." -ForegroundColor Cyan
+        Write-Host ""
+    }
+}
+
+if ($Espresso) {
+    $Global:ModoEspresso = $true
+}
+
+# Se e' richiesta la migrazione dei dati:
+if ($Migrazione) {
+    Invoke-MigrazioneDati -Test:$Test
+    return
+}
+
+# Se e' richiesta la preparazione della USB Offline:
+if ($PreparaUSB) {
+    Invoke-PreparaUSBOffline -TargetDir $TargetDir
+    return
+}
+
+# Modalita' configurazione reale:
+if (-not $Test -and -not $Diagnostica) {
+    $Veloce = $true
+    function Pausa { }
+}
+
+$RunReale = (-not $Test -and -not $Diagnostica)
+if ($RunReale) {
+    try { Enable-SilentElevation } catch {}
+    try { Set-PreventSleep $true } catch {}
+    try { Set-EdgeFirstRunPolicies } catch {}
+    try { Connect-AutoWiFi -TargetDir $TargetDir } catch { Write-Info "Connessione Wi-Fi automatica: $_" }
+    try { Open-PannelloOperatore -NomeCliente $NomeCliente } catch { Write-Info "Pannello Operatore: $_" }
+    if ($Global:ModoAutomatico) {
+        try { [void](Wait-CredenzialiPannello -Test:$Test) } catch {}
+        try { [void](Invoke-BrowserAutoSignup -NomeCliente $Global:nomeCliente -Test:$Test) } catch {}
+    }
+} elseif ($Test -and $Global:ModoAutomatico) {
+    Open-PannelloOperatore -NomeCliente $NomeCliente
+    [void](Wait-CredenzialiPannello -Test:$Test)
+    [void](Invoke-BrowserAutoSignup -NomeCliente $Global:nomeCliente -Test:$Test)
+}
+
+# =============================================================================
 # ACCORTEZZE PC NUOVO (orologio + anti-sospensione)
 # =============================================================================
 
 # Data/ora sbagliata su un PC nuovo -> errori HTTPS su winget/download/attivazioni.
-# ATTIVO la sincronizzazione automatica dell'orario (non solo un resync una-tantum):
-# servizio W32Time in avvio automatico come client NTP + fuso automatico + resync.
+# Servizio W32Time in avvio automatico come client NTP + fuso automatico + resync (solo se online).
 if ($RunReale) {
     try {
         Set-Service -Name w32time -StartupType Automatic -ErrorAction SilentlyContinue
         Start-Service -Name w32time -ErrorAction SilentlyContinue
-        # "Imposta l'ora automaticamente": W32Time come client NTP verso il time server
         Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\W32Time\Parameters' -Name Type -Value 'NTP' -ErrorAction SilentlyContinue
         & w32tm /config /manualpeerlist:"time.windows.com,0x9" /syncfromflags:manual /update 2>$null | Out-Null
-        # "Imposta fuso orario automaticamente" (servizio tzautoupdate)
         Set-Service -Name tzautoupdate -StartupType Automatic -ErrorAction SilentlyContinue
-        & w32tm /resync /force 2>$null | Out-Null
+        if (Test-Rete) {
+            & w32tm /resync /force 2>$null | Out-Null
+        }
         Write-OK "Sincronizzazione orario attivata e orologio aggiornato."
         Add-Report "Sincronizzazione orario" "OK"
     } catch {
@@ -3996,8 +4036,6 @@ if ($RunReale) {
 }
 
 # Evita la sospensione durante le installazioni (solo con alimentatore collegato).
-# Uso powercfg (strumento standard) invece di P/Invoke a kernel32, che gli
-# antivirus segnalano come falso positivo (ScriptContainsMaliciousContent).
 try {
     & powercfg /change standby-timeout-ac 0 2>$null | Out-Null
     & powercfg /change monitor-timeout-ac 0 2>$null | Out-Null
@@ -5071,35 +5109,8 @@ if ($RunReale) {
 # tempo. Policy di registro, impostata PRIMA di aprire Edge.
 # =============================================================================
 if ($RunReale) {
-    try {
-        Enable-PreventSleep
-        $edgePol = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'
-        if (-not (Test-Path $edgePol)) { New-Item -Path $edgePol -Force | Out-Null }
-        Set-ItemProperty -Path $edgePol -Name 'HideFirstRunExperience'        -Value 1 -Type DWord -ErrorAction SilentlyContinue
-        # Non forzare l'accesso e non mostrare il primo tour/import
-        Set-ItemProperty -Path $edgePol -Name 'BrowserSignin'                 -Value 0 -Type DWord -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path $edgePol -Name 'SyncDisabled'                  -Value 1 -Type DWord -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path $edgePol -Name 'ImportOnEachLaunch'            -Value 0 -Type DWord -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path $edgePol -Name 'AutoImportAtFirstRun'          -Value 4 -Type DWord -ErrorAction SilentlyContinue  # 4 = non importare
-        Set-ItemProperty -Path $edgePol -Name 'DefaultBrowserSettingEnabled'  -Value 0 -Type DWord -ErrorAction SilentlyContinue
-        # Meno distrazioni anche DOPO la prima apertura: niente barra laterale/
-        # Copilot, niente Microsoft Rewards, niente assistente acquisti.
-        Set-ItemProperty -Path $edgePol -Name 'HubsSidebarEnabled'            -Value 0 -Type DWord -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path $edgePol -Name 'ShowMicrosoftRewards'          -Value 0 -Type DWord -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path $edgePol -Name 'EdgeShoppingAssistantEnabled'  -Value 0 -Type DWord -ErrorAction SilentlyContinue
-
-        # Disattivazione popup di benvenuto / Scoobe Windows ("Completiamo la configurazione del tuo dispositivo")
-        $userProfileKey = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\UserProfileEngagement'
-        if (-not (Test-Path $userProfileKey)) { New-Item -Path $userProfileKey -Force | Out-Null }
-        Set-ItemProperty -Path $userProfileKey -Name 'ScoobeSystemSettingEnabled' -Value 0 -Type DWord -ErrorAction SilentlyContinue
-
-        $cdmKey = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
-        if (-not (Test-Path $cdmKey)) { New-Item -Path $cdmKey -Force | Out-Null }
-        Set-ItemProperty -Path $cdmKey -Name 'SubscribedContent-310093Enabled' -Value 0 -Type DWord -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path $cdmKey -Name 'SubscribedContent-338389Enabled' -Value 0 -Type DWord -ErrorAction SilentlyContinue
-
-        Write-OK "Schermate iniziali di Edge e notifiche di benvenuto disattivate."
-    } catch {}
+    Set-EdgeFirstRunPolicies
+    Write-OK "Schermate iniziali di Edge e notifiche di benvenuto disattivate."
 }
 
 # =============================================================================

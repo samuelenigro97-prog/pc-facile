@@ -23,7 +23,7 @@ BeforeAll {
         'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus', 'Get-BitLockerRecovery',
         'Get-SystemHardwareDetails', 'Invoke-PcFacileDiagnostics', 'Install-VisualCRuntime',
         'Update-PannelloStatus', 'Open-PannelloOperatore', 'Set-SplitScreenLayout', 'Get-CredenzialiSalvatePannello',
-        'Enable-SilentElevation', 'Restore-SilentElevation',
+        'Enable-SilentElevation', 'Restore-SilentElevation', 'Set-PreventSleep', 'Set-EdgeFirstRunPolicies',
         'New-WlanProfileXml', 'Connect-AutoWiFi', 'Save-StoreWiFiProfile',
         'Invoke-BrowserAutoSignup', 'Wait-CredenzialiPannello',
         'Install-WindowsUpdateDrivers',
@@ -405,6 +405,26 @@ Describe 'Set-SplitScreenLayout' {
     It 'esegue senza errori in modalita test' {
         $Global:Test = $true
         { Set-SplitScreenLayout -HtmlPath "/fake/test.html" } | Should -Not -Throw
+        $Global:Test = $false
+    }
+}
+
+Describe 'Set-EdgeFirstRunPolicies' {
+    It 'esegue senza errori e non genera eccezioni' {
+        { Set-EdgeFirstRunPolicies } | Should -Not -Throw
+    }
+}
+
+Describe 'Sequenza Bootstrap Modalita 1 e 2' {
+    It 'esegue Connect-AutoWiFi seguito da Open-PannelloOperatore e Set-SplitScreenLayout senza errori' {
+        $Global:Test = $true
+        {
+            Enable-SilentElevation
+            Set-PreventSleep $true
+            Set-EdgeFirstRunPolicies
+            Connect-AutoWiFi -TargetDir $PSScriptRoot
+            Open-PannelloOperatore -NomeCliente "Mario Rossi"
+        } | Should -Not -Throw
         $Global:Test = $false
     }
 }
