@@ -19,7 +19,7 @@ BeforeAll {
         'Write-Titolo', 'Write-OK', 'Write-Info', 'Write-Errore', 'Add-Report',
         'New-PasswordCliente', 'New-EmailCliente',
         'Test-NomeSimile', 'Test-LnkJunk', 'Test-Indietro',
-        'Get-OfflineDirs', 'Find-OfflineInstaller', 'Install-OfflinePackage', 'Stop-AppPopups', 'Select-DestinazioneUSB',
+        'Get-OfflineDirs', 'Find-OfflineInstaller', 'Install-OfflinePackage', 'Stop-AppPopups', 'Select-DestinazioneUSB', 'Test-IsAppInstalled',
         'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus', 'Get-BitLockerRecovery',
         'Get-SystemHardwareDetails', 'Invoke-PcFacileDiagnostics', 'Install-VisualCRuntime',
         'Update-PannelloStatus', 'Open-PannelloOperatore', 'Set-SplitScreenLayout', 'Get-CredenzialiSalvatePannello',
@@ -237,6 +237,15 @@ Describe 'Stop-AppPopups' {
         $Global:Test = $true
         { Stop-AppPopups -Nome "Spotify" } | Should -Not -Throw
         { Stop-AppPopups -Nome "Zoom" } | Should -Not -Throw
+        { Stop-AppPopups -Nome "7-Zip" } | Should -Not -Throw
+        $Global:Test = $false
+    }
+}
+
+Describe 'Test-IsAppInstalled' {
+    It 'ritorna false in modalita test' {
+        $Global:Test = $true
+        Test-IsAppInstalled -Nome "7-Zip" -WingetId "7zip.7zip" | Should -BeFalse
         $Global:Test = $false
     }
 }

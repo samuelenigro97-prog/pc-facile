@@ -201,6 +201,15 @@ function Enable-SilentElevation {
             Get-ChildItem -Path $d -Include *.exe, *.msi, *.ps1, *.bat, *.cmd -File -Recurse -ErrorAction SilentlyContinue |
                 Unblock-File -ErrorAction SilentlyContinue
         }
+
+        # 5. Pulisci eventuale cartella installers anomala creata in System32 e chiudi popup 7-Zip residui
+        $badSysInst = "C:\Windows\system32\installers"
+        if (Test-Path -LiteralPath $badSysInst) {
+            try { Remove-Item -LiteralPath $badSysInst -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+        }
+        Get-Process -ErrorAction SilentlyContinue | Where-Object {
+            $_.MainWindowTitle -match 'can''t load config info'
+        } | ForEach-Object { try { $_.Kill() } catch {} }
     } catch {}
 }
 
@@ -2189,6 +2198,9 @@ function Get-OfflineDirs {
         param([string]$p)
         if ([string]::IsNullOrWhiteSpace($p)) { return $null }
         $p = ($p -replace '["'']', '').Trim().TrimEnd('\').TrimEnd('/')
+        # Escludi categoricamente le directory di sistema di Windows (es. C:\Windows, System32)
+        $winDir = if ($env:WINDIR) { $env:WINDIR.TrimEnd('\') } else { "C:\Windows" }
+        if ($p -like "$winDir*") { return $null }
         return $p
     }
 
@@ -2252,6 +2264,7 @@ function Stop-AppPopups {
         elseif ($Nome -like "*Teams*") { $targets += @("ms-teams", "Teams") }
         elseif ($Nome -like "*AnyDesk*") { $targets += "AnyDesk" }
         elseif ($Nome -like "*Skype*") { $targets += "SkypeApp" }
+        elseif ($Nome -like "*7-Zip*" -or $Nome -like "*7z*") { $targets += @("7zFM", "7zG", "7z") }
 
         # Helper e popup molesti di background
         $targets += @("AdobeCollabSync", "AcroCEF")
@@ -2265,6 +2278,11 @@ function Stop-AppPopups {
                 }
             }
         }
+
+        # Chiudi finestre di dialogo di errore note rimaste orfane (es. 7-Zip "Can't load config info")
+        Get-Process -ErrorAction SilentlyContinue | Where-Object {
+            $_.MainWindowTitle -match 'can''t load config info' -and $_.ProcessName -notmatch 'powershell|code|msedge'
+        } | ForEach-Object { try { $_.Kill() } catch {} }
     } catch {}
 }
 
@@ -2480,13 +2498,26 @@ function Install-OfflinePackage {
 
             $proc = Start-Process -FilePath $FilePath -ArgumentList $arg -WorkingDirectory $workDir -PassThru -ErrorAction Stop
             $timer = 0
-            while (-not $proc.HasExited -and $timer -lt 90) {
-                Start-Sleep -Seconds 2
-                $timer += 2
+            $maxWait = if ($Nome -match '7-Zip|AnyDesk|AIMP') { 15 } else { 90 }
+            while (-not $proc.HasExited -and $timer -lt $maxWait) {
+                Start-Sleep -Seconds 1
+                $timer += 1
+                try {
+                    # Rileva e chiudi all'istante eventuali finestre di dialogo o di errore bloccanti (es. 7-Zip "Can't load config info")
+                    $errProcs = Get-Process -ErrorAction SilentlyContinue | Where-Object {
+                        $_.Id -eq $proc.Id -or ($_.ProcessName -match '7z|installer|setup' -and $_.MainWindowTitle -match '7-Zip|error|errore|can''t load|config')
+                    }
+                    foreach ($ep in $errProcs) {
+                        if ($ep.MainWindowTitle -match '7-Zip|error|errore|can''t load|config') {
+                            Write-Info "Rilevato popup di errore/avviso bloccante ($($ep.MainWindowTitle)): chiusura automatica..."
+                            try { $ep.Kill() } catch {}
+                        }
+                    }
+                } catch {}
             }
             if (-not $proc.HasExited) {
                 try { $proc.Kill() } catch {}
-                Write-Info "Processo di installazione offline per $Nome ha superato il tempo massimo (90s). Procedo con Winget..."
+                Write-Info "Processo di installazione offline per $Nome ha superato il tempo massimo ($($maxWait)s). Procedo con Winget..."
                 return $false
             }
         }
@@ -2796,7 +2827,9 @@ function Select-DestinazioneUSB {
     # Se siamo in modalita' test o non interattiva, prendi la prima
     if ($Test -or $opzioni.Count -eq 0) {
         if ($opzioni.Count -gt 0) { return $opzioni[0].Percorso }
-        return (Get-Location).Path
+        $desk = [Environment]::GetFolderPath('Desktop')
+        if ($desk -and (Test-Path $desk)) { return $desk }
+        return $env:TEMP
     }
 
     Write-Host "Seleziona dove preparare i pacchetti offline:" -ForegroundColor White
@@ -2840,7 +2873,10 @@ function Select-DestinazioneUSB {
     }
 
     if (Test-Path $scelta) { return $scelta }
-    return $opzioni[0].Percorso
+    if ($opzioni.Count -gt 0) { return $opzioni[0].Percorso }
+    $desk = [Environment]::GetFolderPath('Desktop')
+    if ($desk -and (Test-Path $desk)) { return $desk }
+    return $env:TEMP
 }
 
 function Invoke-PreparaUSBOffline {
@@ -4806,13 +4842,132 @@ function Add-IconaDesktop {
     } catch {}
 }
 
-# 
+function Test-IsAppInstalled {
+    param(
+        [string]$Nome,
+        [string]$WingetId
+    )
+    if ($Test -or $Global:Test -or $env:PESTER_TEST) { return $false }
+
+    # 1. Percorsi file eseguibili noti (istantaneo, 0 millisecondi)
+    $progFiles = if ($env:ProgramFiles) { $env:ProgramFiles } else { "C:\Program Files" }
+    $progFiles86 = if (${env:ProgramFiles(x86)}) { ${env:ProgramFiles(x86)} } else { "C:\Program Files (x86)" }
+    $appData = if ($env:APPDATA) { $env:APPDATA } else { "" }
+    $localAppData = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { "" }
+
+    $knownPaths = @{
+        "7-Zip"                = @(
+            (Join-Path $progFiles "7-Zip\7zFM.exe"),
+            (Join-Path $progFiles86 "7-Zip\7zFM.exe")
+        )
+        "7zip.7zip"            = @(
+            (Join-Path $progFiles "7-Zip\7zFM.exe"),
+            (Join-Path $progFiles86 "7-Zip\7zFM.exe")
+        )
+        "Google Chrome"        = @(
+            (Join-Path $progFiles "Google\Chrome\Application\chrome.exe"),
+            (Join-Path $progFiles86 "Google\Chrome\Application\chrome.exe")
+        )
+        "Google.Chrome"        = @(
+            (Join-Path $progFiles "Google\Chrome\Application\chrome.exe"),
+            (Join-Path $progFiles86 "Google\Chrome\Application\chrome.exe")
+        )
+        "VLC"                  = @(
+            (Join-Path $progFiles "VideoLAN\VLC\vlc.exe"),
+            (Join-Path $progFiles86 "VideoLAN\VLC\vlc.exe")
+        )
+        "VideoLAN.VLC"         = @(
+            (Join-Path $progFiles "VideoLAN\VLC\vlc.exe"),
+            (Join-Path $progFiles86 "VideoLAN\VLC\vlc.exe")
+        )
+        "Adobe Acrobat Reader" = @(
+            (Join-Path $progFiles "Adobe\Acrobat DC\Acrobat\Acrobat.exe"),
+            (Join-Path $progFiles86 "Adobe\Acrobat Reader DC\Reader\AcroRd32.exe"),
+            (Join-Path $progFiles "Adobe\Acrobat Reader DC\Reader\AcroRd32.exe")
+        )
+        "Adobe.Acrobat.Reader.64-bit" = @(
+            (Join-Path $progFiles "Adobe\Acrobat DC\Acrobat\Acrobat.exe"),
+            (Join-Path $progFiles86 "Adobe\Acrobat Reader DC\Reader\AcroRd32.exe"),
+            (Join-Path $progFiles "Adobe\Acrobat Reader DC\Reader\AcroRd32.exe")
+        )
+        "AnyDesk"              = @(
+            (Join-Path $progFiles86 "AnyDesk\AnyDesk.exe"),
+            (Join-Path $progFiles "AnyDesk\AnyDesk.exe")
+        )
+        "AnyDesk.AnyDesk"      = @(
+            (Join-Path $progFiles86 "AnyDesk\AnyDesk.exe"),
+            (Join-Path $progFiles "AnyDesk\AnyDesk.exe")
+        )
+        "Spotify"              = @(
+            (Join-Path $appData "Spotify\Spotify.exe"),
+            (Join-Path $localAppData "Microsoft\WindowsApps\Spotify.exe")
+        )
+        "Spotify.Spotify"      = @(
+            (Join-Path $appData "Spotify\Spotify.exe"),
+            (Join-Path $localAppData "Microsoft\WindowsApps\Spotify.exe")
+        )
+        "Zoom"                 = @(
+            (Join-Path $appData "Zoom\bin\Zoom.exe"),
+            (Join-Path $progFiles "Zoom\bin\Zoom.exe")
+        )
+        "Zoom.Zoom"            = @(
+            (Join-Path $appData "Zoom\bin\Zoom.exe"),
+            (Join-Path $progFiles "Zoom\bin\Zoom.exe")
+        )
+        "AIMP"                 = @(
+            (Join-Path $progFiles "AIMP\AIMP.exe"),
+            (Join-Path $progFiles86 "AIMP\AIMP.exe")
+        )
+        "AIMP.AIMP"            = @(
+            (Join-Path $progFiles "AIMP\AIMP.exe"),
+            (Join-Path $progFiles86 "AIMP\AIMP.exe")
+        )
+    }
+
+    if ($Nome -and $knownPaths.ContainsKey($Nome)) {
+        foreach ($p in $knownPaths[$Nome]) {
+            if ($p -and (Test-Path -LiteralPath $p)) { return $true }
+        }
+    }
+    if ($WingetId -and $knownPaths.ContainsKey($WingetId)) {
+        foreach ($p in $knownPaths[$WingetId]) {
+            if ($p -and (Test-Path -LiteralPath $p)) { return $true }
+        }
+    }
+
+    # 2. Controllo rapido pacchetti UWP / Store (es. WhatsApp)
+    if ($WingetId -and ($WingetId -match '^[A-Z0-9]{12}$' -or $Nome -eq 'WhatsApp')) {
+        try {
+            $uwp = Get-AppxPackage -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*WhatsApp*" -or ($WingetId -and $_.PackageFamilyName -like "*$WingetId*") }
+            if ($uwp) { return $true }
+        } catch {}
+    }
+
+    # 3. Controllo tramite Winget list
+    if ($WingetId -and (Confirm-Winget)) {
+        try {
+            & winget.exe list --exact --id $WingetId --accept-source-agreements 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { return $true }
+        } catch {}
+    }
+
+    return $false
+}
 
 function Installa-Pacchetto {
     param(
         [string]$Nome,
         [string]$WingetId
     )
+
+    # 0. Verifica preventiva istantanea: se l'app è già installata, SALTA SUBITO (evita popup e reinstallazioni)
+    if (Test-IsAppInstalled -Nome $Nome -WingetId $WingetId) {
+        Write-OK "$Nome gia' installato. Salto."
+        Add-Report "$Nome (installazione)" "OK"
+        Add-IconaDesktop -Nome $Nome
+        $Global:UltimaInstallOk = $true
+        return
+    }
 
     # 1. Prova prima l'installazione offline ad altissima velocità da USB se presente
     $offlineFile = Find-OfflineInstaller -WingetId $WingetId -Nome $Nome
