@@ -24,12 +24,13 @@ fi
 # ---- Modalita': -Test / -Diagnostica / -Veloce / -Auto -------------------------
 MODO="MENU"      # MENU | CONFIGURA | VELOCE | DIAGNOSTICA | TEST | AUTOMATICA
 MODO_TEST=false
+MODO_AUTOMATICO=false
 for arg in "$@"; do
   case "$arg" in
     --test|-t)                   MODO_TEST=true; [[ "$MODO" == "MENU" ]] && MODO="TEST" ;;
     --diagnostica|-d)            MODO="DIAGNOSTICA" ;;
     --veloce|-v)                 MODO="VELOCE" ;;
-    --auto|--automatica|--ia|-a) MODO="AUTOMATICA" ;;
+    --auto|--automatica|--ia|-a) MODO="AUTOMATICA"; MODO_AUTOMATICO=true ;;
   esac
 done
 
@@ -685,6 +686,34 @@ except Exception:
     return 1
 }
 
+attendi_credenziali_mac() {
+    local timeout_s="${1:-120}"
+    if $MODO_TEST; then return 0; fi
+    if leggi_credenziali_salvate_mac; then return 0; fi
+
+    titolo "IN ATTESA DATI DAL PANNELLO OPERATORE (A SINISTRA)"
+    print -r -- "${C_CYAN}  -> Compila Cognome, Nome, Telefono e spunta i servizi nel Pannello Web a SINISTRA.${C_RST}"
+    print -r -- "${C_OK}  -> Clicca sul pulsante verde '🚀 AVVIA SETUP AUTOMATICO (Zero Clic)' per partire.${C_RST}"
+    print -r -- "${C_DIM}     (Oppure premi INVIO in questo terminale per usare i valori correnti)${C_RST}"
+    print -r -- ""
+
+    local start_time=$(date +%s)
+    while (( $(date +%s) - start_time < timeout_s )); do
+        if leggi_credenziali_salvate_mac; then
+            ok "Dati cliente e servizi ricevuti con successo dal Pannello Web!"
+            [[ -n "$NOME_CLIENTE" ]] && print -r -- "  ${C_CYAN}- Cliente :${C_RST} $NOME_CLIENTE"
+            [[ -n "$TELEFONO_CLIENTE" ]] && print -r -- "  ${C_CYAN}- Telefono:${C_RST} $TELEFONO_CLIENTE"
+            return 0
+        fi
+        if read -t 0.5 -r tasto 2>/dev/null; then
+            info "Avvio manuale confermato da terminale."
+            return 0
+        fi
+        sleep 0.5
+    done
+    return 1
+}
+
 invoke_auto_signup_mac() {
     local nome_c="${1:-Utente}"
     leggi_credenziali_salvate_mac
@@ -703,7 +732,7 @@ invoke_auto_signup_mac() {
     if [[ -z "$nome_c" || "$nome_c" == "Utente" ]]; then
         if [[ -n "$NOME_CLIENTE" && "$NOME_CLIENTE" != "Utente" ]]; then
             nome_c="$NOME_CLIENTE"
-        else
+        elif ! $MODO_AUTOMATICO; then
             chiedi_sempre "Nome e Cognome del Cliente (es. Mario Rossi):"
             [[ -n "$REPLY" ]] && nome_c="$REPLY"
             NOME_CLIENTE="$nome_c"
@@ -889,7 +918,7 @@ invoke_ai_agent_mac() {
 # MENU PRINCIPALE
 # =============================================================================
 if [[ "$MODO" == "AUTOMATICA" ]]; then
-    invoke_auto_signup_mac "Utente"
+    MODO_AUTOMATICO=true
     MODO="CONFIGURA"
     RUN_REALE=true
 fi
@@ -913,7 +942,7 @@ if [[ "$MODO" == "MENU" ]]; then
   print -n -- "   Scelta [1-4 / Q] (default = 1): "; read -r t
   case "${(U)t}" in
     2)
-      invoke_auto_signup_mac "Utente"
+      MODO_AUTOMATICO=true
       MODO="CONFIGURA"
       RUN_REALE=true
       ;;
@@ -965,6 +994,11 @@ CRED_PASSWORD="Utente123!"
 
 $RUN_REALE && open_pannello_mac "$NOME_CLIENTE" "$CRED_ACCOUNT" "$CRED_PASSWORD"
 
+if [[ "$MODO_AUTOMATICO" == true ]]; then
+    $RUN_REALE && attendi_credenziali_mac
+    invoke_auto_signup_mac "${NOME_CLIENTE:-Utente}"
+fi
+
 # =============================================================================
 # PASSO 1: LINGUA & REGIONE ITALIANA
 # =============================================================================
@@ -991,10 +1025,12 @@ if $RUN_REALE; then
     sudo systemsetup -setusingnetworktime on >/dev/null 2>&1
     sudo systemsetup -setnetworktimeserver time.apple.com >/dev/null 2>&1
 fi
-chiedi_sempre "Nome del cliente / Mac (INVIO per default 'Utente'):"; nome_in="$REPLY"
-[[ -n "$nome_in" ]] && NOME_CLIENTE="$nome_in"
-CRED_ACCOUNT="$(email_cliente "$NOME_CLIENTE")"
-CRED_PASSWORD="$(password_cliente "$NOME_CLIENTE")"
+if [[ -z "$NOME_CLIENTE" || "$NOME_CLIENTE" == "Utente" ]] && ! $MODO_AUTOMATICO && ! $MODO_TEST; then
+    chiedi_sempre "Nome del cliente / Mac (INVIO per default 'Utente'):"; nome_in="$REPLY"
+    [[ -n "$nome_in" ]] && NOME_CLIENTE="$nome_in"
+fi
+[[ -z "$CRED_ACCOUNT" || "$CRED_ACCOUNT" == "utente@icloud.com" ]] && CRED_ACCOUNT="$(email_cliente "$NOME_CLIENTE")"
+[[ -z "$CRED_PASSWORD" || "$CRED_PASSWORD" == "Utente123!" ]] && CRED_PASSWORD="$(password_cliente "$NOME_CLIENTE")"
 
 if $RUN_REALE && [[ -n "$NOME_CLIENTE" ]]; then
     local host="${NOME_CLIENTE//[^A-Za-z0-9-]/}"

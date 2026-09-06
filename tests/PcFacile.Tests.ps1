@@ -25,7 +25,7 @@ BeforeAll {
         'Update-PannelloStatus', 'Open-PannelloOperatore', 'Set-SplitScreenLayout', 'Get-CredenzialiSalvatePannello',
         'Enable-SilentElevation', 'Restore-SilentElevation',
         'New-WlanProfileXml', 'Connect-AutoWiFi', 'Save-StoreWiFiProfile',
-        'Invoke-BrowserAutoSignup'
+        'Invoke-BrowserAutoSignup', 'Wait-CredenzialiPannello'
     )
     $allFns = $ast.FindAll({
         param($n)
@@ -426,4 +426,12 @@ Describe 'Invoke-BrowserAutoSignup' {
         $res.ServiziTestati | Should -Contain 'Proton'
     }
 }
+
+Describe 'Wait-CredenzialiPannello' {
+    It 'completa immediatamente in modalita test' {
+        $res = Wait-CredenzialiPannello -Test
+        $res | Should -BeTrue
+    }
+}
+
 

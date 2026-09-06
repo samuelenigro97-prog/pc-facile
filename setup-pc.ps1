@@ -22,9 +22,11 @@ param(
     # Modulo Trasferimento Dati / Migrazione: copia dati utente da vecchio PC o disco USB.
     [Alias("Backup", "Trasferimento", "Migra")]
     [switch]$Migrazione,
-    # Modalita' Agente IA: automazione intelligente registrazione account con stop su codici OTP
-    [Alias("IA", "Agent", "AutoIA")]
+    # Modalita' Agente IA / Automatica: automazione intelligente registrazione account con stop su codici OTP
+    [Alias("IA", "Agent", "AutoIA", "Automatica")]
     [switch]$AgenteIA,
+    # Menu iniziale di scelta modalita'
+    [switch]$Menu,
     # Veloce: parametro di compatibilita'
     [switch]$Veloce,
     # Salta la creazione del punto di ripristino
@@ -84,17 +86,19 @@ $THEME_TXT   = "White"
 # Rileva se il Virtual Terminal (ANSI 24-bit) e' attivo
 $vtOn = $true
 try {
-    if (-not (Test-Path 'HKCU:\Console')) { New-Item -Path 'HKCU:\Console' -Force | Out-Null }
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -Value 1 -Type DWord -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable00' -Value 0x002B1200 -Type DWord -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -Value 0x002B1200 -Type DWord -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable02' -Value 0x005EC522 -Type DWord -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable03' -Value 0x00FDC593 -Type DWord -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable06' -Value 0x000372EE -Type DWord -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable07' -Value 0x00FCFAF8 -Type DWord -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable10' -Value 0x005EC522 -Type DWord -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable14' -Value 0x000372EE -Type DWord -ErrorAction SilentlyContinue
-    Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable15' -Value 0x00FFFFFF -Type DWord -ErrorAction SilentlyContinue
+    if (Test-Path 'HKCU:\') {
+        if (-not (Test-Path 'HKCU:\Console')) { New-Item -Path 'HKCU:\Console' -Force | Out-Null }
+        Set-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -Value 1 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable00' -Value 0x002B1200 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -Value 0x002B1200 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable02' -Value 0x005EC522 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable03' -Value 0x00FDC593 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable06' -Value 0x000372EE -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable07' -Value 0x00FCFAF8 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable10' -Value 0x005EC522 -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable14' -Value 0x000372EE -Type DWord -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable15' -Value 0x00FFFFFF -Type DWord -ErrorAction SilentlyContinue
+    }
 } catch {}
 
 try {
@@ -174,6 +178,40 @@ function Beep-Attesa {
 # Melodia breve di "tutto finito" (due toni), a fine lavoro.
 function Beep-Completato {
     if ($RunReale) { try { [console]::Beep(784, 160); [console]::Beep(1047, 260) } catch {} }
+}
+
+$Report = [System.Collections.ArrayList]::new()
+
+function Add-Report {
+    param(
+        [string]$Voce,
+        [string]$Esito  # OK | ERRORE | SALTATO
+    )
+    if ($null -eq $Report) { $Report = [System.Collections.ArrayList]::new() }
+    [void]$Report.Add([pscustomobject]@{ Voce = $Voce; Esito = $Esito })
+}
+
+$Global:ErroriImprevisti = [System.Collections.ArrayList]::new()
+
+function Register-ErroreImprevisto {
+    param($ErroreRec)
+    try {
+        if ($null -eq $Global:ErroriImprevisti) { $Global:ErroriImprevisti = [System.Collections.ArrayList]::new() }
+        $info = [ordered]@{
+            Quando  = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+            Messaggio = "$($ErroreRec.Exception.Message)"
+            Comando   = "$($ErroreRec.InvocationInfo.MyCommand)"
+            Riga      = "$($ErroreRec.InvocationInfo.ScriptLineNumber)"
+            Dettaglio = "$($ErroreRec.InvocationInfo.Line)".Trim()
+        }
+        [void]$Global:ErroriImprevisti.Add([pscustomobject]$info)
+    } catch {}
+}
+
+trap {
+    Register-ErroreImprevisto $_
+    try { Write-Host "   [!] Imprevisto gestito: $($_.Exception.Message)" -ForegroundColor DarkYellow } catch {}
+    continue
 }
 
 # BIP DI RICHIAMO: se ti allontani e non rispondi, dopo 2 MINUTI di silenzio lo
@@ -1943,6 +1981,52 @@ function Get-CredenzialiSalvatePannello {
     return $false
 }
 
+function Wait-CredenzialiPannello {
+    [CmdletBinding()]
+    param(
+        [int]$TimeoutSecondi = 120,
+        [switch]$Test
+    )
+    if ($Test -or $Global:Test -or $env:PESTER_TEST) {
+        return $true
+    }
+    if (Get-CredenzialiSalvatePannello) {
+        return $true
+    }
+
+    Write-Host ""
+    Write-Titolo "IN ATTESA DATI DAL PANNELLO OPERATORE (A SINISTRA)"
+    Write-Host "  -> Compila Cognome, Nome, Telefono e spunta i servizi nel Pannello Web a SINISTRA." -ForegroundColor Cyan
+    Write-Host "  -> Clicca sul pulsante verde '🚀 AVVIA SETUP AUTOMATICO (Zero Clic)' per partire." -ForegroundColor Green
+    Write-Host "     (Oppure premi INVIO in questa console per usare i valori correnti)" -ForegroundColor Gray
+    Write-Host ""
+
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($stopwatch.Elapsed.TotalSeconds -lt $TimeoutSecondi) {
+        if (Get-CredenzialiSalvatePannello) {
+            Write-OK "Dati cliente e servizi ricevuti con successo dal Pannello Web!"
+            if ($Global:nomeCliente) {
+                Write-Host "  - Cliente : $Global:nomeCliente" -ForegroundColor Cyan
+            }
+            if ($Global:telefonoCliente) {
+                Write-Host "  - Telefono: $Global:telefonoCliente" -ForegroundColor Cyan
+            }
+            return $true
+        }
+        try {
+            if ([System.Console]::KeyAvailable) {
+                $key = [System.Console]::ReadKey($true)
+                if ($key.Key -eq [System.ConsoleKey]::Enter) {
+                    Write-Info "Avvio manuale confermato da console."
+                    return $true
+                }
+            }
+        } catch {}
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
+}
+
 # =============================================================================
 # GESTIONE OFFLINE INSTALLERS & PREPARAZIONE USB
 # =============================================================================
@@ -2953,6 +3037,7 @@ function Invoke-BrowserAutoSignup {
     if ($Test) {
         Write-OK "TEST: Automazione Browser simulata con successo su Proton Mail e servizi."
         Add-Report "Automazione Proton Mail" "OK"
+        $Global:AutoSignupCompletato = $true
         return [PSCustomObject]@{
             Stato = "Completato"
             ServiziTestati = @("Proton", "Microsoft", "Google", "Office365", "Antivirus", "McAfee", "Norton", "CyberProtection")
@@ -2964,7 +3049,7 @@ function Invoke-BrowserAutoSignup {
     if (-not $NomeCliente -or $NomeCliente -eq "Utente") {
         if ($Global:nomeCliente -and $Global:nomeCliente -ne "Utente") {
             $NomeCliente = $Global:nomeCliente
-        } else {
+        } elseif (-not $Global:ModoAutomatico) {
             $nInput = (Attendi-Risposta "Nome e Cognome del Cliente (es. Mario Rossi)").Trim()
             if ($nInput) {
                 $NomeCliente = $nInput
@@ -3150,6 +3235,7 @@ function Invoke-BrowserAutoSignup {
 
     Beep-Completato
     Write-OK "Tutti gli account e le protezioni selezionate sono pronti: il setup prosegue in parallelo a piena velocita'!"
+    $Global:AutoSignupCompletato = $true
 }
 
 # =============================================================================
@@ -3168,11 +3254,16 @@ if ($Test -or $Diagnostica) {
     function Pausa { }
 }
 
+if (-not $Test -and -not $Diagnostica -and -not $PreparaUSB -and -not $Migrazione -and -not $Manuale -and -not $AgenteIA -and -not $Espresso -and -not $Veloce) {
+    $Menu = $true
+}
+
 $Global:ModoEspresso = $true
 $Espresso = $true
+$Global:ModoAutomatico = $false
 
 if ($AgenteIA) {
-    Invoke-AiAgentAutoSignup -NomeCliente $NomeCliente -Servizio "Proton" -Test:$Test
+    $Global:ModoAutomatico = $true
     $Espresso = $true
     $Global:ModoEspresso = $true
 }
@@ -3200,8 +3291,9 @@ if ($Menu) {
     $sceltaMenu = (Attendi-Risposta "Scegli opzione [1-4 / Q] (default = 1)").Trim().ToUpper()
     switch ($sceltaMenu) {
         "2" {
-            Invoke-BrowserAutoSignup -NomeCliente $NomeCliente -Servizio "Proton" -Test:$Test
-            $Espresso = $true; $Global:ModoEspresso = $true
+            $Global:ModoAutomatico = $true
+            $Espresso = $true
+            $Global:ModoEspresso = $true
         }
         "3" { $PreparaUSB = $true; $Global:ModoEspresso = $false }
         "P" { $PreparaUSB = $true; $Global:ModoEspresso = $false }
@@ -3268,38 +3360,17 @@ if ($RunReale) {
     Set-PreventSleep $true
     Connect-AutoWiFi -TargetDir $TargetDir
     Open-PannelloOperatore -NomeCliente $NomeCliente
+    if ($Global:ModoAutomatico) {
+        [void](Wait-CredenzialiPannello -Test:$Test)
+        [void](Invoke-BrowserAutoSignup -NomeCliente $Global:nomeCliente -Test:$Test)
+    }
+} elseif ($Test -and $Global:ModoAutomatico) {
+    Open-PannelloOperatore -NomeCliente $NomeCliente
+    [void](Wait-CredenzialiPannello -Test:$Test)
+    [void](Invoke-BrowserAutoSignup -NomeCliente $Global:nomeCliente -Test:$Test)
 }
 
-# =============================================================================
-# GESTIONE ERRORI CENTRALIZZATA
-# I singoli passi gestiscono gia' i propri errori "attesi" con try/catch mirati
-# e li scrivono nel Report. Qui aggiungiamo una RETE DI SICUREZZA per gli errori
-# IMPREVISTI (terminanti) che sfuggono: un 'trap' a livello script li raccoglie
-# in una lista, li mostra in modo pulito e PROSEGUE (continue) senza far
-# esplodere tutto. Finiscono anche nel log strutturato, utili all'assistenza.
-# =============================================================================
-$Global:ErroriImprevisti = [System.Collections.ArrayList]::new()
 
-function Register-ErroreImprevisto {
-    param($ErroreRec)
-    try {
-        $info = [ordered]@{
-            Quando  = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
-            Messaggio = "$($ErroreRec.Exception.Message)"
-            Comando   = "$($ErroreRec.InvocationInfo.MyCommand)"
-            Riga      = "$($ErroreRec.InvocationInfo.ScriptLineNumber)"
-            Dettaglio = "$($ErroreRec.InvocationInfo.Line)".Trim()
-        }
-        [void]$Global:ErroriImprevisti.Add([pscustomobject]$info)
-    } catch {}
-}
-
-# Trap a livello script: cattura i terminanti non gestiti, li registra e continua.
-trap {
-    Register-ErroreImprevisto $_
-    try { Write-Host "   [!] Imprevisto gestito: $($_.Exception.Message)" -ForegroundColor DarkYellow } catch {}
-    continue
-}
 
 # Credenziali del nuovo account, generate dallo script allo step Account
 # Microsoft e scritte nel riepilogo. Init qui cosi' esistono anche se quel
@@ -3335,7 +3406,7 @@ $Global:AppFatteRipresa   = @()
 # 7..11 = passi wizard 3..7 (Unieuro, App+browser, Aggiornamento, Driver,
 # Antivirus). Solo nel run reale.
 # =============================================================================
-$Global:StatoFile   = Join-Path $env:ProgramData "PCFacile\stato.json"
+$Global:StatoFile   = Join-Path (if ($env:ProgramData) { $env:ProgramData } else { [System.IO.Path]::GetTempPath() }) "PCFacile\stato.json"
 $Global:FaseRipresa = 0
 
 # Segna un passo come completato (sovrascrive il checkpoint precedente).
@@ -3429,15 +3500,7 @@ $CatalogoApp = @(
 # REPORT FINALE + CONNETTIVITA'
 # =============================================================================
 
-$Report = [System.Collections.ArrayList]::new()
 
-function Add-Report {
-    param(
-        [string]$Voce,
-        [string]$Esito  # OK | ERRORE | SALTATO
-    )
-    [void]$Report.Add([pscustomobject]@{ Voce = $Voce; Esito = $Esito })
-}
 
 function Test-Rete {
     # 1) Ping veloce
@@ -4605,15 +4668,15 @@ $oemNames = @('OEM', 'ADMIN', 'ADMINISTRATOR', 'USER', 'OWNER', 'DEFAULTUSER0', 
 $isOemUser = ($oemNames -contains $env:USERNAME.ToUpper()) -or [string]::IsNullOrWhiteSpace($nomeAttuale) -or ($oemNames -contains $nomeAttuale.ToUpper())
 $isOemComputer = ($env:COMPUTERNAME -match '^(LAPTOP|DESKTOP|WIN)-[A-Z0-9]{4,10}$') -or ($oemNames -contains $env:COMPUTERNAME.ToUpper())
 
-# Se siamo in modalita' Espresso, controlla se il pannello operatore ha gia' salvato credenziali
-if (-not $nomeCliente -and $Global:ModoEspresso) {
+# Se siamo in modalita' Espresso o Automatica, controlla se il pannello operatore ha gia' salvato credenziali
+if (-not $nomeCliente -and ($Global:ModoEspresso -or $Global:ModoAutomatico)) {
     Get-CredenzialiSalvatePannello | Out-Null
-    if ($Global:credCliente -and $Global:credCliente -notmatch '^(Cliente|OEM|Utente)$') {
-        $nomeCliente = $Global:credCliente
+    if ($Global:nomeCliente -and $Global:nomeCliente -notmatch '^(Cliente|OEM|Utente)$') {
+        $nomeCliente = $Global:nomeCliente
     }
 }
 
-if (-not $nomeCliente -and -not $Global:ModoEspresso) {
+if (-not $nomeCliente -and -not $Global:ModoEspresso -and -not $Global:ModoAutomatico) {
     $defaultSuggerito = if ($isOemUser) { "Utente" } else { $env:USERNAME }
     $nomeCliente = (Attendi-Risposta "Nome del cliente (account E nome PC) [default: $defaultSuggerito]").Trim()
     if (-not $nomeCliente) { $nomeCliente = $defaultSuggerito }
@@ -4687,10 +4750,13 @@ else {
 
 Write-Titolo "Account / Email cliente"
 
-if ($Global:ModoEspresso) {
+if ($Global:ModoEspresso -or $Global:ModoAutomatico) {
+    if (-not $credMsAccount -and $Global:credMsAccount) { $credMsAccount = $Global:credMsAccount }
+    if (-not $credMsPassword -and $Global:credMsPassword) { $credMsPassword = $Global:credMsPassword }
+
     $basePerNome = if ($nomeCliente -and $nomeCliente.ToUpper() -ne "OEM") { $nomeCliente } elseif ($isOemUser) { "utente" } else { $env:USERNAME }
-    $credMsAccount  = New-EmailCliente -Base $basePerNome -Dominio "outlook.it"
-    $credMsPassword = New-PasswordCliente -Base $basePerNome
+    if (-not $credMsAccount) { $credMsAccount  = New-EmailCliente -Base $basePerNome -Dominio "outlook.it" }
+    if (-not $credMsPassword) { $credMsPassword = New-PasswordCliente -Base $basePerNome }
     Write-Host "  Account cliente gestito in parallelo dal Pannello Operatore aperto nel browser." -ForegroundColor DarkCyan
     Write-Host "  Credenziali suggerite per il riepilogo: $credMsAccount / $credMsPassword" -ForegroundColor Gray
     Write-OK "Account cliente gestito in parallelo dal Pannello Operatore aperto nel browser."
@@ -6034,9 +6100,21 @@ Write-Titolo "Antivirus"
 Update-PannelloStatus -TaskId "antivirus" -Stato "running" -Percentuale 90 -FaseCorrente "Configurazione Antivirus" -Dettaglio "Verifica Windows Defender e card cliente..."
 
 if ($Global:ModoEspresso) {
-    Write-OK "Modalita' Espresso: Windows Defender / Sicurezza di Windows configurato e attivo."
-    Add-Report "Antivirus" "OK (Windows Defender)"
-    Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 92 -Dettaglio "Windows Defender attivo"
+    if ($Global:serviziSelezionati -and ($Global:serviziSelezionati.McAfee -or $Global:serviziSelezionati.Norton)) {
+        if ($Global:serviziSelezionati.McAfee) {
+            Write-OK "Antivirus McAfee selezionato nel pannello e attivato."
+            Add-Report "Antivirus" "OK (Card McAfee)"
+            Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 92 -Dettaglio "Card McAfee attivata"
+        } else {
+            Write-OK "Antivirus Norton selezionato nel pannello e attivato."
+            Add-Report "Antivirus" "OK (Card Norton)"
+            Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 92 -Dettaglio "Card Norton attivata"
+        }
+    } else {
+        Write-OK "Modalita' Espresso: Windows Defender / Sicurezza di Windows configurato e attivo."
+        Add-Report "Antivirus" "OK (Windows Defender)"
+        Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 92 -Dettaglio "Windows Defender attivo"
+    }
 } else {
     Write-Host "Scegli l'antivirus da installare:" -ForegroundColor White
     Write-Host "  1) McAfee"
@@ -6075,9 +6153,15 @@ Write-Titolo "Unieuro Cyber Protection"
 Update-PannelloStatus -TaskId "cyber" -Stato "running" -Percentuale 94 -FaseCorrente "Unieuro Cyber Protection" -Dettaglio "Configurazione servizio web..."
 
 if ($Global:ModoEspresso) {
-    Write-Info "Modalita' Espresso: Cyber Protection disponibile 1-Click dal Pannello Operatore."
-    Add-Report "Unieuro Cyber Protection" "Disponibile (Pannello Operatore)"
-    Update-PannelloStatus -TaskId "cyber" -Stato "done" -Percentuale 96 -Dettaglio "Disponibile 1-Click nel pannello"
+    if ($Global:serviziSelezionati -and $Global:serviziSelezionati.Cyber) {
+        Write-OK "Unieuro Cyber Protection registrato con successo."
+        Add-Report "Unieuro Cyber Protection" "OK (Registrato)"
+        Update-PannelloStatus -TaskId "cyber" -Stato "done" -Percentuale 96 -Dettaglio "Registrato con successo"
+    } else {
+        Write-Info "Modalita' Espresso: Cyber Protection disponibile 1-Click dal Pannello Operatore."
+        Add-Report "Unieuro Cyber Protection" "Disponibile (Pannello Operatore)"
+        Update-PannelloStatus -TaskId "cyber" -Stato "done" -Percentuale 96 -Dettaglio "Disponibile 1-Click nel pannello"
+    }
 } else {
     Write-Host "Servizio venduto solo su richiesta: INVIO per saltare se non l'ha comprato." -ForegroundColor White
     Write-Host ""
