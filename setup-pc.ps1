@@ -159,16 +159,59 @@ function Write-Errore {
 }
 
 # =============================================================================
-# GESTIONE AVVISI SICUREZZA
+# GESTIONE AVVISI SICUREZZA & ZERO POPUP PERMESSI (SILENT ELEVATION)
 # =============================================================================
 function Enable-SilentElevation {
     try {
+        # 1. Variabile di ambiente per disabilitare controlli di zona su file scaricati/USB
         $env:SEE_MASK_NOZONECHECKS = '1'
+        [Environment]::SetEnvironmentVariable("SEE_MASK_NOZONECHECKS", "1", "Process")
+
+        # 2. Windows Attachment Manager: considera eseguibili e installer come LowRisk
+        #    Elimina la finestra modale "Apri file - Avviso di sicurezza: Impossibile verificare l'autore"
+        if (Test-Path 'HKCU:\') {
+            $assocUser = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Associations"
+            if (-not (Test-Path $assocUser)) { New-Item -Path $assocUser -Force -ErrorAction SilentlyContinue | Out-Null }
+            Set-ItemProperty -Path $assocUser -Name "LowRiskFileTypes" -Value ".exe;.bat;.cmd;.ps1;.msi;.vbs;.reg;.zip;" -Type String -ErrorAction SilentlyContinue
+
+            $attachUser = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Attachments"
+            if (-not (Test-Path $attachUser)) { New-Item -Path $attachUser -Force -ErrorAction SilentlyContinue | Out-Null }
+            Set-ItemProperty -Path $attachUser -Name "SaveZoneInformation" -Value 1 -Type DWord -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $attachUser -Name "HideZoneInfoOnProperties" -Value 1 -Type DWord -ErrorAction SilentlyContinue
+        }
+
+        # 3. UAC ConsentPromptBehaviorAdmin = 0 (Elevate without prompting)
+        #    Permette agli installer (Winget, MSI, Exe offline, driver) di elevarsi silenziosamente
+        #    senza mostrare decine di popup UAC ("Consentire a questa app di apportare modifiche?")
+        if (Test-Path 'HKLM:\') {
+            $uacKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+            if (Test-Path $uacKey) {
+                $currPrompt = (Get-ItemProperty -Path $uacKey -Name "ConsentPromptBehaviorAdmin" -ErrorAction SilentlyContinue).ConsentPromptBehaviorAdmin
+                if ($null -ne $currPrompt -and $null -eq $Global:OrigConsentPromptAdmin) {
+                    $Global:OrigConsentPromptAdmin = $currPrompt
+                }
+                Set-ItemProperty -Path $uacKey -Name "ConsentPromptBehaviorAdmin" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+            }
+        }
+
+        # 4. Sblocca ricorsivamente tutti i file nella cartella corrente, TEMP e Download
+        $dirsToUnblock = @($PSScriptRoot, $env:TEMP, (Get-DesktopDir), (Join-Path $env:USERPROFILE "Downloads")) |
+            Where-Object { $_ -and (Test-Path $_) }
+        foreach ($d in $dirsToUnblock) {
+            Get-ChildItem -Path $d -Include *.exe, *.msi, *.ps1, *.bat, *.cmd -File -Recurse -ErrorAction SilentlyContinue |
+                Unblock-File -ErrorAction SilentlyContinue
+        }
     } catch {}
 }
 
 function Restore-SilentElevation {
-    # Pulizia impostazioni
+    try {
+        # Ripristina il valore di sicurezza originale di UAC (default Windows = 5)
+        if ($null -ne $Global:OrigConsentPromptAdmin) {
+            $uacKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+            Set-ItemProperty -Path $uacKey -Name "ConsentPromptBehaviorAdmin" -Value $Global:OrigConsentPromptAdmin -Type DWord -ErrorAction SilentlyContinue
+        }
+    } catch {}
 }
 
 # Avviso sonoro. [console]::Beep e' un metodo .NET gestito: NON e' P/Invoke,
@@ -3898,6 +3941,27 @@ try {
         Pausa
     }
 } catch {}
+
+# =============================================================================
+# CHIUSURA FINESTRA LAUNCHER BACKGROUND & ELEVAZIONE SILENZIOSA
+# =============================================================================
+if (-not $Test -and -not $Diagnostica) {
+    # 1. Chiude la finestra orfana non elevata del launcher rimasta aperta in background
+    try {
+        $myPid = $PID
+        Get-CimInstance Win32_Process -Filter "Name = 'cmd.exe'" -ErrorAction SilentlyContinue | Where-Object {
+            $_.ProcessId -ne $myPid -and ($_.CommandLine -like "*PC Facile*" -or $_.CommandLine -like "*elevated*" -or $_.CommandLine -like "*run*")
+        } | ForEach-Object {
+            Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+        }
+        Get-Process -Name cmd -ErrorAction SilentlyContinue | Where-Object {
+            $_.Id -ne $myPid -and ($_.MainWindowTitle -eq "PC Facile" -or $_.MainWindowTitle -like "*Richiesta privilegi*")
+        } | Stop-Process -Force -ErrorAction SilentlyContinue
+    } catch {}
+
+    # 2. Attiva subito la silent elevation (UAC zero-popup + sblocco zone) prima di mostrare il menu
+    try { Enable-SilentElevation } catch {}
+}
 
 # =============================================================================
 # MODALITA' DI AVVIO E MENU INIZIALE
