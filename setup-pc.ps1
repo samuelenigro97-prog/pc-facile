@@ -1009,7 +1009,15 @@ public class WinSplit {
             $hConsole = [IntPtr]::Zero
             try { $hConsole = [WinSplit]::GetConsoleWindow() } catch {}
             if (-not $hConsole -or $hConsole -eq [IntPtr]::Zero) {
-                try { $hConsole = (Get-Process -Id $PID).MainWindowHandle } catch {}
+                try {
+                    $curr = Get-CimInstance Win32_Process -Filter "ProcessId = $PID" -ErrorAction SilentlyContinue
+                    if ($curr -and $curr.ParentProcessId) {
+                        $parentProc = Get-Process -Id $curr.ParentProcessId -ErrorAction SilentlyContinue
+                        if ($parentProc -and $parentProc.MainWindowHandle -ne [IntPtr]::Zero) {
+                            $hConsole = $parentProc.MainWindowHandle
+                        }
+                    }
+                } catch {}
             }
             if ($hConsole -and $hConsole -ne [IntPtr]::Zero) {
                 try {
@@ -1024,9 +1032,11 @@ public class WinSplit {
 
         # 2. Avvia Edge a SINISTRA (X = 0, Y = 0, W = halfW, H = workH)
         $edgeCandidates = @(
-            "$env:ProgramFiles (x86)\Microsoft\Edge\Application\msedge.exe",
+            "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
             "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
-            (Join-Path $env:LOCALAPPDATA "Microsoft\Edge\Application\msedge.exe")
+            (Join-Path $env:LOCALAPPDATA "Microsoft\Edge\Application\msedge.exe"),
+            "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
         )
         $edgePath = ""
         foreach ($cand in $edgeCandidates) {
@@ -1047,9 +1057,21 @@ public class WinSplit {
 
         if ($edgePath) {
             $edgeArgs = "--new-window --window-position=0,0 --window-size=$halfW,$workH `"$uriTarget`""
-            Start-Process -FilePath $edgePath -ArgumentList $edgeArgs -ErrorAction SilentlyContinue
+            $edgeProc = Start-Process -FilePath $edgePath -ArgumentList $edgeArgs -PassThru -ErrorAction SilentlyContinue
+            for ($i = 0; $i -lt 5; $i++) {
+                Start-Sleep -Milliseconds 200
+                $edgeWindows = Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero }
+                foreach ($ew in $edgeWindows) {
+                    if ($ew.MainWindowTitle -like "*Unieuro*" -or $ew.MainWindowTitle -like "*Pannello*" -or ($edgeProc -and $ew.Id -eq $edgeProc.Id)) {
+                        [WinSplit]::ShowWindow($ew.MainWindowHandle, 9)
+                        [WinSplit]::MoveWindow($ew.MainWindowHandle, 0, 0, $halfW, $workH, $true) | Out-Null
+                        [WinSplit]::SetWindowPos($ew.MainWindowHandle, [IntPtr]::Zero, 0, 0, $halfW, $workH, 0x0040) | Out-Null
+                        break
+                    }
+                }
+            }
         } else {
-            Start-Process -FilePath $uriTarget -ErrorAction SilentlyContinue
+            Start-Process -FilePath $HtmlPath -ErrorAction SilentlyContinue
         }
     } catch {
         try { Start-Process -FilePath $HtmlPath -ErrorAction SilentlyContinue } catch {}
@@ -1115,12 +1137,36 @@ function Update-PannelloStatus {
     } catch {}
 }
 
+function Start-LocalCredServer {
+    if ($Test -or $Global:Test -or $env:PESTER_TEST) { return }
+    try {
+        if ($Global:CredHttpListener -and $Global:CredHttpListener.IsListening) { return }
+        $listener = New-Object System.Net.HttpListener
+        $listener.Prefixes.Add("http://127.0.0.1:8899/")
+        $listener.Start()
+        $Global:CredHttpListener = $listener
+        $Global:CredHttpAsyncResult = $listener.BeginGetContext($null, $null)
+    } catch {}
+}
+
+function Stop-LocalCredServer {
+    try {
+        if ($Global:CredHttpListener) {
+            $Global:CredHttpListener.Stop()
+            $Global:CredHttpListener.Close()
+            $Global:CredHttpListener = $null
+            $Global:CredHttpAsyncResult = $null
+        }
+    } catch {}
+}
+
 function Open-PannelloOperatore {
     param(
         [string]$NomeCliente = "",
         [string]$Email = "",
         [string]$Password = ""
     )
+    Start-LocalCredServer
     $oemNames = @('OEM', 'ADMIN', 'ADMINISTRATOR', 'USER', 'OWNER', 'DEFAULTUSER0', 'PC', 'LAPTOP', 'DESKTOP')
     if ($NomeCliente -and ($oemNames -contains $NomeCliente.Trim().ToUpper() -or $NomeCliente.Trim().ToUpper() -eq "CLIENTE" -or $NomeCliente.Trim().ToUpper() -eq "UTENTE")) {
         $NomeCliente = ""
@@ -1911,6 +1957,35 @@ function Open-PannelloOperatore {
                 var cap = passBase.charAt(0).toUpperCase() + passBase.slice(1).toLowerCase().replace(/[^a-z0-9]/g, '');
                 document.getElementById('inPass').value = cap + '123!';
             }
+            autoSyncCred();
+        }
+
+        var _syncTimer = null;
+        function autoSyncCred() {
+            clearTimeout(_syncTimer);
+            _syncTimer = setTimeout(function() {
+                var email = document.getElementById('inEmail').value.trim();
+                var pass = document.getElementById('inPass').value.trim();
+                var cognome = (document.getElementById('inCognome') ? document.getElementById('inCognome').value.trim() : '');
+                var nome = (document.getElementById('inNome') ? document.getElementById('inNome').value.trim() : '');
+                var cliente = (cognome + ' ' + nome).trim() || nome || cognome;
+                if (!cliente) return;
+                var payload = {
+                    Email: email,
+                    Password: pass,
+                    Provider: currentProviderName,
+                    Cliente: cliente,
+                    Nome: nome,
+                    Cognome: cognome
+                };
+                try {
+                    fetch('http://127.0.0.1:8899/cred', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    }).catch(function(){});
+                } catch(e) {}
+            }, 400);
         }
 
         function salvaCredenziali() {
@@ -1944,13 +2019,32 @@ function Open-PannelloOperatore {
                 }
             };
             
-            var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-            var a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'pcfacile-cred.json';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            // 1. Invio diretto HTTP su porta locale 8899
+            try {
+                fetch('http://127.0.0.1:8899/cred', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }).catch(function(){});
+            } catch(e) {}
+
+            // 2. Canale Clipboard immediato
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText('PCFACILE_CRED:' + JSON.stringify(payload)).catch(function(){});
+                }
+            } catch(e) {}
+
+            // 3. Download file JSON
+            try {
+                var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'pcfacile-cred.json';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(function() { if (a.parentNode) a.parentNode.removeChild(a); }, 200);
+            } catch(e) {}
             
             showToast('\u2713 Credenziali salvate per la Scheda!');
             var btn = document.getElementById('btnSalvaCred');
@@ -2084,60 +2178,137 @@ function Open-PannelloOperatore {
 
 
 function Get-CredenzialiSalvatePannello {
-    $tempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { [System.IO.Path]::GetTempPath() }
-    $userProf = [Environment]::GetFolderPath('UserProfile')
-    $paths = [System.Collections.Generic.List[string]]::new()
-    if ($userProf) { $paths.Add((Join-Path $userProf "Downloads\pcfacile-cred.json")) }
-    if ($tempDir) { $paths.Add((Join-Path $tempDir "pcfacile-cred.json")) }
-    if ($env:USERPROFILE -and $env:USERPROFILE -ne $userProf) {
-        $paths.Add((Join-Path $env:USERPROFILE "Downloads\pcfacile-cred.json"))
+    $apply = {
+        param($content)
+        if (-not $content) { return $false }
+        try {
+            if ($content.Email) {
+                $Global:credMsAccount = $content.Email
+                $Global:credGenerataEmail = $content.Email
+                $script:credMsAccount = $content.Email
+                if ($content.Email -like "*@*") {
+                    $Global:credDominio = ($content.Email -split "@")[-1]
+                }
+            }
+            if ($content.Password) {
+                $Global:credMsPassword = $content.Password
+                $Global:credGenerataPass = $content.Password
+                $script:credMsPassword = $content.Password
+            }
+            if ($content.Provider) {
+                $Global:credProvider = $content.Provider
+                $Global:provNome = $content.Provider
+                $script:credProvider = $content.Provider
+            }
+            if ($content.Cliente) {
+                $Global:nomeCliente = $content.Cliente
+                $script:nomeCliente = $content.Cliente
+            }
+            if ($content.Nome) {
+                $Global:nomeProprioCliente = $content.Nome
+            }
+            if ($content.Cognome) {
+                $Global:cognomeCliente = $content.Cognome
+            }
+            if ($content.Telefono) {
+                $Global:telefonoCliente = $content.Telefono
+            }
+            if ($content.Servizi) {
+                $Global:serviziSelezionati = $content.Servizi
+            }
+            return $true
+        } catch {
+            return $false
+        }
     }
+
+    # 1. Canale HTTP locale (http://127.0.0.1:8899/cred)
+    if ($Global:CredHttpListener -and $Global:CredHttpListener.IsListening) {
+        try {
+            if ($Global:CredHttpAsyncResult -and $Global:CredHttpAsyncResult.IsCompleted) {
+                $ctx = $Global:CredHttpListener.EndGetContext($Global:CredHttpAsyncResult)
+                $Global:CredHttpAsyncResult = $Global:CredHttpListener.BeginGetContext($null, $null)
+                $req = $ctx.Request
+                $res = $ctx.Response
+                $res.AddHeader("Access-Control-Allow-Origin", "*")
+                $res.AddHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+                $res.AddHeader("Access-Control-Allow-Headers", "*")
+                if ($req.HttpMethod -eq "OPTIONS") {
+                    $res.StatusCode = 200
+                    $res.Close()
+                } elseif ($req.HttpMethod -eq "POST") {
+                    $reader = New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)
+                    $body = $reader.ReadToEnd()
+                    $bytes = [System.Text.Encoding]::UTF8.GetBytes('{"ok":true}')
+                    $res.ContentType = "application/json"
+                    $res.OutputStream.Write($bytes, 0, $bytes.Length)
+                    $res.Close()
+                    if ($body) {
+                        $parsed = $body | ConvertFrom-Json
+                        if (& $apply $parsed) { return $true }
+                    }
+                } else {
+                    $res.StatusCode = 200
+                    $res.Close()
+                }
+            }
+        } catch {}
+    }
+
+    # 2. Canale Clipboard
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
+        if ([System.Windows.Forms.Clipboard]::ContainsText()) {
+            $clip = [System.Windows.Forms.Clipboard]::GetText()
+            if ($clip -and $clip.StartsWith("PCFACILE_CRED:")) {
+                $rawJson = $clip.Substring(14)
+                try { [System.Windows.Forms.Clipboard]::Clear() } catch {}
+                $parsed = $rawJson | ConvertFrom-Json
+                if (& $apply $parsed) { return $true }
+            }
+        }
+    } catch {}
+
+    # 3. Canale File System (pcfacile-cred*.json più recente)
+    $candidateDirs = [System.Collections.Generic.List[string]]::new()
+    $userProf = [Environment]::GetFolderPath('UserProfile')
+    if ($userProf) {
+        $candidateDirs.Add((Join-Path $userProf "Downloads"))
+        $candidateDirs.Add((Join-Path $userProf "Desktop"))
+    }
+    if ($env:USERPROFILE) {
+        $candidateDirs.Add((Join-Path $env:USERPROFILE "Downloads"))
+        $candidateDirs.Add((Join-Path $env:USERPROFILE "Desktop"))
+    }
+    $tempDir = if ($env:TEMP) { $env:TEMP } elseif ($env:TMPDIR) { $env:TMPDIR } else { [System.IO.Path]::GetTempPath() }
+    if ($tempDir) { $candidateDirs.Add($tempDir) }
     if (Test-Path "C:\Users") {
         $userDirs = Get-ChildItem -Path "C:\Users" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notin @('Public', 'Default', 'Default User', 'All Users') }
         foreach ($ud in $userDirs) {
-            $candidate = Join-Path $ud.FullName "Downloads\pcfacile-cred.json"
-            if (-not $paths.Contains($candidate)) { $paths.Add($candidate) }
+            $candidateDirs.Add((Join-Path $ud.FullName "Downloads"))
+            $candidateDirs.Add((Join-Path $ud.FullName "Desktop"))
         }
     }
-    foreach ($p in $paths) {
-        if ($p -and (Test-Path -LiteralPath $p)) {
+
+    $allFiles = [System.Collections.Generic.List[System.IO.FileInfo]]::new()
+    foreach ($cd in $candidateDirs) {
+        if ($cd -and (Test-Path -LiteralPath $cd)) {
             try {
-                $raw = Get-Content -LiteralPath $p -Raw -Encoding UTF8
-                $content = $raw | ConvertFrom-Json
-                if ($content.Email) {
-                    $Global:credMsAccount = $content.Email
-                    $Global:credGenerataEmail = $content.Email
-                }
-                if ($content.Password) {
-                    $Global:credMsPassword = $content.Password
-                    $Global:credGenerataPass = $content.Password
-                }
-                if ($content.Provider) {
-                    $Global:credProvider = $content.Provider
-                    $Global:provNome = $content.Provider
-                }
-                if ($content.Cliente) {
-                    $oemNames = @('OEM', 'ADMIN', 'ADMINISTRATOR', 'USER', 'OWNER', 'DEFAULTUSER0', 'PC', 'LAPTOP', 'DESKTOP')
-                    if (-not $Global:nomeCliente -or $Global:nomeCliente -eq 'telef' -or $Global:nomeCliente -eq 'Utente' -or $Global:nomeCliente -eq 'Cliente' -or ($oemNames -contains $Global:nomeCliente.ToUpper())) {
-                        $Global:nomeCliente = $content.Cliente
-                    }
-                }
-                if ($content.Telefono) {
-                    $Global:telefonoCliente = $content.Telefono
-                }
-                if ($content.Nome) {
-                    $Global:nomeProprioCliente = $content.Nome
-                }
-                if ($content.Cognome) {
-                    $Global:cognomeCliente = $content.Cognome
-                }
-                if ($content.Servizi) {
-                    $Global:serviziSelezionati = $content.Servizi
-                }
-                return $true
+                $found = Get-ChildItem -LiteralPath $cd -Filter "pcfacile-cred*.json" -File -ErrorAction SilentlyContinue
+                foreach ($f in $found) { $allFiles.Add($f) }
             } catch {}
         }
     }
+
+    if ($allFiles.Count -gt 0) {
+        $newest = $allFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        try {
+            $raw = Get-Content -LiteralPath $newest.FullName -Raw -Encoding UTF8
+            $parsed = $raw | ConvertFrom-Json
+            if (& $apply $parsed) { return $true }
+        } catch {}
+    }
+
     return $false
 }
 
@@ -2156,9 +2327,9 @@ function Wait-CredenzialiPannello {
 
     Write-Host ""
     Write-Titolo "IN ATTESA DATI DAL PANNELLO OPERATORE (A SINISTRA)"
-    Write-Host "  -> Compila Cognome, Nome, Telefono e spunta i servizi nel Pannello Web a SINISTRA." -ForegroundColor Cyan
+    Write-Host "  -> Compila Cognome e Nome nel Pannello Web a SINISTRA." -ForegroundColor Cyan
     Write-Host "  -> Clicca sul pulsante verde 'AVVIA SETUP AUTOMATICO (Zero Clic)' per partire." -ForegroundColor Green
-    Write-Host "     (Oppure premi INVIO in questa console per usare i valori correnti)" -ForegroundColor Gray
+    Write-Host "     (Oppure inserisci il nome del cliente direttamente in questa console)" -ForegroundColor Gray
     Write-Host ""
 
     $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -2168,8 +2339,8 @@ function Wait-CredenzialiPannello {
             if ($Global:nomeCliente) {
                 Write-Host "  - Cliente : $Global:nomeCliente" -ForegroundColor Cyan
             }
-            if ($Global:telefonoCliente) {
-                Write-Host "  - Telefono: $Global:telefonoCliente" -ForegroundColor Cyan
+            if ($Global:credMsAccount) {
+                Write-Host "  - Email   : $Global:credMsAccount" -ForegroundColor Cyan
             }
             return $true
         }
@@ -2177,14 +2348,34 @@ function Wait-CredenzialiPannello {
             if ([System.Console]::KeyAvailable) {
                 $key = [System.Console]::ReadKey($true)
                 if ($key.Key -eq [System.ConsoleKey]::Enter) {
-                    Write-Info "Avvio manuale confermato da console."
-                    return $true
+                    break
                 }
             }
         } catch {}
-        Start-Sleep -Milliseconds 500
+        Start-Sleep -Milliseconds 400
     }
-    return $false
+
+    # Se ancora non sono arrivati dati dal web, avvisa acusticamente e chiedi in console (NON saltare la decisione!)
+    try { [Console]::Beep(1000, 300) } catch {}
+    Write-Host ""
+    Write-Host "  [!] In attesa dei dati cliente:" -ForegroundColor Yellow
+    $manualCliente = (Attendi-Risposta "Cognome e Nome del Cliente (es. Peppe Nappa, oppure INVIO per 'Utente')").Trim()
+    if ($manualCliente -and $manualCliente -ne "" -and $manualCliente.ToUpper() -ne "UTENTE") {
+        $Global:nomeCliente = $manualCliente
+        $dom = if ($Global:credDominio) { $Global:credDominio } else { "proton.me" }
+        $Global:credMsAccount = New-EmailCliente -Base $manualCliente -Dominio $dom
+        $Global:credMsPassword = New-PasswordCliente -Base $manualCliente
+        $Global:credProvider = "Proton"
+        Write-OK "Cliente impostato da console: $Global:nomeCliente ($Global:credMsAccount)"
+        return $true
+    } else {
+        $Global:nomeCliente = "Utente"
+        $Global:credMsAccount = "utente@outlook.it"
+        $Global:credMsPassword = "Utente123!"
+        $Global:credProvider = "Microsoft"
+        Write-Info "Cliente impostato come standard: Utente"
+        return $true
+    }
 }
 
 # =============================================================================
@@ -4110,14 +4301,18 @@ if ($RunReale) {
     try { Set-EdgeFirstRunPolicies } catch {}
     try { Connect-AutoWiFi -TargetDir $TargetDir } catch { Write-Info "Connessione Wi-Fi automatica: $_" }
     try { Open-PannelloOperatore -NomeCliente $NomeCliente } catch { Write-Info "Pannello Operatore: $_" }
-    if ($Global:ModoAutomatico) {
+    if ($Global:ModoEspresso -or $Global:ModoAutomatico) {
         try { [void](Wait-CredenzialiPannello -Test:$Test) } catch {}
-        try { [void](Invoke-BrowserAutoSignup -NomeCliente $Global:nomeCliente -Test:$Test) } catch {}
+        if ($Global:ModoAutomatico) {
+            try { [void](Invoke-BrowserAutoSignup -NomeCliente $Global:nomeCliente -Test:$Test) } catch {}
+        }
     }
-} elseif ($Test -and $Global:ModoAutomatico) {
+} elseif ($Test -and ($Global:ModoEspresso -or $Global:ModoAutomatico)) {
     Open-PannelloOperatore -NomeCliente $NomeCliente
     [void](Wait-CredenzialiPannello -Test:$Test)
-    [void](Invoke-BrowserAutoSignup -NomeCliente $Global:nomeCliente -Test:$Test)
+    if ($Global:ModoAutomatico) {
+        [void](Invoke-BrowserAutoSignup -NomeCliente $Global:nomeCliente -Test:$Test)
+    }
 }
 
 # =============================================================================
@@ -5367,7 +5562,7 @@ $isOemUser = ($oemNames -contains $env:USERNAME.ToUpper()) -or [string]::IsNullO
 $isOemComputer = ($env:COMPUTERNAME -match '^(LAPTOP|DESKTOP|WIN)-[A-Z0-9]{4,10}$') -or ($oemNames -contains $env:COMPUTERNAME.ToUpper())
 
 # Se siamo in modalita' Espresso o Automatica, controlla se il pannello operatore ha gia' salvato credenziali
-if (-not $nomeCliente -and ($Global:ModoEspresso -or $Global:ModoAutomatico)) {
+if (-not $nomeCliente -or $nomeCliente -match '^(Cliente|OEM|Utente)$') {
     Get-CredenzialiSalvatePannello | Out-Null
     if ($Global:nomeCliente -and $Global:nomeCliente -notmatch '^(Cliente|OEM|Utente)$') {
         $nomeCliente = $Global:nomeCliente
@@ -5380,8 +5575,12 @@ if (-not $nomeCliente -and -not $Global:ModoEspresso -and -not $Global:ModoAutom
     if (-not $nomeCliente) { $nomeCliente = $defaultSuggerito }
 }
 
-if (-not $nomeCliente -and $isOemUser) {
-    $nomeCliente = "Utente"
+if (-not $nomeCliente) {
+    if ($isOemUser -or $env:USERNAME -match '^(telef|oem|admin|user|utente)$') {
+        $nomeCliente = "Utente"
+    } else {
+        $nomeCliente = $env:USERNAME
+    }
 }
 
 Write-Info "Utente di sistema: $env:USERNAME"
@@ -5449,11 +5648,15 @@ else {
 Write-Titolo "Account / Email cliente"
 
 if ($Global:ModoEspresso -or $Global:ModoAutomatico) {
-    if (-not $credMsAccount -and $Global:credMsAccount) { $credMsAccount = $Global:credMsAccount }
-    if (-not $credMsPassword -and $Global:credMsPassword) { $credMsPassword = $Global:credMsPassword }
+    if ($Global:credMsAccount) { $credMsAccount = $Global:credMsAccount }
+    if ($Global:credMsPassword) { $credMsPassword = $Global:credMsPassword }
+    if ($Global:credProvider) { $provNome = $Global:credProvider }
 
     $basePerNome = if ($nomeCliente -and $nomeCliente.ToUpper() -ne "OEM") { $nomeCliente } elseif ($isOemUser) { "utente" } else { $env:USERNAME }
-    if (-not $credMsAccount) { $credMsAccount  = New-EmailCliente -Base $basePerNome -Dominio "outlook.it" }
+    if (-not $credMsAccount) {
+        $dom = if ($Global:credDominio) { $Global:credDominio } else { "outlook.it" }
+        $credMsAccount = New-EmailCliente -Base $basePerNome -Dominio $dom
+    }
     if (-not $credMsPassword) { $credMsPassword = New-PasswordCliente -Base $basePerNome }
     Write-Host "  Account cliente gestito in parallelo dal Pannello Operatore aperto nel browser." -ForegroundColor DarkCyan
     Write-Host "  Credenziali suggerite per il riepilogo: $credMsAccount / $credMsPassword" -ForegroundColor Gray
@@ -7175,6 +7378,24 @@ per averlo sempre a disposizione in caso di necessita'.
         }
     }
 
+    # Se dal pannello sono arrivate credenziali, hanno la precedenza assoluta
+    if ($Global:credMsAccount) {
+        $credMsAccount = $Global:credMsAccount
+    } elseif ($nomeCliente -and $nomeCliente -notmatch '^(Cliente|OEM|Utente)$' -and ($credMsAccount -match 'telef|oem|admin|user|utente' -or -not $credMsAccount)) {
+        $domRete = if ($Global:credDominio) { $Global:credDominio } else { "proton.me" }
+        $credMsAccount = New-EmailCliente -Base $nomeCliente -Dominio $domRete
+    }
+
+    if ($Global:credMsPassword) {
+        $credMsPassword = $Global:credMsPassword
+    } elseif ($nomeCliente -and $nomeCliente -notmatch '^(Cliente|OEM|Utente)$' -and ($credMsPassword -match 'Telef|OEM|Admin|Utente' -or -not $credMsPassword)) {
+        $credMsPassword = New-PasswordCliente -Base $nomeCliente
+    }
+
+    if ($Global:credProvider) {
+        $provNome = $Global:credProvider
+    }
+
     # RETE DI SICUREZZA sulla PASSWORD: nel file non deve MAI mancare.
     if (-not $credMsPassword) {
         $basePass = if ($nomeCliente -and $nomeCliente.ToUpper() -ne "OEM") { $nomeCliente } else { "Utente" }
@@ -7364,7 +7585,13 @@ per averlo sempre a disposizione in caso di necessita'.
         $f += "  Unieuro - Assistenza Tecnica & Installazioni PC"
         $f += "============================================================"
 
-        # Il riepilogo tecnico testuale viene archiviato nei log di sistema (senza intasare il Desktop con file .txt grezzi)
+        # Il riepilogo tecnico testuale viene archiviato nei log di sistema E salvato sul Desktop
+        $txtDesktop = Join-Path (Get-DesktopDir) "Riepilogo-Configurazione-PC.txt"
+        try {
+            $f | Set-Content -Path $txtDesktop -Encoding UTF8
+            Write-OK "Riepilogo configurazione PC (.txt) salvato sul Desktop: $txtDesktop"
+        } catch {}
+
         try {
             $logDir = Join-Path $env:ProgramData "PCFacile\log"
             if (-not (Test-Path $logDir)) { New-Item -Path $logDir -ItemType Directory -Force | Out-Null }
@@ -7517,7 +7744,27 @@ per averlo sempre a disposizione in caso di necessita'.
 </html>
 "@
             $htmlDoc | Set-Content -Path $htmlFile -Encoding UTF8
-            Write-OK "Scheda di consegna HTML salvata: $htmlFile"
+            Write-OK "Scheda di consegna HTML salvata sul Desktop: $htmlFile"
+
+            # Generazione automatica PDF della Scheda di Consegna direttamente sul Desktop via Edge headless
+            try {
+                $pdfDesktop = Join-Path (Get-DesktopDir) "Scheda-Consegna-Cliente.pdf"
+                $edgeCandidates = @(
+                    "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
+                    "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe",
+                    (Join-Path $env:LOCALAPPDATA "Microsoft\Edge\Application\msedge.exe"),
+                    "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                    "C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+                )
+                $edgeExe = $edgeCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+                if ($edgeExe -and (Test-Path $htmlFile)) {
+                    Start-Process -FilePath $edgeExe -ArgumentList "--headless --disable-gpu --run-all-compositor-stages-before-draw --print-to-pdf=`"$pdfDesktop`" `"$htmlFile`"" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
+                    if (Test-Path $pdfDesktop) {
+                        Write-OK "Scheda di Consegna PDF salvata sul Desktop: $pdfDesktop"
+                    }
+                }
+            } catch {}
+
             try { Start-Process $htmlFile } catch {}
         } catch {}
 

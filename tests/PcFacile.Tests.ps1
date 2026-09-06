@@ -23,6 +23,7 @@ BeforeAll {
         'Get-StorageHealthInfo', 'Get-BatteryHealthInfo', 'Get-WindowsActivationStatus', 'Get-BitLockerRecovery',
         'Get-SystemHardwareDetails', 'Invoke-PcFacileDiagnostics', 'Install-VisualCRuntime',
         'Update-PannelloStatus', 'Open-PannelloOperatore', 'Set-SplitScreenLayout', 'Get-CredenzialiSalvatePannello',
+        'Start-LocalCredServer', 'Stop-LocalCredServer',
         'Enable-SilentElevation', 'Restore-SilentElevation', 'Set-PreventSleep', 'Set-EdgeFirstRunPolicies',
         'New-WlanProfileXml', 'Connect-AutoWiFi', 'Save-StoreWiFiProfile',
         'Invoke-BrowserAutoSignup', 'Wait-CredenzialiPannello',
@@ -539,5 +540,38 @@ Describe 'Rimozione Bloatware, Booking, Dropbox e Unpin Taskbar' {
     }
 }
 
+Describe 'Sincronizzazione Credenziali Multi-Canale & Salvataggio Report Desktop' {
+    It 'Get-CredenzialiSalvatePannello rileva pcfacile-cred (1).json con dati cliente e credenziali' {
+        $tempDir = [System.IO.Path]::GetTempPath()
+        $sampleCred = @{
+            Email = "peppenappa@proton.me"
+            Password = "PeppePassword123!"
+            Provider = "Proton"
+            Cliente = "peppe nappa"
+            Nome = "nappa"
+            Cognome = "peppe"
+        } | ConvertTo-Json
+        
+        $testFile = Join-Path $tempDir "pcfacile-cred (1).json"
+        try {
+            $sampleCred | Set-Content -Path $testFile -Encoding UTF8
+            $found = Get-CredenzialiSalvatePannello
+            $found | Should -BeTrue
+            $Global:nomeCliente | Should -Be "peppe nappa"
+            $Global:credMsAccount | Should -Be "peppenappa@proton.me"
+            $Global:credMsPassword | Should -Be "PeppePassword123!"
+            $Global:credProvider | Should -Be "Proton"
+        } finally {
+            if (Test-Path $testFile) { Remove-Item $testFile -Force -ErrorAction SilentlyContinue }
+        }
+    }
 
-
+    It 'setup-pc.ps1 contiene il salvataggio sul Desktop di Riepilogo-Configurazione-PC.txt e Scheda-Consegna-Cliente.pdf' {
+        $content = Get-Content $script:SetupPath -Raw
+        $content | Should -Match 'Riepilogo-Configurazione-PC\.txt'
+        $content | Should -Match 'Scheda-Consegna-Cliente\.pdf'
+        $content | Should -Match '--print-to-pdf='
+        $content | Should -Match 'Start-LocalCredServer'
+        $content | Should -Match 'Stop-LocalCredServer'
+    }
+}
