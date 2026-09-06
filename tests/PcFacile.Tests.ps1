@@ -26,7 +26,8 @@ BeforeAll {
         'Enable-SilentElevation', 'Restore-SilentElevation',
         'New-WlanProfileXml', 'Connect-AutoWiFi', 'Save-StoreWiFiProfile',
         'Invoke-BrowserAutoSignup', 'Wait-CredenzialiPannello',
-        'Install-WindowsUpdateDrivers'
+        'Install-WindowsUpdateDrivers',
+        'Convert-PngToIco', 'Get-AppxPackageIcon'
     )
     $allFns = $ast.FindAll({
         param($n)
@@ -444,5 +445,52 @@ Describe 'Install-WindowsUpdateDrivers' {
         @($Global:Report | Where-Object { $_.Voce -eq "Driver (Windows Update)" -and $_.Esito -eq "OK" }).Count | Should -Be 1
     }
 }
+
+Describe 'Convert-PngToIco' {
+    It 'converte byte PNG validi in file ICO conforme con header standard' {
+        $pngBytes = [byte[]]@(
+            137, 80, 78, 71, 13, 10, 26, 10,
+            0, 0, 0, 13,
+            73, 72, 68, 82,
+            0, 0, 0, 48,
+            0, 0, 0, 48,
+            8, 6, 0, 0, 0
+        )
+        $tmp = [System.IO.Path]::GetTempFileName() + ".ico"
+        try {
+            $ok = Convert-PngToIco -pngBytes $pngBytes -outFile $tmp
+            $ok | Should -BeTrue
+            (Test-Path $tmp) | Should -BeTrue
+            $icoBytes = [System.IO.File]::ReadAllBytes($tmp)
+            $icoBytes[0] | Should -Be 0
+            $icoBytes[1] | Should -Be 0
+            $icoBytes[2] | Should -Be 1
+            $icoBytes[3] | Should -Be 0
+            $icoBytes[4] | Should -Be 1
+            $icoBytes[5] | Should -Be 0
+            $icoBytes[6] | Should -Be 48
+            $icoBytes[7] | Should -Be 48
+        } finally {
+            if (Test-Path $tmp) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
+        }
+    }
+
+    It 'restituisce false su dati non validi o vuoti' {
+        $tmp = [System.IO.Path]::GetTempFileName() + ".ico"
+        try {
+            Convert-PngToIco -pngBytes @(1, 2, 3) -outFile $tmp | Should -BeFalse
+        } finally {
+            if (Test-Path $tmp) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
+        }
+    }
+}
+
+Describe 'Get-AppxPackageIcon' {
+    It 'gestisce nomi sicuri e non va in errore se il pacchetto non e presente' {
+        $res = Get-AppxPackageIcon -NomeApp "PacchettoInesistente12345"
+        $res | Should -BeNullOrEmpty
+    }
+}
+
 
 

@@ -29,7 +29,10 @@ param(
     [switch]$Menu,
     # Veloce: parametro di compatibilita'
     [switch]$Veloce,
-    # Salta la creazione del punto di ripristino
+    # Crea il punto di ripristino (di default disabilitato per velocizzare il setup e risparmiare spazio SSD)
+    [Alias("RestorePoint", "Ripristino")]
+    [switch]$CreaRipristino,
+    # Salta la creazione del punto di ripristino (mantenuto per compatibilita')
     [switch]$skipRestore,
     # Cartella target o USB esplicita (opzionale)
     [string]$TargetDir
@@ -45,7 +48,7 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Versione del programma (mostrata nell'header e nel riepilogo).
 # Bump ad ogni modifica cosi' capisci se la USB e' aggiornata.
-$SCRIPT_VERSION = "12.0 (2026-09-05)"
+$SCRIPT_VERSION = "12.1 (2026-09-06)"
 
 # Versione SEMPRE VISIBILE: la scrivo nella barra del titolo della finestra, che
 # resta a video in QUALSIASI schermata (a differenza dell'header, che scorre via).
@@ -4377,6 +4380,215 @@ function Remove-IconeDoppieDesktop {
     } catch {}
 }
 
+# Converte un flusso di byte PNG in un file .ico Windows (formato PNG-in-ICO standard da Vista a Windows 11).
+function Convert-PngToIco {
+    param(
+        [byte[]]$pngBytes,
+        [string]$outFile
+    )
+    try {
+        if (-not $pngBytes -or $pngBytes.Length -lt 24) { return $false }
+        # Verifica magic byte PNG: 0x89 0x50 0x4E 0x47
+        if ($pngBytes[0] -ne 0x89 -or $pngBytes[1] -ne 0x50 -or $pngBytes[2] -ne 0x4E -or $pngBytes[3] -ne 0x47) {
+            return $false
+        }
+        # Dimensioni da IHDR (offset 16..23, big-endian)
+        $w = [System.BitConverter]::ToInt32(@($pngBytes[19], $pngBytes[18], $pngBytes[17], $pngBytes[16]), 0)
+        $h = [System.BitConverter]::ToInt32(@($pngBytes[23], $pngBytes[22], $pngBytes[21], $pngBytes[20]), 0)
+        $icoW = if ($w -ge 256 -or $w -le 0) { 0 } else { [byte]$w }
+        $icoH = if ($h -ge 256 -or $h -le 0) { 0 } else { [byte]$h }
+        $lenBytes = [System.BitConverter]::GetBytes([int]$pngBytes.Length)
+        $offsetBytes = [System.BitConverter]::GetBytes([int]22)
+
+        $outDir = Split-Path $outFile
+        if ($outDir -and -not (Test-Path $outDir)) {
+            New-Item -Path $outDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+
+        $ms = New-Object System.IO.MemoryStream
+        # Header ICO: Reserved (2), Type 1=Icon (2), Count 1 (2)
+        $ms.Write([byte[]]@(0, 0, 1, 0, 1, 0), 0, 6)
+        # Entry: Width(1), Height(1), Colors(1), Reserved(1), Planes(2), BPP(2), BytesInRes(4), Offset(4)
+        $ms.Write([byte[]]@($icoW, $icoH, 0, 0, 1, 0, 32, 0), 0, 8)
+        $ms.Write($lenBytes, 0, 4)
+        $ms.Write($offsetBytes, 0, 4)
+        # PNG payload
+        $ms.Write($pngBytes, 0, $pngBytes.Length)
+        [System.IO.File]::WriteAllBytes($outFile, $ms.ToArray())
+        $ms.Dispose()
+        return (Test-Path $outFile)
+    } catch {
+        return $false
+    }
+}
+
+# Estrae l'icona ufficiale da un'app dello Store (MSIX/AppX) e la converte in .ico leggibile da Explorer
+function Get-AppxPackageIcon {
+    param(
+        [string]$AppUserModelId = "",
+        [string]$NomeApp = ""
+    )
+    try {
+        $iconDir = Join-Path (if ($env:ProgramData) { $env:ProgramData } else { "C:\ProgramData" }) "PCFacile\Icons"
+        if (-not (Test-Path $iconDir)) {
+            New-Item -Path $iconDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+            try { & icacls.exe "$iconDir" /grant "Users:(OI)(CI)RX" /T 2>$null | Out-Null } catch {}
+        }
+        $safeName = ($NomeApp -replace '[\\/:*?"<>|]', '').Trim()
+        if (-not $safeName -and $AppUserModelId) { $safeName = ($AppUserModelId -split '!')[0] }
+        if (-not $safeName) { return $null }
+
+        $icoDest = Join-Path $iconDir "$safeName.ico"
+        if ((Test-Path $icoDest) -and (Get-Item $icoDest).Length -gt 100) {
+            return $icoDest
+        }
+
+        $pkg = $null
+        if ($AppUserModelId) {
+            $pfn = ($AppUserModelId -split '!')[0]
+            $pkg = Get-AppxPackage -ErrorAction SilentlyContinue | Where-Object { $_.PackageFamilyName -eq $pfn } | Select-Object -First 1
+        }
+        if (-not $pkg -and $NomeApp) {
+            $pkg = Get-AppxPackage -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*$safeName*" } | Select-Object -First 1
+        }
+
+        if ($pkg -and $pkg.InstallLocation -and (Test-Path $pkg.InstallLocation)) {
+            # 1) Se c'e' un .ico nativo nel pacchetto
+            $icoFile = Get-ChildItem -Path $pkg.InstallLocation -Filter "*.ico" -Recurse -ErrorAction SilentlyContinue |
+                Sort-Object Length -Descending | Select-Object -First 1
+            if ($icoFile) {
+                Copy-Item -Path $icoFile.FullName -Destination $icoDest -Force -ErrorAction SilentlyContinue
+                try { & icacls.exe "$icoDest" /grant "Users:RX" 2>$null | Out-Null } catch {}
+                if (Test-Path $icoDest) { return $icoDest }
+            }
+
+            # 2) Cerca gli asset PNG ufficiali
+            $assetsDir = Join-Path $pkg.InstallLocation "Assets"
+            $searchDirs = @($assetsDir, $pkg.InstallLocation) | Where-Object { Test-Path $_ }
+            $pngFiles = @()
+            foreach ($sd in $searchDirs) {
+                $pngFiles += Get-ChildItem -Path $sd -Filter "*.png" -Recurse -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -notmatch 'splash|banner|badge|contrast-black|contrast-white' }
+            }
+
+            $candidato = $pngFiles | Where-Object { $_.Name -match 'targetsize-(48|64|96|128|256)|Square150|Square44|Logo|AppList' } |
+                Sort-Object {
+                    $score = 0
+                    if ($_.Name -match 'targetsize-256') { $score += 100 }
+                    elseif ($_.Name -match 'targetsize-128') { $score += 90 }
+                    elseif ($_.Name -match 'targetsize-64') { $score += 80 }
+                    elseif ($_.Name -match 'targetsize-48') { $score += 70 }
+                    elseif ($_.Name -match 'Square150') { $score += 60 }
+                    elseif ($_.Name -match 'Square44') { $score += 50 }
+                    elseif ($_.Name -match 'Logo') { $score += 40 }
+                    $score += [int]($_.Length / 1024)
+                    $score
+                } -Descending | Select-Object -First 1
+
+            if (-not $candidato -and $pngFiles.Count -gt 0) {
+                $candidato = $pngFiles | Sort-Object Length -Descending | Select-Object -First 1
+            }
+
+            if ($candidato) {
+                $pngBytes = [System.IO.File]::ReadAllBytes($candidato.FullName)
+                if (Convert-PngToIco -pngBytes $pngBytes -outFile $icoDest) {
+                    try { & icacls.exe "$icoDest" /grant "Users:RX" 2>$null | Out-Null } catch {}
+                    return $icoDest
+                }
+            }
+        }
+    } catch {}
+    return $null
+}
+
+# Forza l'aggiornamento immediato della cache delle icone della shell di Windows
+function Update-DesktopIconCache {
+    try {
+        $code = @'
+        using System;
+        using System.Runtime.InteropServices;
+        public class PCFacileShellNotify {
+            [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+            public static extern void SHChangeNotify(int wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+        }
+'@
+        Add-Type -TypeDefinition $code -ErrorAction SilentlyContinue
+        [PCFacileShellNotify]::SHChangeNotify(0x08000000, 0x1000, [IntPtr]::Zero, [IntPtr]::Zero)
+    } catch {}
+    try { Start-Process "ie4uinit.exe" -ArgumentList "-show" -WindowStyle Hidden -ErrorAction SilentlyContinue } catch {}
+}
+
+# Controlla e ripara i collegamenti sul Desktop che hanno icone bianche o target Store senza icona
+function Repair-DesktopShortcuts {
+    if (-not $RunReale) { return }
+    try {
+        $desktopDirs = @((Get-DesktopDir), [Environment]::GetFolderPath('CommonDesktopDirectory')) |
+            Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+
+        $wsh = New-Object -ComObject WScript.Shell
+        $riparati = 0
+
+        foreach ($dir in $desktopDirs) {
+            $lnks = Get-ChildItem -Path $dir -Filter *.lnk -ErrorAction SilentlyContinue
+            foreach ($lnk in $lnks) {
+                try {
+                    $sc = $wsh.CreateShortcut($lnk.FullName)
+                    $nome = $lnk.BaseName
+
+                    # Ripara Spotify
+                    if ($nome -like "*Spotify*") {
+                        $spotExes = @(
+                            (Join-Path $env:APPDATA "Spotify\Spotify.exe"),
+                            (Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\Spotify.exe"),
+                            "$env:ProgramFiles\Spotify\Spotify.exe",
+                            "${env:ProgramFiles(x86)}\Spotify\Spotify.exe"
+                        )
+                        $spotExes += @(Get-ChildItem -Path "C:\Users\*\AppData\Roaming\Spotify\Spotify.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
+                        $spotReal = $spotExes | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+                        if ($spotReal) {
+                            $sc.TargetPath = $spotReal
+                            $sc.Arguments = ""
+                            $sc.IconLocation = "$spotReal,0"
+                            $sc.WorkingDirectory = Split-Path $spotReal
+                            $sc.Save()
+                            $riparati++
+                            continue
+                        } else {
+                            $ico = Get-AppxPackageIcon -NomeApp "Spotify"
+                            if ($ico) {
+                                $sc.IconLocation = "$ico,0"
+                                $sc.Save()
+                                $riparati++
+                                continue
+                            }
+                        }
+                    }
+
+                    # Ripara collegamenti Store ad explorer.exe (WhatsApp, ecc.)
+                    if ($sc.TargetPath -like "*explorer.exe*" -and $sc.Arguments -like "*shell:AppsFolder*") {
+                        $appId = ($sc.Arguments -replace '^.*shell:AppsFolder\\', '').Trim()
+                        $curIco = $sc.IconLocation
+                        if (-not $curIco -or $curIco -like "*WindowsApps*" -or -not (Test-Path ($curIco -split ',')[0])) {
+                            $ico = Get-AppxPackageIcon -AppUserModelId $appId -NomeApp $nome
+                            if ($ico) {
+                                $sc.IconLocation = "$ico,0"
+                                $sc.Save()
+                                $riparati++
+                            }
+                        }
+                    }
+                } catch {}
+            }
+        }
+
+        if ($riparati -gt 0) {
+            Write-OK "Riparate icone desktop per $riparati collegamenti."
+        }
+        Update-DesktopIconCache
+    } catch {}
+}
+
 function Add-IconaDesktop {
     param([string]$Nome, [string[]]$LnkPrima = @())
     if (-not $RunReale) { return }
@@ -4415,6 +4627,7 @@ function Add-IconaDesktop {
                     if (-not $giaSimile -and -not (Test-Path $dest)) {
                         Copy-Item -Path $scelto.FullName -Destination $dest -Force -ErrorAction SilentlyContinue
                     }
+                    Update-DesktopIconCache
                     return
                 }
             }
@@ -4426,6 +4639,7 @@ function Add-IconaDesktop {
             Sort-Object { $_.BaseName.Length } | Select-Object -First 1
         if ($cand) {
             Copy-Item -Path $cand.FullName -Destination (Join-Path $desktop $cand.Name) -Force -ErrorAction SilentlyContinue
+            Update-DesktopIconCache
             return
         }
 
@@ -4436,26 +4650,38 @@ function Add-IconaDesktop {
             $wsh = New-Object -ComObject WScript.Shell
             $file = ("$($app.Name).lnk" -replace '[\\/:*?"<>|]', '')
             $sc = $wsh.CreateShortcut((Join-Path $desktop $file))
-            if ($app.AppID -match '\.exe$' -and (Test-Path $app.AppID)) {
+
+            # Verifica speciale per Spotify Win32 (installato nel profilo utente)
+            $spotExe = $null
+            if ($Nome -like "*Spotify*") {
+                $spotExes = @(
+                    (Join-Path $env:APPDATA "Spotify\Spotify.exe"),
+                    (Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps\Spotify.exe"),
+                    "$env:ProgramFiles\Spotify\Spotify.exe",
+                    "${env:ProgramFiles(x86)}\Spotify\Spotify.exe"
+                )
+                $spotExes += @(Get-ChildItem -Path "C:\Users\*\AppData\Roaming\Spotify\Spotify.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName)
+                $spotExe = $spotExes | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+            }
+
+            if ($spotExe) {
+                $sc.TargetPath = $spotExe
+                $sc.WorkingDirectory = Split-Path $spotExe
+                $sc.IconLocation = "$spotExe,0"
+            } elseif ($app.AppID -match '\.exe$' -and (Test-Path $app.AppID)) {
                 $sc.TargetPath = $app.AppID
+                $sc.IconLocation = "$($app.AppID),0"
             } else {
                 $sc.TargetPath = "$env:WINDIR\explorer.exe"
                 $sc.Arguments  = "shell:AppsFolder\$($app.AppID)"
-                # Senza icona esplicita, un collegamento ad explorer mostra l'icona
-                # di una CARTELLA (era il caso di WhatsApp). Punto l'icona all'exe
-                # dentro il pacchetto Store, cosi' si vede il logo vero dell'app.
-                try {
-                    $pfn = ($app.AppID -split '!')[0]
-                    $pkg = Get-AppxPackage -ErrorAction SilentlyContinue | Where-Object { $_.PackageFamilyName -eq $pfn } | Select-Object -First 1
-                    if ($pkg -and $pkg.InstallLocation -and (Test-Path $pkg.InstallLocation)) {
-                        $ico = Get-ChildItem -Path $pkg.InstallLocation -Filter *.exe -Recurse -ErrorAction SilentlyContinue |
-                               Where-Object { $_.Name -notmatch 'vcredist|helper|update|crash|notification|background' } |
-                               Sort-Object Length -Descending | Select-Object -First 1
-                        if ($ico) { $sc.IconLocation = "$($ico.FullName),0" }
-                    }
-                } catch {}
+                # Estrai l'icona ufficiale del pacchetto Store e salvala in ProgramData\PCFacile\Icons
+                $ico = Get-AppxPackageIcon -AppUserModelId $app.AppID -NomeApp $Nome
+                if ($ico) {
+                    $sc.IconLocation = "$ico,0"
+                }
             }
             $sc.Save()
+            Update-DesktopIconCache
         }
     } catch {}
 }
@@ -5622,10 +5848,15 @@ Save-Fase 4 "Lingua e regione"
 # PUNTO DI RIPRISTINO (rete di sicurezza prima delle modifiche)
 # =============================================================================
 
-if (Test-FaseFatta 5) { Write-Info "Punto di ripristino: gia' fatto nella sessione precedente, salto." }
-elseif ($skipRestore) {
-    Write-Info "Punto di ripristino saltato (flag -skipRestore)."
-    Add-Report "Punto di ripristino" "SALTATO"
+if (Test-FaseFatta 5) {
+    Write-Info "Punto di ripristino: gia' fatto nella sessione precedente, salto."
+    Update-PannelloStatus -TaskId "ripristino" -Stato "skipped" -Percentuale 45 -FaseCorrente "Baseline" -Dettaglio "Gia' completato"
+} elseif ($skipRestore -or -not $CreaRipristino) {
+    # Richiesta esplicita operatore: "questo puoi saltarlo, è super opzionale".
+    # Su macchine nuove in negozio risparmia fino a 25 GB su SSD ed evita attese VSS inutili.
+    Write-Info "Punto di ripristino: saltato (super opzionale, ottimizzazione spazio SSD)."
+    Update-PannelloStatus -TaskId "ripristino" -Stato "skipped" -Percentuale 45 -FaseCorrente "Baseline" -Dettaglio "Saltato (ottimizzazione SSD)"
+    Add-Report "Punto di ripristino" "SALTATO (opzionale)"
     Save-Fase 5 "Punto di ripristino"
 } else {
 
@@ -5634,9 +5865,6 @@ Update-PannelloStatus -TaskId "ripristino" -Stato "running" -Percentuale 40 -Fas
 
 Write-Host "Crea un punto di ripristino: se qualcosa va storto puoi tornare indietro." -ForegroundColor White
 Write-Host ""
-Write-Host "  Rispondi S per crearlo (consigliato) oppure N per saltare, poi premi INVIO." -ForegroundColor Gray
-
-# Chiedi/Read-Host accettano SOLO input da tastiera (niente finestra GUI con
     try {
         Enable-ComputerRestore -Drive "$env:SystemDrive\" -ErrorAction SilentlyContinue
         # Limita lo spazio massimo del ripristino al 5% del disco per proteggere lo storage SSD
@@ -5646,9 +5874,6 @@ Write-Host "  Rispondi S per crearlo (consigliato) oppure N per saltare, poi pre
             -Name "SystemRestorePointCreationFrequency" -Value 0 -PropertyType DWord -Force -ErrorAction SilentlyContinue | Out-Null
         Write-Info "Creazione punto di ripristino (puo' richiedere un minuto)..."
         Start-BarraAnimata "Creo il punto di ripristino"
-        # Checkpoint-Computer su PC piu' lenti (o se VSS resta in attesa) puo'
-        # restare bloccato a lungo: lo eseguo in un job con TIME-OUT, cosi' lo
-        # script non resta mai incastrato su questo passo.
         $job = $null
         try {
             $job = Start-Job -ScriptBlock {
@@ -5656,16 +5881,19 @@ Write-Host "  Rispondi S per crearlo (consigliato) oppure N per saltare, poi pre
                 try { Checkpoint-Computer -Description $desc -RestorePointType "MODIFY_SETTINGS" -ErrorAction Stop; return 0 }
                 catch { return 1 }
             } -ArgumentList "$env:SystemDrive\", "Prima di setup-pc"
-            if (-not (Wait-Job $job -Timeout 90)) {
+            if (-not (Wait-Job $job -Timeout 60)) {
                 Stop-Job $job
-                Write-Errore "Creazione del punto di ripristino in timeout dopo 90 secondi: salto."
-                Add-Report "Punto di ripristino" "ERRORE"
+                Write-Errore "Creazione del punto di ripristino in timeout dopo 60 secondi: salto."
+                Update-PannelloStatus -TaskId "ripristino" -Stato "error" -Percentuale 45 -Dettaglio "Timeout (proseguo)"
+                Add-Report "Punto di ripristino" "ERRORE (timeout)"
             } elseif ((Receive-Job $job) -eq 0) {
                 Write-OK "Punto di ripristino creato."
+                Update-PannelloStatus -TaskId "ripristino" -Stato "done" -Percentuale 45 -Dettaglio "Completato"
                 Add-Report "Punto di ripristino" "OK"
             } else {
                 Write-Errore "NON e' stato possibile creare il punto di ripristino."
                 Write-Info "  Non e' un errore bloccante: la configurazione prosegue comunque."
+                Update-PannelloStatus -TaskId "ripristino" -Stato "error" -Percentuale 45 -Dettaglio "Non riuscito (proseguo)"
                 Add-Report "Punto di ripristino" "ERRORE"
             }
         } catch {
@@ -6278,6 +6506,7 @@ if ($pianoApp.Count -gt 0) {
 }
 
 Remove-IconeDoppieDesktop
+Repair-DesktopShortcuts
 
 if ($Global:AppFallite -ge 2) {
     Write-Host ""
@@ -6919,6 +7148,7 @@ per averlo sempre a disposizione in caso di necessita'.
     } catch {
         Write-Info "Impossibile creare il file riepilogo: $_"
     }
+    Repair-DesktopShortcuts
     Update-PannelloStatus -TaskId "diagnostica" -Stato "done" -Percentuale 100 -FaseCorrente "Configurazione PC Completata!" -Dettaglio "Tutti i lavori terminati con successo" -Completato
 }
 
