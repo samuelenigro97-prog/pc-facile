@@ -512,5 +512,23 @@ Describe 'Get-AppxPackageIcon' {
     }
 }
 
+Describe 'Rimozione Bloatware, Booking, Dropbox e Unpin Taskbar' {
+    It 'include Booking e Dropbox in tutte le liste di pulizia di setup-pc.ps1' {
+        $content = Get-Content $script:SetupPath -Raw
+        $content | Should -Match '\*Booking\*'
+        $content | Should -Match '\*Dropbox\*'
+        $content | Should -Match 'DropboxInc\.Dropbox'
+        $content | Should -Match '\*AcerCareCenter\*'
+        $content | Should -Match '\*Planet9\*'
+    }
+
+    It 'include la pulizia dei pin della barra applicazioni e dei file lnk e url' {
+        $content = Get-Content $script:SetupPath -Raw
+        $content | Should -Match 'User Pinned\\TaskBar'
+        $content | Should -Match 'Unpin from taskbar|Rimuovi dalla barra'
+        $content | Should -Match 'SilentInstalledAppsEnabled'
+    }
+}
+
 
 

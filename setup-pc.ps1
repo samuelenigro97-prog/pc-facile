@@ -5424,89 +5424,201 @@ Write-Host ""
     }
 
     # ---------------------------------------------------------------------
-    # 2/3 - BLOATWARE + PULIZIA AVVIO AUTOMATICO
+    # 2/3 - BLOATWARE + PULIZIA AVVIO AUTOMATICO & BARRA APPLICAZIONI
     # ---------------------------------------------------------------------
-    Write-Info "2/3 - Rimozione bloatware e pulizia dell'avvio automatico..."
-
-# App Store (Appx) superflue. Wildcard sul nome. NON include Xbox ne' Spotify,
-# ne' driver/stampante (pattern mirati sul bloatware, non l'intero publisher).
-$bloatwareAppx = @(
-    # --- Microsoft consumer / giochi ---
-    "Microsoft.BingNews", "Microsoft.BingWeather", "Microsoft.BingSearch",
-    "Microsoft.GetHelp", "Microsoft.Getstarted", "Microsoft.Microsoft3DViewer",
-    "Microsoft.MicrosoftSolitaireCollection", "Microsoft.MixedReality.Portal",
-    "Microsoft.People", "Microsoft.WindowsFeedbackHub",
-    "Microsoft.ZuneMusic", "Microsoft.ZuneVideo", "Microsoft.Windows.DevHome",
-    "Microsoft.Todos", "MicrosoftCorporationII.QuickAssist", "Clipchamp.Clipchamp",
-    "king.com.*", "*.CandyCrush*",
-    # --- Social/streaming preinstallati (terze parti) ---
-    "*.Facebook", "*.Instagram", "*.TikTok", "*.Netflix", "*.DisneyPlus",
-    "*.AmazonPrimeVideo", "*Booking*", "*.Twitter", "*ExpressVPN*",
-    # --- HP ---
-    "*SupportAssistant*", "*myHP*", "AD2F1837.HPPrivacySettings", "*HPJumpStart*",
-    "*HPPCHardwareDiagnostics*", "*HPPowerManager*", "*HPQuickDrop*", "*HPSystemInformation*",
-    "*HPWorkWell*", "*HPProgrammableKey*", "*HPDesktopSupportUtilities*",
-    # --- Lenovo ---
-    "*LenovoVantage*", "*LenovoCompanion*", "*LenovoUtility*", "*LenovoWelcome*",
-    "*LenovoQuickClean*", "*LenovoNow*", "*LenovoSmartCommunication*",
-    # --- Dell ---
-    "*DellSupportAssist*", "*DellCustomerConnect*", "*DellDigitalDelivery*",
-    "*DellUpdate*", "*DellOptimizer*", "*PartnerPromo*", "*DellPowerManager*",
-    # --- Asus (NB: NON tocco "ASUS System Control Interface": e' un DRIVER, serve
-    #     ai tasti funzione/ventole). Tolgo solo le app "vetrina"/promo/cloud. ---
-    "*MyASUS*", "*ASUSPCAssistant*", "*ASUSGiftBox*", "*GlideX*", "*ASUSSplendid*",
-    "*ScreenXpert*", "*ScreenPad*", "*ArmouryCrate*", "*AsusCloud*", "*ASUSWebStorage*",
-    "*ASUSSettings*", "*ProArtCreatorHub*", "*ASUSLiveUpdate*", "*AsusProductRegistration*",
-    "*ASUSDialoutBox*", "*ASUSAppCenter*",
-    # --- Acer ---
-    "*AcerCollection*", "*AcerRegistration*", "*AcerJumpstart*", "*AcerCareCenter*",
-    "*AcerPortal*", "*AcerQuickAccess*"
-)
+    Write-Info "2/3 - Rimozione bloatware OEM, app promozionali e pulizia avvio..."
 
     $rimosse = 0
+
+    # 0) Termina processi noti in background per sbloccare file ed evitare blocchi
+    $junkProcesses = @(
+        'Dropbox', 'DropboxUpdate', 'DropboxOEM',
+        'Booking', 'BookingApp',
+        'WildTangent', 'WildTangentGames',
+        'ExpressVPN', 'expressvpn-browser-helper',
+        'Evernote', 'EvernoteClipper',
+        'AcerCareCenter', 'ACCStd', 'CareCenter', 'AcerCollection', 'Planet9',
+        'HPJumpStart', 'HPSupportAssistant', 'HPCommRecovery',
+        'DellSupportAssist', 'DellDataVault',
+        'LenovoVantageService', 'LenovoNow'
+    )
+    if ($RunReale) {
+        foreach ($proc in $junkProcesses) {
+            try { Stop-Process -Name $proc -Force -ErrorAction SilentlyContinue 2>$null } catch {}
+        }
+    }
+
+    # 1) App Store (Appx) superflue e Provisioned Packages (per nuovi utenti).
+    # Include Dropbox, Booking, Evernote, tutto il bloatware Acer/HP/Lenovo/Dell/Asus,
+    # giochi sponsorizzati e social/streaming. NON include Xbox ne' Spotify.
+    $bloatwareAppx = @(
+        # --- Microsoft consumer / giochi / stubs ---
+        "Microsoft.BingNews", "Microsoft.BingWeather", "Microsoft.BingSearch",
+        "Microsoft.BingFinance", "Microsoft.BingSports",
+        "Microsoft.GetHelp", "Microsoft.Getstarted", "Microsoft.Microsoft3DViewer",
+        "Microsoft.MicrosoftSolitaireCollection", "Microsoft.MixedReality.Portal",
+        "Microsoft.People", "Microsoft.WindowsFeedbackHub",
+        "Microsoft.ZuneMusic", "Microsoft.ZuneVideo", "Microsoft.Windows.DevHome",
+        "Microsoft.Todos", "MicrosoftCorporationII.QuickAssist", "Clipchamp.Clipchamp",
+        "Microsoft.MicrosoftOfficeHub",
+        "king.com.*", "*.CandyCrush*", "*.HiddenCity*", "*.MarchofEmpires*",
+        "*.RoyalRevolt*", "*.DisneyMagicKingdoms*", "*.BubbleWitch*", "*.FarmHeroes*",
+        # --- Social/streaming/cloud/trial terze parti ---
+        "*.Facebook", "*.Instagram", "*.TikTok", "*.Netflix", "*.DisneyPlus",
+        "*.AmazonPrimeVideo", "*.AmazonMusic", "*.Amazon*", "*Booking*", "*.Twitter",
+        "*.LinkedIn*", "*Dropbox*", "DropboxInc.Dropbox", "*Evernote*",
+        "*WildTangent*", "*ExpressVPN*", "*CyberLink*",
+        # --- HP ---
+        "*SupportAssistant*", "*myHP*", "AD2F1837.HPPrivacySettings", "*HPJumpStart*",
+        "*HPPCHardwareDiagnostics*", "*HPPowerManager*", "*HPQuickDrop*", "*HPSystemInformation*",
+        "*HPWorkWell*", "*HPProgrammableKey*", "*HPDesktopSupportUtilities*",
+        # --- Lenovo ---
+        "*LenovoVantage*", "*LenovoCompanion*", "*LenovoUtility*", "*LenovoWelcome*",
+        "*LenovoQuickClean*", "*LenovoNow*", "*LenovoSmartCommunication*",
+        # --- Dell ---
+        "*DellSupportAssist*", "*DellCustomerConnect*", "*DellDigitalDelivery*",
+        "*DellUpdate*", "*DellOptimizer*", "*PartnerPromo*", "*DellPowerManager*",
+        # --- Asus (NB: NON tocco 'ASUS System Control Interface': e' un DRIVER vitale) ---
+        "*MyASUS*", "*ASUSPCAssistant*", "*ASUSGiftBox*", "*GlideX*", "*ASUSSplendid*",
+        "*ScreenXpert*", "*ScreenPad*", "*ArmouryCrate*", "*AsusCloud*", "*ASUSWebStorage*",
+        "*ASUSSettings*", "*ProArtCreatorHub*", "*ASUSLiveUpdate*", "*AsusProductRegistration*",
+        "*ASUSDialoutBox*", "*ASUSAppCenter*",
+        # --- Acer (tutto il bloatware promozionale, telemetry e store apps) ---
+        "*AcerCollection*", "*AcerRegistration*", "*AcerJumpstart*", "*AcerCareCenter*",
+        "*AcerPortal*", "*AcerQuickAccess*", "*Planet9*", "*AcerPurifiedVoice*",
+        "*AcerUserExperience*", "*AcerExplorerAssistant*"
+    )
+
     foreach ($pkg in $bloatwareAppx) {
         try {
             $trovati = Get-AppxPackage -AllUsers -Name $pkg -ErrorAction SilentlyContinue
             foreach ($t in $trovati) {
-                Write-Info "Rimuovo app: $($t.Name)"
+                Write-Info "Rimuovo app Store: $($t.Name)"
                 Remove-AppxPackage -Package $t.PackageFullName -AllUsers -ErrorAction SilentlyContinue
                 $rimosse++
             }
-            # Rimuovi anche il provisioning: i nuovi utenti non le riavranno
+            # Rimuovi anche il provisioning (sia per DisplayName che per PackageName)
             Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue |
-                Where-Object { $_.DisplayName -like $pkg } |
-                ForEach-Object { Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction SilentlyContinue | Out-Null }
+                Where-Object {
+                    ($_.DisplayName -and $_.DisplayName -like $pkg) -or
+                    ($_.PackageName -and $_.PackageName -like $pkg)
+                } |
+                ForEach-Object {
+                    Remove-AppxProvisionedPackage -Online -PackageName $_.PackageName -ErrorAction SilentlyContinue | Out-Null
+                }
         } catch {}
     }
 
-    # Utility/trial Win32 via winget. NIENTE antivirus: li gestisce gia' il
-    # blocco 1/3 qui sopra (nessuna duplicazione).
-    $trialWin32 = @("HP Support Assistant", "HP Documentation", "HP Sure Recover",
-                    "WildTangent Games", "ExpressVPN", "Dropbox Promotion",
-                    "MyASUS", "ASUS GiftBox", "GlideX", "ASUS Product Registration Program")
+    # 2) Disinstallazione DIRETTA da REGISTRO per programmi Win32 OEM (offline-safe,
+    # non dipende da winget: intercetta Dropbox, Booking, Acer Care Center, trial, ecc.)
+    $bloatwareWin32Patterns = @(
+        '*Dropbox*', '*Booking*', '*Evernote*', '*WildTangent*',
+        '*ExpressVPN*', '*CyberLink*',
+        '*Acer Care Center*', '*Acer Collection*', '*Acer Registration*', '*Acer Jumpstart*',
+        '*Planet9*', '*Acer User Experience*', '*Care Center Service*',
+        '*HP Support Assistant*', '*HP Documentation*', '*HP Sure Recover*', '*HP JumpStart*',
+        '*Lenovo Vantage*', '*Lenovo Welcome*', '*Lenovo Now*',
+        '*Dell SupportAssist*', '*Dell Customer Connect*', '*Dell Digital Delivery*',
+        '*ASUS GiftBox*', '*GlideX*', '*ASUS Product Registration*'
+    )
+
+    $uninstallKeys = @(
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )
+    if ($RunReale) {
+        foreach ($uPath in $uninstallKeys) {
+            try {
+                $items = Get-ItemProperty -Path $uPath -ErrorAction SilentlyContinue
+                if (-not $items) { continue }
+                foreach ($item in $items) {
+                    $dispName = $item.DisplayName
+                    if (-not $dispName) { continue }
+
+                    $matchFound = $false
+                    foreach ($pat in $bloatwareWin32Patterns) {
+                        if ($dispName -like $pat) {
+                            $matchFound = $true
+                            break
+                        }
+                    }
+                    if (-not $matchFound) { continue }
+
+                    $uninst = $item.QuietUninstallString
+                    if (-not $uninst) { $uninst = $item.UninstallString }
+                    if ($uninst) {
+                        Write-Info "Disinstallo programma Win32: $dispName"
+                        try {
+                            if ($uninst -match 'msiexec(\.exe)?' -or $item.PSChildName -match '^\{[0-9A-Fa-f\-]+\}$') {
+                                $prodCode = if ($item.PSChildName -match '^\{[0-9A-Fa-f\-]+\}$') { $item.PSChildName } else {
+                                    if ($uninst -match '\{[0-9A-Fa-f\-]+\}') { $matches[0] } else { $null }
+                                }
+                                if ($prodCode) {
+                                    Start-Process -FilePath "msiexec.exe" -ArgumentList "/x `"$prodCode`" /qn /norestart" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
+                                    $rimosse++
+                                    Write-OK "Disinstallato via MSI: $dispName"
+                                }
+                            } elseif ($item.QuietUninstallString) {
+                                Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$($item.QuietUninstallString)`"" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
+                                $rimosse++
+                                Write-OK "Disinstallato: $dispName"
+                            } else {
+                                $cmd = $uninst
+                                if ($cmd -notmatch '/S|/silent|/verysilent|/qn') { $cmd = "$cmd /S /silent /qn" }
+                                Start-Process -FilePath "cmd.exe" -ArgumentList "/c $cmd" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
+                                $rimosse++
+                                Write-OK "Disinstallato: $dispName"
+                            }
+                        } catch {}
+                    }
+                }
+            } catch {}
+        }
+    }
+
+    # 3) Passaggio di completamento Win32 via Winget (se disponibile)
+    $trialWin32Winget = @(
+        "Dropbox", "Dropbox Promotion", "Dropbox OEM", "Booking.com",
+        "Evernote", "WildTangent Games", "ExpressVPN", "CyberLink PowerDVD",
+        "HP Support Assistant", "HP Documentation", "HP Sure Recover",
+        "MyASUS", "ASUS GiftBox", "GlideX", "ASUS Product Registration Program",
+        "Acer Care Center", "Planet9"
+    )
     if (Confirm-Winget) {
-        foreach ($nome in $trialWin32) {
+        foreach ($nome in $trialWin32Winget) {
             winget uninstall --name $nome --silent --accept-source-agreements --disable-interactivity 2>$null | Out-Null
             if ($LASTEXITCODE -eq 0) { Write-Info "Rimosso (winget): $nome"; $rimosse++ }
         }
     }
 
-    # --- Collegamenti SPAZZATURA nel menu Start (Booking.com, "Offerte Adobe",
-    # HP Documentation...): sono solo link pubblicitari/promo, via. NON tocca
-    # le app vere (Word, Excel, Edge, l'antivirus). ---
-    $menuJunk = @('*Booking*', 'Offerte Adobe*', 'Adobe offers*', 'HP Documentation*', 'ExpressVPN*', 'WildTangent*', 'Amazon.it*')
-    $menuDirs = @(
-        (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'),
-        (Join-Path $env:APPDATA     'Microsoft\Windows\Start Menu\Programs')
+    # 4) Pulizia COLLEGAMENTI (.lnk e .url) dal Menu Start, Desktop (Utente, Pubblico e OneDrive)
+    $junkShortcutPatterns = @(
+        '*Booking*', '*Dropbox*', '*Evernote*', '*WildTangent*', '*ExpressVPN*',
+        '*CyberLink*', '*Offerte Adobe*', '*Adobe offers*', '*Adobe*', '*Amazon*',
+        '*TikTok*', '*Instagram*', '*Facebook*', '*Disney*', '*Netflix*',
+        '*Acer Collection*', '*Acer Care Center*', '*Acer Jumpstart*', '*Acer Registration*',
+        '*Planet9*', '*HP Support Assistant*', '*HP Documentation*', '*Lenovo Welcome*',
+        '*Lenovo Vantage*', '*Dell SupportAssist*', '*Dell Digital Delivery*',
+        '*ASUS GiftBox*', '*GlideX*', '*McAfee*', '*Norton*'
     )
-    foreach ($dir in $menuDirs) {
-        if (-not (Test-Path $dir)) { continue }
-        Get-ChildItem -Path $dir -Filter *.lnk -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-            $nomeLnk = $_.BaseName
-            foreach ($pat in $menuJunk) {
-                if ($nomeLnk -like $pat) {
-                    Write-Info "Tolgo dal menu Start: $nomeLnk"
-                    Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+
+    $shortcutDirs = @(
+        (Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'),
+        (Join-Path $env:APPDATA     'Microsoft\Windows\Start Menu\Programs'),
+        [Environment]::GetFolderPath('Desktop'),
+        [Environment]::GetFolderPath('CommonDesktopDirectory'),
+        'C:\Users\Public\Desktop',
+        (Join-Path $env:USERPROFILE 'OneDrive\Desktop')
+    )
+    foreach ($dir in $shortcutDirs) {
+        if (-not $dir -or -not (Test-Path $dir)) { continue }
+        Get-ChildItem -Path $dir -Include *.lnk, *.url -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+            $nomeFile = $_.BaseName
+            foreach ($pat in $junkShortcutPatterns) {
+                if ($nomeFile -like $pat) {
+                    Write-Info "Elimino collegamento: $($_.Name)"
+                    Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
                     $rimosse++
                     break
                 }
@@ -5514,15 +5626,66 @@ $bloatwareAppx = @(
         }
     }
 
-    # --- Pulizia AVVIO AUTOMATICO: updater/helper NOTI (produttore, promo). NON
-    # tocca driver, OneDrive, gli updater dei browser, ne' le app del setup. ---
+    # 5) SBLOCCO DALLA BARRA DELLE APPLICAZIONI (Taskbar Unpin)
+    # Rimuove le icone promozionali (Booking, Dropbox, Acer) fissate da OEM nella barra
+    try {
+        $taskbarDir = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'
+        if (Test-Path $taskbarDir) {
+            Get-ChildItem -Path $taskbarDir -Include *.lnk, *.url -File -ErrorAction SilentlyContinue | ForEach-Object {
+                $tbName = $_.BaseName
+                foreach ($pat in $junkShortcutPatterns) {
+                    if ($tbName -like $pat) {
+                        Write-Info "Tolgo icona dalla barra: $($_.Name)"
+                        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+                        $rimosse++
+                        break
+                    }
+                }
+            }
+        }
+
+        # Unpin via Shell COM: agisce sia sui file pinned che su shell:AppsFolder
+        $shellApp = New-Object -ComObject Shell.Application
+        if (Test-Path $taskbarDir) {
+            $tbFolder = $shellApp.Namespace($taskbarDir)
+            if ($tbFolder) {
+                foreach ($item in $tbFolder.Items()) {
+                    foreach ($pat in $junkShortcutPatterns) {
+                        if ($item.Name -like $pat) {
+                            $v = $item.Verbs() | Where-Object { $_.Name.Replace('&','') -match 'Unpin from taskbar|Rimuovi dalla barra|Sblocca dalla barra' }
+                            if ($v) { $v.DoIt() }
+                        }
+                    }
+                }
+            }
+        }
+        $appsFolder = $shellApp.Namespace('shell:::{4234d49b-0245-4df3-b780-3893943456e1}')
+        if ($appsFolder) {
+            foreach ($app in $appsFolder.Items()) {
+                foreach ($pat in $junkShortcutPatterns) {
+                    if ($app.Name -like $pat) {
+                        $v = $app.Verbs() | Where-Object { $_.Name.Replace('&','') -match 'Unpin from taskbar|Rimuovi dalla barra|Sblocca dalla barra' }
+                        if ($v) {
+                            $v.DoIt()
+                            Write-Info "Sbloccato dalla barra applicazioni: $($app.Name)"
+                        }
+                        break
+                    }
+                }
+            }
+        }
+    } catch {}
+
+    # 6) Pulizia AVVIO AUTOMATICO: updater/helper NOTI (produttore, promo). NON
+    # tocca driver, OneDrive, gli updater dei browser, ne' le app del setup.
     $avvioJunk = @(
         'HP*', '*Lenovo*', 'Dell*', '*ASUS*', 'Acer*', '*SupportAssist*', '*Vantage*',
         'Adobe*', 'SunJavaUpdate*', 'iTunesHelper', 'QuickTime*', 'CCleaner*',
-        'WildTangent*', 'ExpressVPN*', '*Booking*'
+        'WildTangent*', 'ExpressVPN*', '*Booking*', '*Dropbox*', '*Evernote*',
+        '*CyberLink*', '*Planet9*', '*ACCStd*', '*CareCenter*'
     )
     $avvioTolti = 0
-    # 1) Voci di registro "Run" (utente + macchina + 32-bit): tolgo per nome-voce
+    # a) Voci di registro "Run" (utente + macchina + 32-bit): tolgo per nome-voce
     $runKeys = @(
         'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run',
         'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run',
@@ -5545,7 +5708,7 @@ $bloatwareAppx = @(
             }
         }
     }
-    # 2) Collegamenti nelle cartelle "Esecuzione automatica" (utente + tutti)
+    # b) Collegamenti nelle cartelle "Esecuzione automatica" (utente + tutti)
     foreach ($dir in @([Environment]::GetFolderPath('Startup'), [Environment]::GetFolderPath('CommonStartup'))) {
         if (-not $dir -or -not (Test-Path $dir)) { continue }
         Get-ChildItem -Path $dir -Filter *.lnk -ErrorAction SilentlyContinue | ForEach-Object {
@@ -5560,12 +5723,13 @@ $bloatwareAppx = @(
             }
         }
     }
-    # 3) Task pianificati all'avvio/logon: DISABILITO (non elimino) i junk noti.
+    # c) Task pianificati all'avvio/logon: DISABILITO (non elimino) i junk noti.
     #    Salto i task di sistema \Microsoft\Windows\ e gli updater dei browser.
     $taskJunk = @(
         '*Adobe*', '*HP*', '*Lenovo*', '*Dell*', '*ASUS*', '*Acer*',
         '*SupportAssist*', '*Vantage*', '*CCleaner*', '*WildTangent*',
-        '*ExpressVPN*', '*Java Update*', '*JavaUpdate*'
+        '*ExpressVPN*', '*Java Update*', '*JavaUpdate*',
+        '*Dropbox*', '*Booking*', '*Evernote*', '*CyberLink*', '*Planet9*'
     )
     try {
         foreach ($tk in (Get-ScheduledTask -ErrorAction SilentlyContinue)) {
@@ -5583,7 +5747,7 @@ $bloatwareAppx = @(
         }
     } catch {}
 
-    Write-OK "Bloatware: rimosse $rimosse app; tolti $avvioTolti elementi dall'avvio automatico."
+    Write-OK "Bloatware: rimosse $rimosse app/collegamenti; tolti $avvioTolti elementi dall'avvio automatico."
     Add-Report "Rimozione bloatware ($rimosse app)" "OK"
     Add-Report "Pulizia avvio automatico ($avvioTolti)" "OK"
 
@@ -5675,6 +5839,10 @@ $bloatwareAppx = @(
         if (Test-Path $cdm) {
             Set-ItemProperty -Path $cdm -Name "SystemPaneSuggestionsEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
             Set-ItemProperty -Path $cdm -Name "SoftLandingEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $cdm -Name "SilentInstalledAppsEnabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $cdm -Name "ContentDeliveryAllowed" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $cdm -Name "SubscribedContent-338388Enabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $cdm -Name "SubscribedContent-338389Enabled" -Value 0 -Type DWord -ErrorAction SilentlyContinue
         }
         Write-OK "Privacy Windows potenziata (telemetria e tracciamento pubblicitario disattivati)."
         Add-Report "Privacy e telemetria Windows" "OK"
