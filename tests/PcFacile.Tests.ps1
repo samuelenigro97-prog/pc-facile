@@ -360,6 +360,17 @@ Describe 'Update-PannelloStatus' {
         $content | Should -Match "pulizia"
         $content | Should -Match "running"
     }
+
+    It 'imposta tutti i task pending su done quando viene passato -Completato' {
+        $Global:PannelloStatus = $null
+        Update-PannelloStatus -TaskId "pulizia" -Stato "pending"
+        Update-PannelloStatus -Completato
+        $Global:PannelloStatus.Completato | Should -BeTrue
+        $Global:PannelloStatus.Percentuale | Should -Be 100
+        foreach ($k in $Global:PannelloStatus.Tasks.Keys) {
+            $Global:PannelloStatus.Tasks[$k].Stato | Should -Not -Be "pending"
+        }
+    }
 }
 
 Describe 'Get-CredenzialiSalvatePannello' {

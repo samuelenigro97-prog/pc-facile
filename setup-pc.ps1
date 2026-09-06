@@ -1114,6 +1114,14 @@ function Update-PannelloStatus {
         if ($Completato) {
             $Global:PannelloStatus.Completato = $true
             $Global:PannelloStatus.Percentuale = 100
+            if ($Global:PannelloStatus.Tasks) {
+                foreach ($k in @($Global:PannelloStatus.Tasks.Keys)) {
+                    if ($Global:PannelloStatus.Tasks[$k].Stato -eq "pending") {
+                        $Global:PannelloStatus.Tasks[$k].Stato = "done"
+                        $Global:PannelloStatus.Tasks[$k].Dettaglio = "Completato"
+                    }
+                }
+            }
         }
 
         if ($TaskId -and $Global:PannelloStatus.Tasks.Contains($TaskId)) {
@@ -2018,6 +2026,7 @@ function Open-PannelloOperatore {
             }
 
             var tasks = data.Tasks || data.tasks;
+            var isAllDone = (data.Completato || data.completato || pct >= 100);
             if (tasks) {
                 var doneCount = 0;
                 for (var key in tasks) {
@@ -2025,6 +2034,10 @@ function Open-PannelloOperatore {
                     var row = document.getElementById('task-' + key);
                     var stato = (task.Stato || task.stato || 'pending').toLowerCase();
                     var dettaglio = task.Dettaglio || task.dettaglio || '';
+                    if (isAllDone && stato === 'pending') {
+                        stato = 'done';
+                        dettaglio = 'Completato';
+                    }
                     if (stato === 'done' || stato === 'skipped') doneCount++;
                     
                     if (row) {
@@ -5404,6 +5417,10 @@ if ($RunReale) {
                             Update-PannelloStatus -TaskId "office" -Stato "done" -Percentuale 62 -Dettaglio "Gia' completato"
                             Update-PannelloStatus -TaskId "runtime" -Stato "done" -Percentuale 56 -Dettaglio "Gia' completato"
                         }
+                        if ($Global:FaseRipresa -ge 7) { Update-PannelloStatus -TaskId "aggiorna" -Stato "done" -Percentuale 72 -Dettaglio "Gia' completato" }
+                        if ($Global:FaseRipresa -ge 8) { Update-PannelloStatus -TaskId "app" -Stato "done" -Percentuale 88 -Dettaglio "Gia' completato" }
+                        if ($Global:FaseRipresa -ge 9) { Update-PannelloStatus -TaskId "antivirus" -Stato "done" -Percentuale 92 -Dettaglio "Gia' completato" }
+                        if ($Global:FaseRipresa -ge 10) { Update-PannelloStatus -TaskId "cyber" -Stato "done" -Percentuale 96 -Dettaglio "Gia' completato" }
                         Write-OK "Riprendo: i passi gia' completati verranno saltati."
                     } else {
                         Remove-Item $Global:StatoFile -Force -ErrorAction SilentlyContinue
