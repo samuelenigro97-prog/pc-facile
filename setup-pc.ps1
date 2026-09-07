@@ -4574,10 +4574,10 @@ if (-not $Test -and -not $Diagnostica -and -not $PreparaUSB -and -not $Migrazion
     Write-Host ""
     Write-Host "Seleziona Modalita' Operativa:" -ForegroundColor White
     Write-Host ""
-    Write-Host "  [1] MODALITA' SEMI-AUTOMATICA (Standard Unieuro - Consigliata)" -ForegroundColor Green
-    Write-Host "      -> Setup parallelo a massima velocita' + Pannello Operatore 50% con portali 1-Click" -ForegroundColor DarkGray
-    Write-Host "  [2] MODALITA' AUTOMATICA (Proton Mail Rapido + Setup Completo)" -ForegroundColor Cyan
-    Write-Host "      -> Registrazione rapida Proton Mail + installazione app e ottimizzazioni in parallelo" -ForegroundColor DarkGray
+    Write-Host "  [1] CONFIGURAZIONE AUTOMATICA ZERO-TOUCH (Standard Unieuro - Consigliata)" -ForegroundColor Green
+    Write-Host "      -> Inserisci nome e cognome nel Pannello Web e il PC fa TUTTO da solo fino alla consegna." -ForegroundColor DarkGray
+    Write-Host "  [2] REGISTRAZIONE GUIDATA ACCOUNT & SERVIZI (Passo-passo nel browser)" -ForegroundColor Cyan
+    Write-Host "      -> Apertura guidata dei portali web per registrazione email e riscatto card" -ForegroundColor DarkGray
     Write-Host "  [3] PREPARA USB OFFLINE (Scarica tutti i programmi sulla chiavetta)" -ForegroundColor Yellow
     Write-Host "  [4] CHECK SALUTE & DIAGNOSTICA HARDWARE (Report SSD SMART, Batteria, Driver)" -ForegroundColor Blue
     Write-Host "  [Q] Esci" -ForegroundColor DarkGray
