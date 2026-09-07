@@ -2023,7 +2023,7 @@ function Open-PannelloOperatore {
                     <div class="cred-step-title"><span class="step-badge">PASSO 4</span> Servizi Acquistati dal Cliente sullo Scontrino:</div>
                     <div class="services-grid">
                         <label class="svc-item">
-                            <input type="checkbox" id="chkSvcProton" checked> <span>&#9993; Email Proton</span>
+                            <input type="checkbox" id="chkSvcProton"> <span>&#9993; Email Proton</span>
                         </label>
                         <label class="svc-item">
                             <input type="checkbox" id="chkSvcOffice"> <span>&#128230; Card Office 365</span>
@@ -2207,6 +2207,8 @@ function Open-PannelloOperatore {
             var btns = document.querySelectorAll('.dom-btn');
             for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
             if (btn) btn.classList.add('active');
+            var chkProton = document.getElementById('chkSvcProton');
+            if (chkProton) { chkProton.checked = (dom === 'proton.me'); }
             aggiornaCred();
         }
 
@@ -2352,7 +2354,7 @@ function Open-PannelloOperatore {
             var telefono = (document.getElementById('inTelefono') ? document.getElementById('inTelefono').value.trim() : '');
             var cliente = (cognome + ' ' + nome).trim() || nome || cognome || 'Utente';
             
-            var proton = document.getElementById('chkSvcProton') ? document.getElementById('chkSvcProton').checked : true;
+            var proton = document.getElementById('chkSvcProton') ? document.getElementById('chkSvcProton').checked : false;
             var office = document.getElementById('chkSvcOffice') ? document.getElementById('chkSvcOffice').checked : false;
             var mcafee = document.getElementById('chkSvcMcAfee') ? document.getElementById('chkSvcMcAfee').checked : false;
             var norton = document.getElementById('chkSvcNorton') ? document.getElementById('chkSvcNorton').checked : false;
@@ -2389,17 +2391,6 @@ function Open-PannelloOperatore {
                 if (navigator.clipboard && navigator.clipboard.writeText) {
                     navigator.clipboard.writeText('PCFACILE_CRED:' + JSON.stringify(payload)).catch(function(){});
                 }
-            } catch(e) {}
-
-            // 3. Download file JSON
-            try {
-                var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-                var a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = 'pcfacile-cred.json';
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(function() { if (a.parentNode) a.parentNode.removeChild(a); }, 200);
             } catch(e) {}
             
             showToast('Dati cliente salvati con successo!');
@@ -3952,7 +3943,9 @@ function Invoke-BrowserAutoSignup {
 
     # Servizi da attivare (da JSON pannello o default)
     $svcs = $Global:serviziSelezionati
-    $doProton = if ($null -ne $svcs -and $null -ne $svcs.Proton) { [bool]$svcs.Proton } else { $true }
+    $isProtonSelected = ($null -ne $svcs -and $null -ne $svcs.Proton -and [bool]$svcs.Proton)
+    $isProtonDomain   = ($Global:credDominio -eq "proton.me" -or $Global:credProvider -eq "Proton")
+    $doProton = ($isProtonSelected -or ($isProtonDomain -and $null -eq $svcs))
     $doOffice = if ($null -ne $svcs -and $null -ne $svcs.Office) { [bool]$svcs.Office } else { $false }
     $doMcAfee = if ($null -ne $svcs -and $null -ne $svcs.McAfee) { [bool]$svcs.McAfee } else { $false }
     $doNorton = if ($null -ne $svcs -and $null -ne $svcs.Norton) { [bool]$svcs.Norton } else { $false }
