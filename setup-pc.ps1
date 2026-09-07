@@ -1159,153 +1159,627 @@ function Open-PannelloOperatore {
     <title>Unieuro - Pannello Assistenza Tecnica PC</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #000c1e; }
-        ::-webkit-scrollbar-thumb { background: #003875; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb { background: #00458C; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #EE7203; }
 
-        body { background: radial-gradient(circle at 50% 0%, #001a3d 0%, #000d20 70%, #000713 100%); color: #f8fafc; padding: 12px; min-height: 100vh; line-height: 1.4; }
+        body {
+            background: radial-gradient(circle at 50% 0%, #001a3d 0%, #000c20 70%, #000612 100%);
+            color: #f8fafc;
+            padding: 14px;
+            min-height: 100vh;
+            font-size: 15px;
+            line-height: 1.5;
+        }
         .container { max-width: 980px; margin: 0 auto; }
 
-        /* HEADER & BRAND */
-        .header { background: linear-gradient(135deg, rgba(0,26,58,0.95) 0%, rgba(0,43,92,0.95) 100%); backdrop-filter: blur(10px); border: 1px solid #00458C; border-radius: 12px; padding: 12px 16px; border-bottom: 3.5px solid #EE7203; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 6px 20px rgba(0,0,0,0.45); }
-        .brand-box { display: flex; align-items: center; gap: 10px; }
-        .u-logo { background: #EE7203; color: #fff; font-weight: 900; font-size: 17px; letter-spacing: 1.2px; padding: 6px 12px; border-radius: 7px; text-transform: uppercase; box-shadow: 0 2px 10px rgba(238,114,3,0.4); flex-shrink: 0; }
-        .brand-titles h1 { font-size: 15.5px; color: #fff; font-weight: 700; letter-spacing: 0.2px; line-height: 1.2; }
-        .brand-titles p { font-size: 11.5px; color: #94a3b8; margin-top: 2px; }
-        .u-tagline { color: #EE7203; font-weight: 700; font-style: italic; }
-        
-        .header-actions { display: flex; align-items: center; gap: 8px; }
-        .btn-audio { background: #00142E; border: 1px solid #00458C; color: #93c5fd; border-radius: 20px; padding: 5px 10px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 4px; }
-        .btn-audio:hover { border-color: #EE7203; color: #fff; }
-        .badge-live { background: linear-gradient(135deg, #EE7203 0%, #d95e00 100%); color: #fff; font-weight: 800; font-size: 10.5px; padding: 5px 12px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 0 12px rgba(238,114,3,0.6); animation: pulse 2s infinite; white-space: nowrap; }
-        .badge-done { background: #16a34a !important; box-shadow: 0 0 14px rgba(34,197,94,0.6) !important; animation: none !important; color: #fff; font-weight: 800; font-size: 10.5px; padding: 5px 12px; border-radius: 20px; text-transform: uppercase; white-space: nowrap; }
-        @keyframes pulse { 0% { opacity: 0.9; transform: scale(1); } 50% { opacity: 1; transform: scale(1.02); } 100% { opacity: 0.9; transform: scale(1); } }
+        /* HEADER & BRAND - GRANDE, NITIDO E RICONOSCIBILE */
+        .header {
+            background: linear-gradient(135deg, rgba(0,26,58,0.95) 0%, rgba(0,43,92,0.95) 100%);
+            backdrop-filter: blur(10px);
+            border: 2px solid #00458C;
+            border-radius: 14px;
+            padding: 14px 20px;
+            border-bottom: 4px solid #EE7203;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 6px 22px rgba(0,0,0,0.5);
+        }
+        .brand-box { display: flex; align-items: center; gap: 14px; }
+        .u-logo {
+            background: #EE7203;
+            color: #fff;
+            font-weight: 900;
+            font-size: 20px;
+            letter-spacing: 1.5px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            text-transform: uppercase;
+            box-shadow: 0 3px 12px rgba(238,114,3,0.45);
+            flex-shrink: 0;
+        }
+        .brand-titles h1 { font-size: 18px; color: #fff; font-weight: 800; letter-spacing: 0.3px; line-height: 1.2; }
+        .brand-titles p { font-size: 13px; color: #94a3b8; margin-top: 3px; }
+        .u-tagline { color: #EE7203; font-weight: 800; font-style: italic; }
 
-        /* MINI DASHBOARD HARDWARE */
-        .hw-bar { background: rgba(0, 20, 46, 0.8); border: 1px solid #003366; border-radius: 8px; padding: 6px 12px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: #cbd5e1; flex-wrap: wrap; }
-        .hw-item { display: flex; align-items: center; gap: 5px; }
-        .hw-item strong { color: #38bdf8; }
-        .hw-item .hw-val { color: #fff; font-weight: 600; }
-        .hw-copy-sn { cursor: pointer; color: #fed7aa; text-decoration: underline; font-size: 10.5px; }
-        .hw-copy-sn:hover { color: #EE7203; }
+        .header-actions { display: flex; align-items: center; gap: 10px; }
+        .btn-audio {
+            background: #00142E;
+            border: 1.5px solid #00458C;
+            color: #93c5fd;
+            border-radius: 24px;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-audio:hover { border-color: #EE7203; color: #fff; background: #00224d; }
+        .badge-live {
+            background: linear-gradient(135deg, #EE7203 0%, #d95e00 100%);
+            color: #fff;
+            font-weight: 800;
+            font-size: 13px;
+            padding: 8px 18px;
+            border-radius: 24px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 0 14px rgba(238,114,3,0.65);
+            animation: pulse 2s infinite;
+            white-space: nowrap;
+        }
+        .badge-done {
+            background: #16a34a !important;
+            box-shadow: 0 0 16px rgba(34,197,94,0.65) !important;
+            animation: none !important;
+            color: #fff;
+            font-weight: 800;
+            font-size: 13px;
+            padding: 8px 18px;
+            border-radius: 24px;
+            text-transform: uppercase;
+            white-space: nowrap;
+        }
+        @keyframes pulse { 0% { opacity: 0.92; transform: scale(1); } 50% { opacity: 1; transform: scale(1.02); } 100% { opacity: 0.92; transform: scale(1); } }
 
-        /* HERO PROGRESS BAR SINCRONIZZATA IN TEMPO REALE */
-        .progress-card { background: linear-gradient(135deg, rgba(0,26,58,0.9) 0%, rgba(0,38,77,0.9) 100%); border: 1px solid #00458C; border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.3); }
-        .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 12px; }
-        .progress-title { color: #fed7aa; font-weight: 700; display: flex; align-items: center; gap: 6px; font-size: 12px; }
-        .progress-meta { display: flex; align-items: center; gap: 10px; }
-        .progress-timer { color: #94a3b8; font-size: 11px; font-family: monospace; }
-        .progress-pct { color: #EE7203; font-size: 16px; font-weight: 900; }
-        .progress-bar-bg { background: #000c1c; border: 1px solid #003B7A; height: 11px; border-radius: 6px; overflow: hidden; position: relative; }
-        .progress-bar-fill { background: linear-gradient(90deg, #EE7203 0%, #ff9d42 70%, #38bdf8 100%); height: 100%; width: 5%; border-radius: 6px; transition: width 0.4s ease; box-shadow: 0 0 10px rgba(238,114,3,0.7); }
-        .progress-status-row { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; font-size: 11px; }
-        .current-fase { color: #fff; font-weight: 600; }
-        .current-detail { color: #94a3b8; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; text-align: right; }
+        /* RIEPILOGO HARDWARE */
+        .hw-bar {
+            background: rgba(0, 20, 46, 0.85);
+            border: 1.5px solid #003875;
+            border-radius: 10px;
+            padding: 10px 16px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 13.5px;
+            color: #cbd5e1;
+            flex-wrap: wrap;
+        }
+        .hw-item { display: flex; align-items: center; gap: 6px; }
+        .hw-item strong { color: #38bdf8; font-weight: 700; }
+        .hw-item .hw-val { color: #fff; font-weight: 700; }
+        .btn-hw-copy {
+            background: #002b5c;
+            border: 1px solid #00458C;
+            color: #fed7aa;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-left: 6px;
+            transition: all 0.2s;
+        }
+        .btn-hw-copy:hover { background: #EE7203; color: #fff; border-color: #EE7203; }
 
-        /* COMPLETION BANNER */
-        .banner-complete { display: none; background: rgba(34, 197, 94, 0.15); border: 2px solid #22c55e; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; text-align: center; }
-        .banner-complete h3 { color: #4ade80; font-size: 14px; margin-bottom: 3px; }
-        .banner-complete p { color: #dcfce7; font-size: 12px; margin-bottom: 8px; }
-        .btn-scheda { display: inline-block; background: #22c55e; color: #fff; font-weight: 700; font-size: 12px; padding: 7px 16px; border-radius: 6px; text-decoration: none; box-shadow: 0 2px 10px rgba(34,197,94,0.4); transition: all 0.2s; }
+        /* MEGA-HERO PROGRESS BAR (STATO IN TEMPO REALE) */
+        .progress-card {
+            background: linear-gradient(135deg, rgba(0,26,58,0.95) 0%, rgba(0,38,77,0.95) 100%);
+            border: 2px solid #00458C;
+            border-radius: 14px;
+            padding: 16px 20px;
+            margin-bottom: 14px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+        }
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .progress-title {
+            color: #fed7aa;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .progress-meta { display: flex; align-items: center; gap: 14px; }
+        .progress-timer-box { font-size: 13px; color: #94a3b8; }
+        .progress-timer { color: #38bdf8; font-family: monospace; font-size: 15px; font-weight: 700; }
+        .progress-pct {
+            color: #EE7203;
+            font-size: 36px;
+            font-weight: 900;
+            line-height: 1;
+            text-shadow: 0 0 12px rgba(238,114,3,0.5);
+        }
+        .progress-bar-bg {
+            background: #000c1c;
+            border: 2px solid #003B7A;
+            height: 22px;
+            border-radius: 11px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: inset 0 2px 6px rgba(0,0,0,0.6);
+        }
+        .progress-bar-fill {
+            background: linear-gradient(90deg, #EE7203 0%, #ff9d42 65%, #38bdf8 100%);
+            height: 100%;
+            width: 5%;
+            border-radius: 9px;
+            transition: width 0.4s ease;
+            box-shadow: 0 0 14px rgba(238,114,3,0.8);
+        }
+        .progress-status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+            font-size: 14px;
+            background: rgba(0, 15, 36, 0.6);
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 59, 122, 0.4);
+        }
+        .current-fase { color: #ffffff; font-weight: 700; font-size: 14.5px; }
+        .current-detail { color: #cbd5e1; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; text-align: right; }
+
+        /* BANNER DI COMPLETAMENTO */
+        .banner-complete {
+            display: none;
+            background: rgba(34, 197, 94, 0.18);
+            border: 2.5px solid #22c55e;
+            border-radius: 14px;
+            padding: 16px 20px;
+            margin-bottom: 14px;
+            text-align: center;
+            box-shadow: 0 4px 16px rgba(34,197,94,0.3);
+        }
+        .banner-complete h3 { color: #4ade80; font-size: 17px; font-weight: 800; margin-bottom: 4px; }
+        .banner-complete p { color: #dcfce7; font-size: 14px; margin-bottom: 12px; }
+        .btn-scheda {
+            display: inline-block;
+            background: #22c55e;
+            color: #fff;
+            font-weight: 800;
+            font-size: 14px;
+            padding: 10px 22px;
+            border-radius: 8px;
+            text-decoration: none;
+            box-shadow: 0 3px 12px rgba(34,197,94,0.5);
+            transition: all 0.2s;
+        }
         .btn-scheda:hover { background: #16a34a; transform: translateY(-1px); }
 
-        /* NAVIGATION TABS (OTTIMIZZAZIONE 50% SPLIT SCREEN) */
-        .tab-bar { display: flex; gap: 4px; margin-bottom: 10px; background: rgba(0, 20, 46, 0.95); padding: 4px; border-radius: 8px; border: 1px solid #003366; overflow-x: auto; }
-        .tab-btn { flex: 1; min-width: max-content; background: transparent; border: none; color: #94a3b8; font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
-        .tab-btn:hover { color: #fff; background: rgba(0, 59, 122, 0.4); }
-        .tab-btn.active { background: #003B7A; color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.3); border: 1px solid #0056B3; }
+        /* NAVIGAZIONE SCHEDE (TABS) GRANDI E BEN VISIBILI */
+        .tab-bar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+            background: rgba(0, 20, 46, 0.95);
+            padding: 6px;
+            border-radius: 12px;
+            border: 1.5px solid #003875;
+        }
+        .tab-btn {
+            flex: 1;
+            min-height: 48px;
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            font-size: 14px;
+            font-weight: 700;
+            padding: 10px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .tab-btn:hover { color: #fff; background: rgba(0, 59, 122, 0.5); }
+        .tab-btn.active {
+            background: #003B7A;
+            color: #fff;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+            border: 1.5px solid #0056B3;
+        }
         .tab-btn.active .tab-badge-num { background: #EE7203; color: #fff; }
-        .tab-badge-num { background: #001f48; color: #93c5fd; font-size: 9.5px; padding: 1px 5px; border-radius: 10px; font-weight: 800; }
+        .tab-badge-num {
+            background: #001f48;
+            color: #93c5fd;
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 800;
+        }
 
         /* SEZIONI E CARD */
         .section-view { display: none; }
         .section-view.active-view { display: block; }
-        
-        .card { background: rgba(0, 31, 72, 0.85); backdrop-filter: blur(8px); border: 1px solid #003B7A; border-radius: 10px; padding: 12px 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.25); margin-bottom: 10px; }
-        .card h2 { font-size: 13.5px; color: #f8fafc; margin-bottom: 10px; border-bottom: 1.5px solid #003B7A; padding-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
-        .card h2 .title-left { display: flex; align-items: center; gap: 6px; }
-        .card h2 .bar { width: 3.5px; height: 14px; background: #EE7203; border-radius: 2px; display: inline-block; }
-        
-        /* CREDENZIALI */
-        .cred-group { margin-bottom: 9px; }
-        .cred-label { font-size: 10.5px; color: #93c5fd; margin-bottom: 3px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; display: flex; justify-content: space-between; align-items: center; }
-        .cred-box { display: flex; gap: 6px; }
-        .cred-input { flex: 1; background: #00122B; border: 1px solid #00458C; border-radius: 6px; padding: 7px 10px; font-size: 12px; color: #fff; font-family: 'Consolas', monospace; outline: none; transition: border-color 0.2s; }
-        .cred-input:focus { border-color: #EE7203; box-shadow: 0 0 0 2px rgba(238,114,3,0.35); }
-        .dom-selector { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 4px; margin-bottom: 6px; }
-        .dom-btn { background: #00122B; border: 1px solid #00458C; color: #cbd5e1; font-size: 10.5px; font-weight: 700; padding: 4.5px 6px; border-radius: 5px; cursor: pointer; transition: all 0.15s; text-align: center; }
-        .dom-btn:hover { border-color: #EE7203; color: #fff; }
-        .dom-btn.active { background: #EE7203; border-color: #EE7203; color: #fff; box-shadow: 0 2px 6px rgba(238,114,3,0.4); font-weight: 800; }
-        .btn-copy { background: linear-gradient(135deg, #003B7A 0%, #002B5C 100%); border: 1px solid #0056B3; color: #fff; border-radius: 5px; padding: 0 10px; font-size: 10.5px; font-weight: 700; cursor: pointer; transition: all 0.2s; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
-        .btn-copy:hover { background: #EE7203; border-color: #EE7203; }
-        .btn-mini-action { background: #001f48; border: 1px solid #00458C; color: #cbd5e1; border-radius: 5px; padding: 0 8px; font-size: 11px; cursor: pointer; transition: all 0.2s; }
-        .btn-mini-action:hover { color: #fff; border-color: #EE7203; }
 
-        /* PORTALI 1-CLICK */
-        .portal-filter { width: 100%; background: #00122B; border: 1px solid #003B7A; border-radius: 6px; padding: 6px 10px; font-size: 11px; color: #fff; margin-bottom: 8px; outline: none; }
-        .portal-filter:focus { border-color: #EE7203; }
-        .links-grid { display: flex; flex-direction: column; gap: 4.5px; }
-        .portal-divider { display: flex; align-items: center; gap: 6px; margin: 6px 0 3px 0; }
-        .portal-divider::before, .portal-divider::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(238,114,3,0.1), #EE7203, rgba(238,114,3,0.1)); }
-        .portal-divider span { font-size: 9.5px; font-weight: 800; color: #fed7aa; text-transform: uppercase; letter-spacing: 0.4px; background: #001A3A; border: 1px solid #EE7203; padding: 1.5px 6px; border-radius: 4px; box-shadow: 0 1px 4px rgba(238,114,3,0.25); white-space: nowrap; }
-        .portal-btn { display: flex; align-items: center; justify-content: space-between; background: #00142E; border: 1px solid #003B7A; border-radius: 6px; padding: 6.5px 10px; color: #f8fafc; text-decoration: none; font-size: 11.5px; font-weight: 600; transition: all 0.15s; }
-        .portal-btn:hover { background: #00224D; border-color: #EE7203; transform: translateX(2px); }
-        .portal-btn .icon { font-size: 13px; margin-right: 5px; }
-        .portal-btn .arrow { color: #EE7203; font-weight: bold; font-size: 11px; }
-        .portal-btn.highlight { border-color: #EE7203; background: rgba(238, 114, 3, 0.12); box-shadow: 0 0 8px rgba(238,114,3,0.2); }
+        .card {
+            background: rgba(0, 31, 72, 0.88);
+            backdrop-filter: blur(8px);
+            border: 1.5px solid #003B7A;
+            border-radius: 14px;
+            padding: 18px 20px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+            margin-bottom: 14px;
+        }
+        .card h2 {
+            font-size: 16px;
+            color: #f8fafc;
+            margin-bottom: 12px;
+            border-bottom: 2px solid #003B7A;
+            padding-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .card h2 .title-left { display: flex; align-items: center; gap: 8px; font-weight: 800; }
+        .card h2 .bar { width: 4px; height: 18px; background: #EE7203; border-radius: 2px; display: inline-block; }
+        .card-subtitle { font-size: 13px; color: #94a3b8; margin-top: -6px; margin-bottom: 14px; line-height: 1.4; }
 
-        .btn-quick { background: #001f48; border: 1px solid #00458C; color: #cbd5e1; font-size: 10.5px; font-weight: 700; padding: 5px 10px; border-radius: 5px; cursor: pointer; transition: all 0.2s; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
-        .btn-quick:hover { background: #003B7A; border-color: #EE7203; color: #fff; }
+        /* TAB 1: LISTA DELLE 10 FASI */
+        .bg-tasks { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+        .task-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 14px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1.5px solid transparent;
+            transition: all 0.2s ease;
+        }
+        .task-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+        .task-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; font-weight: 700; }
+        .task-name { color: #e2e8f0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .task-detail { color: #fed7aa; font-size: 12.5px; margin-left: 5px; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .task-badge {
+            font-size: 12px;
+            font-weight: 800;
+            padding: 4px 10px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
 
-        /* TASKS SINCRONIZZATI */
-        .bg-tasks { list-style: none; display: flex; flex-direction: column; gap: 4px; }
-        .task-item { display: flex; align-items: center; justify-content: space-between; font-size: 11px; padding: 5px 8px; border-radius: 5px; border: 1px solid transparent; transition: all 0.2s ease; }
-        .task-left { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
-        .task-icon { font-size: 11px; width: 14px; text-align: center; flex-shrink: 0; }
-        .task-name { color: #cbd5e1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .task-detail { color: #fed7aa; font-size: 10px; margin-left: 3px; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .task-badge { font-size: 9px; font-weight: 700; padding: 1.5px 6px; border-radius: 8px; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; }
-        
-        .task-item.pending { color: #64748b; }
+        .task-item.pending { background: rgba(0, 18, 43, 0.5); color: #64748b; }
         .task-item.pending .task-icon { color: #475569; }
-        .badge-pending { background: #00122B; color: #64748b; border: 1px solid #003B7A; }
-        
-        .task-item.running { background: rgba(238, 114, 3, 0.12); border-color: #EE7203; color: #fff; font-weight: 600; box-shadow: 0 0 8px rgba(238,114,3,0.25); }
-        .task-item.running .task-name { color: #fff; font-weight: 700; }
-        .badge-running { background: #EE7203; color: #fff; animation: pulse 1.5s infinite; }
-        
-        .task-item.done { color: #f8fafc; }
-        .task-item.done .task-icon { color: #22c55e; font-weight: bold; }
-        .task-item.done .task-name { color: #e2e8f0; }
-        .badge-done-task { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid #22c55e; }
-        
-        .task-item.error { background: rgba(239, 68, 68, 0.12); border-color: #ef4444; color: #fca5a5; }
-        .task-item.error .task-icon { color: #ef4444; font-weight: bold; }
-        .badge-error { background: #ef4444; color: #fff; }
-        
-        .task-item.skipped { color: #cbd5e1; }
-        .task-item.skipped .task-icon { color: #38bdf8; font-weight: bold; }
-        .badge-skipped { background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); font-weight: 700; }
+        .badge-pending { background: #00122B; color: #94a3b8; border: 1px solid #003B7A; }
 
-        .spinner { display: inline-block; width: 10px; height: 10px; border: 1.5px solid #EE7203; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        .task-item.running {
+            background: rgba(238, 114, 3, 0.16);
+            border-color: #EE7203;
+            color: #fff;
+            box-shadow: 0 0 12px rgba(238,114,3,0.3);
+        }
+        .task-item.running .task-name { color: #fff; font-weight: 800; }
+        .badge-running { background: #EE7203; color: #fff; animation: pulse 1.5s infinite; }
+
+        .task-item.done { background: rgba(0, 24, 56, 0.7); color: #f8fafc; }
+        .task-item.done .task-icon { color: #22c55e; }
+        .task-item.done .task-name { color: #f1f5f9; }
+        .badge-done-task { background: rgba(34, 197, 94, 0.18); color: #4ade80; border: 1px solid #22c55e; }
+
+        .task-item.error { background: rgba(239, 68, 68, 0.15); border-color: #ef4444; color: #fca5a5; }
+        .task-item.error .task-icon { color: #ef4444; }
+        .badge-error { background: #ef4444; color: #fff; }
+
+        .task-item.skipped { background: rgba(0, 24, 56, 0.7); color: #cbd5e1; }
+        .task-item.skipped .task-icon { color: #38bdf8; }
+        .badge-skipped { background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.4); }
+
+        .spinner {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #EE7203;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* TOAST NOTIFICATION */
-        .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px); background: #16a34a; color: #fff; font-size: 11.5px; font-weight: 700; padding: 7px 16px; border-radius: 20px; box-shadow: 0 4px 14px rgba(0,0,0,0.4); opacity: 0; pointer-events: none; transition: all 0.3s ease; z-index: 1000; }
+        /* DIVISORI DI FASE */
+        .portal-divider {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 10px 0 4px 0;
+        }
+        .portal-divider::before, .portal-divider::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: linear-gradient(90deg, rgba(238,114,3,0.1), #EE7203, rgba(238,114,3,0.1));
+        }
+        .portal-divider span {
+            font-size: 11.5px;
+            font-weight: 800;
+            color: #fed7aa;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: #001A3A;
+            border: 1px solid #EE7203;
+            padding: 2px 10px;
+            border-radius: 6px;
+            box-shadow: 0 1px 6px rgba(238,114,3,0.25);
+            white-space: nowrap;
+        }
+
+        /* TAB 2: CREDENZIALI & DATI CLIENTE */
+        .cred-step-box {
+            background: rgba(0, 18, 43, 0.6);
+            border: 1px solid #003B7A;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 12px;
+        }
+        .cred-step-title {
+            font-size: 13.5px;
+            color: #fed7aa;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .cred-step-title .step-badge {
+            background: #EE7203;
+            color: #fff;
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 4px;
+        }
+
+        .cred-label { font-size: 12px; color: #93c5fd; margin-bottom: 4px; font-weight: 700; }
+        .cred-box { display: flex; gap: 8px; align-items: stretch; }
+        .cred-input {
+            flex: 1;
+            background: #001026;
+            border: 1.5px solid #00458C;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 15px;
+            color: #fff;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .cred-input:focus { border-color: #EE7203; box-shadow: 0 0 0 3px rgba(238,114,3,0.3); }
+        .cred-input.cred-mono { font-family: 'Consolas', 'Courier New', monospace; font-size: 16px; font-weight: 700; color: #38bdf8; }
+
+        .dom-selector {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .dom-btn {
+            background: #00122B;
+            border: 1.5px solid #00458C;
+            color: #cbd5e1;
+            font-size: 13.5px;
+            font-weight: 700;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            text-align: center;
+        }
+        .dom-btn:hover { border-color: #EE7203; color: #fff; background: #00224d; }
+        .dom-btn.active {
+            background: #EE7203;
+            border-color: #EE7203;
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(238,114,3,0.45);
+            font-weight: 800;
+        }
+
+        .btn-copy {
+            background: linear-gradient(135deg, #00458C 0%, #002B5C 100%);
+            border: 1.5px solid #0056B3;
+            color: #fff;
+            border-radius: 8px;
+            padding: 0 16px;
+            font-size: 13px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-copy:hover { background: #EE7203; border-color: #EE7203; color: #fff; }
+
+        .btn-mini-action {
+            background: #001f48;
+            border: 1.5px solid #00458C;
+            color: #cbd5e1;
+            border-radius: 8px;
+            padding: 0 12px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .btn-mini-action:hover { color: #fff; border-color: #EE7203; background: #003B7A; }
+
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 8px;
+        }
+        .svc-item {
+            background: rgba(0, 14, 33, 0.7);
+            border: 1px solid #003B7A;
+            border-radius: 8px;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .svc-item:hover { border-color: #EE7203; }
+        .svc-item input[type="checkbox"] { width: 16px; height: 16px; accent-color: #EE7203; cursor: pointer; }
+
+        .btn-action-primary {
+            background: #16a34a;
+            color: #fff;
+            font-weight: 800;
+            font-size: 15px;
+            padding: 14px 20px;
+            border: none;
+            cursor: pointer;
+            border-radius: 10px;
+            width: 100%;
+            box-shadow: 0 4px 14px rgba(22,163,74,0.4);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .btn-action-primary:hover { background: #15803d; transform: translateY(-1px); }
+
+        .btn-quick {
+            background: #002b5c;
+            border: 1.5px solid #00458C;
+            color: #cbd5e1;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .btn-quick:hover { background: #003B7A; border-color: #EE7203; color: #fff; }
+
+        /* TAB 3: PORTALI 1-CLICK */
+        .portal-filter {
+            width: 100%;
+            background: #001026;
+            border: 1.5px solid #003B7A;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 14px;
+            color: #fff;
+            margin-bottom: 12px;
+            outline: none;
+            box-sizing: border-box;
+        }
+        .portal-filter:focus { border-color: #EE7203; }
+        .links-grid { display: flex; flex-direction: column; gap: 8px; }
+
+        .portal-btn {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #00142E;
+            border: 1.5px solid #003B7A;
+            border-radius: 10px;
+            padding: 12px 16px;
+            color: #f8fafc;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 700;
+            transition: all 0.15s;
+        }
+        .portal-btn:hover { background: #002554; border-color: #EE7203; transform: translateX(3px); }
+        .portal-btn .icon { font-size: 17px; margin-right: 8px; }
+        .portal-btn .portal-tag {
+            background: #00224d;
+            border: 1px solid #00458C;
+            color: #fed7aa;
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .portal-btn:hover .portal-tag { background: #EE7203; color: #fff; border-color: #EE7203; }
+        .portal-btn.highlight { border-color: #EE7203; background: rgba(238, 114, 3, 0.14); box-shadow: 0 0 10px rgba(238,114,3,0.25); }
+
+        /* TOAST E FOOTER */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: #16a34a;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 800;
+            padding: 10px 24px;
+            border-radius: 30px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
         .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
 
-        .footer { text-align: center; font-size: 10.5px; color: #64748b; margin-top: 10px; padding-top: 8px; border-top: 1px solid #002B5C; }
+        .footer {
+            text-align: center;
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 14px;
+            padding-top: 10px;
+            border-top: 1px solid #002B5C;
+        }
         .footer strong { color: #cbd5e1; }
 
-        /* RESPONSIVE SPECIFICO PER SCHERMI RIDOTTI / SPLIT SCREEN */
         @media (max-width: 900px) {
-            body { padding: 8px; }
-            .header { padding: 10px 12px; }
-            .brand-titles h1 { font-size: 14px; }
+            body { padding: 10px; }
+            .header { padding: 12px 14px; }
+            .brand-titles h1 { font-size: 15px; }
             .brand-titles p { display: none; }
-            .u-logo { font-size: 15px; padding: 4px 8px; }
-            .card { padding: 10px 12px; }
+            .u-logo { font-size: 17px; padding: 6px 10px; }
+            .card { padding: 12px 14px; }
+            .tab-btn { font-size: 12.5px; padding: 8px 6px; }
+            .dom-selector { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
@@ -1317,28 +1791,28 @@ function Open-PannelloOperatore {
                 <div class="u-logo">UNIEURO</div>
                 <div class="brand-titles">
                     <h1>Pannello Assistenza &amp; Configurazione PC</h1>
-                    <p><span class="u-tagline">Batte. Forte. Sempre.</span> &bull; Setup Tecnico Dedicato</p>
+                    <p><span class="u-tagline">Batte. Forte. Sempre.</span> &bull; Setup Tecnico Semplificato</p>
                 </div>
             </div>
             <div class="header-actions">
-                <button type="button" id="btnSoundToggle" class="btn-audio" onclick="toggleAudio()" title="Suono fine configurazione">&#128276; Audio</button>
+                <button type="button" id="btnSoundToggle" class="btn-audio" onclick="toggleAudio()" title="Suono fine configurazione">&#128276; Suoni</button>
                 <div id="badgeLive" class="badge-live">&#9889; Setup in corso</div>
             </div>
         </div>
 
-        <!-- MINI DASHBOARD HARDWARE E SISTEMA -->
+        <!-- RIEPILOGO HARDWARE -->
         <div class="hw-bar">
-            <div class="hw-item">&#128187; <strong>PC:</strong> <span class="hw-val">$hwModello</span></div>
-            <div class="hw-item">&#9881; <strong>CPU/RAM:</strong> <span class="hw-val">$hwCpu &bull; $hwRam</span></div>
-            <div class="hw-item">&#127991; <strong>Seriale:</strong> <span class="hw-val" id="hwSerialVal">$hwSeriale</span> <span class="hw-copy-sn" onclick="copiaSeriale()">[copia]</span></div>
+            <div class="hw-item">&#128187; <span>Computer:</span> <strong class="hw-val">$hwModello</strong></div>
+            <div class="hw-item">&#9881; <span>Processore &amp; RAM:</span> <strong class="hw-val">$hwCpu &bull; $hwRam</strong></div>
+            <div class="hw-item">&#127991; <span>Seriale:</span> <strong class="hw-val" id="hwSerialVal">$hwSeriale</strong> <button type="button" class="btn-hw-copy" onclick="copiaSeriale()">&#128203; Copia Seriale</button></div>
         </div>
 
-        <!-- HERO PROGRESS CARD SINCRONIZZATA IN TEMPO REALE -->
+        <!-- MEGA-HERO PROGRESS BAR SINCRONIZZATA IN TEMPO REALE -->
         <div class="progress-card">
             <div class="progress-header">
-                <div class="progress-title">&#9889; Avanzamento Configurazione Automatica (Zero-Touch)</div>
+                <div class="progress-title">&#9889; AVANZAMENTO CONFIGURAZIONE AUTOMATICA</div>
                 <div class="progress-meta">
-                    <span id="elapsedTimerText" class="progress-timer">00:00</span>
+                    <div class="progress-timer-box">Tempo: <span id="elapsedTimerText" class="progress-timer">00:00</span></div>
                     <div id="progressPercentText" class="progress-pct">5%</div>
                 </div>
             </div>
@@ -1346,45 +1820,47 @@ function Open-PannelloOperatore {
                 <div id="progressBarFill" class="progress-bar-fill" style="width: 5%;"></div>
             </div>
             <div class="progress-status-row">
-                <div><span style="color:#93c5fd; font-weight:700;">FASE:</span> <span id="currentFaseText" class="current-fase">Inizializzazione Setup</span></div>
+                <div><span style="color:#93c5fd; font-weight:800;">COSA STA FACENDO ORA:</span> <span id="currentFaseText" class="current-fase">Inizializzazione Setup</span></div>
                 <div id="currentDetailText" class="current-detail">Avvio pannello operatore Unieuro...</div>
             </div>
         </div>
 
-        <!-- BANNER COMPLETAMENTO CELEBRATIVO -->
+        <!-- BANNER COMPLETAMENTO -->
         <div id="completionBanner" class="banner-complete">
-            <h3>&#127881; TUTTI I LAVORI IN BACKGROUND COMPLETATI CON SUCCESSO!</h3>
-            <p>Il computer &egrave; configurato, ottimizzato e aggiornato secondo gli standard Unieuro.</p>
-            <a href="Scheda-Consegna-Cliente.html" target="_blank" class="btn-scheda">&#128196; Apri Scheda di Consegna Cliente</a>
+            <h3>&#127881; TUTTI I LAVORI SONO STATI COMPLETATI CON SUCCESSO!</h3>
+            <p>Il computer &egrave; pronto, configurato, ottimizzato e aggiornato secondo gli standard Unieuro.</p>
+            <a href="Scheda-Consegna-Cliente.html" target="_blank" class="btn-scheda">&#128196; APRI SCHEDA DI CONSEGNA CLIENTE</a>
         </div>
 
-        <!-- SELETTORE VISTE / TABS (PERFETTO PER SPLIT SCREEN 50%) -->
+        <!-- SELETTORE VISTE / TABS -->
         <div class="tab-bar">
             <button type="button" class="tab-btn active" onclick="switchView('tab-live', this)">
-                <span>&#9889; Lavori Live</span> <span id="taskCountBadge" class="tab-badge-num">10</span>
+                <span>&#128202; 1. Avanzamento Lavori</span> <span id="taskCountBadge" class="tab-badge-num">10/10</span>
             </button>
             <button type="button" class="tab-btn" onclick="switchView('tab-cred', this)">
-                <span>&#128273; Account &amp; Credenziali</span>
+                <span>&#128100; 2. Dati Cliente &amp; Email</span>
             </button>
             <button type="button" class="tab-btn" onclick="switchView('tab-portali', this)">
-                <span>&#127760; Portali 1-Click</span>
+                <span>&#127760; 3. Siti &amp; Portali Utili</span>
             </button>
         </div>
 
-        <!-- VISTA 1: LAVORI LIVE -->
+        <!-- VISTA 1: AVANZAMENTO LAVORI (10 FASI CHIARE) -->
         <div id="view-tab-live" class="section-view active-view">
             <div class="card">
                 <h2>
-                    <span class="title-left"><span class="bar"></span> &#9881; Lavori Automatici in Background</span>
-                    <span style="font-size: 10px; color: #94a3b8; font-weight: normal;">Sincronizzato live con PowerShell</span>
+                    <span class="title-left"><span class="bar"></span> &#128202; Lista delle 10 Fasi di Configurazione</span>
+                    <span style="font-size: 12px; color: #94a3b8; font-weight: normal;">Sincronizzato in tempo reale</span>
                 </h2>
+                <div class="card-subtitle">Il sistema procede in totale autonomia. Non &egrave; necessario toccare nulla fino al termine.</div>
+
                 <ul class="bg-tasks" id="tasksContainer">
                     <!-- FASE 1: PULIZIA & SISTEMA -->
                     <div class="portal-divider" style="margin-top: 0;"><span>&#128736; 1. Pulizia &amp; Sistema</span></div>
                     <li id="task-pulizia" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">1. Pulizia Bloatware OEM &amp; Ottimizzazione SSD</span>
+                            <span class="task-name">1. Pulizia programmi inutili e velocizzazione PC</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -1392,7 +1868,7 @@ function Open-PannelloOperatore {
                     <li id="task-lingua" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">2. Forzatura Lingua &amp; Regione Italiana (it-IT)</span>
+                            <span class="task-name">2. Impostazione lingua italiana e tastiera</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -1400,7 +1876,7 @@ function Open-PannelloOperatore {
                     <li id="task-ripristino" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">3. Punto di Ripristino di Sicurezza</span>
+                            <span class="task-name">3. Creazione punto di ripristino di sicurezza</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -1411,7 +1887,7 @@ function Open-PannelloOperatore {
                     <li id="task-runtime" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">4. Runtime Microsoft Visual C++ (x86 &amp; x64)</span>
+                            <span class="task-name">4. Componenti di sistema Microsoft (Visual C++)</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -1419,7 +1895,7 @@ function Open-PannelloOperatore {
                     <li id="task-office" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">5. Configurazione Icone Office / Microsoft 365</span>
+                            <span class="task-name">5. Configurazione collegamenti Office 365</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -1427,18 +1903,18 @@ function Open-PannelloOperatore {
                     <li id="task-aggiorna" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">6. Aggiornamenti &amp; Driver Windows Update</span>
+                            <span class="task-name">6. Aggiornamenti di sicurezza e driver Windows</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
                     </li>
 
-                    <!-- FASE 3: APPLICAZIONI & SICUREZZA -->
-                    <div class="portal-divider"><span>&#128737; 3. Applicazioni &amp; Sicurezza</span></div>
+                    <!-- FASE 3: PROGRAMMI & SICUREZZA -->
+                    <div class="portal-divider"><span>&#128737; 3. Programmi &amp; Sicurezza</span></div>
                     <li id="task-app" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">7. Installazione Applicazioni Unieuro</span>
+                            <span class="task-name">7. Installazione programmi base richiesti</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -1446,7 +1922,7 @@ function Open-PannelloOperatore {
                     <li id="task-antivirus" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">8. Sicurezza &amp; Antivirus Definitivo (Defender / Card)</span>
+                            <span class="task-name">8. Configurazione protezione antivirus</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -1454,18 +1930,18 @@ function Open-PannelloOperatore {
                     <li id="task-cyber" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">9. Servizio Unieuro Cyber Protection</span>
+                            <span class="task-name">9. Attivazione servizio Unieuro Cyber Protection</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
                     </li>
 
-                    <!-- FASE 4: COLLAUDO & SCHEDA -->
-                    <div class="portal-divider"><span>&#128640; 4. Collaudo &amp; Scheda di Consegna</span></div>
+                    <!-- FASE 4: COLLAUDO FINALE & SCHEDA -->
+                    <div class="portal-divider"><span>&#128640; 4. Collaudo Finale &amp; Scheda</span></div>
                     <li id="task-diagnostica" class="task-item pending">
                         <div class="task-left">
                             <span class="task-icon">&#9675;</span>
-                            <span class="task-name">10. Diagnostica Hardware, BitLocker &amp; Scheda Consegna</span>
+                            <span class="task-name">10. Controllo finale e creazione scheda consegna</span>
                             <span class="task-detail"></span>
                         </div>
                         <span class="task-badge badge-pending">In attesa</span>
@@ -1474,156 +1950,171 @@ function Open-PannelloOperatore {
             </div>
         </div>
 
-        <!-- VISTA 2: CREDENZIALI & ACCOUNT -->
+        <!-- VISTA 2: DATI CLIENTE & EMAIL (GUIDATA A PROVA DI BOOMER) -->
         <div id="view-tab-cred" class="section-view">
             <div class="card">
                 <h2>
-                    <span class="title-left"><span class="bar"></span> &#128273; Generatore Credenziali &amp; Account Cliente</span>
-                    <span style="font-size: 10px; color: #94a3b8;">Standard Unieuro</span>
+                    <span class="title-left"><span class="bar"></span> &#128100; Dati Cliente &amp; Creazione Credenziali</span>
+                    <span style="font-size: 12px; color: #94a3b8;">Procedura Semplice Guidata</span>
                 </h2>
+                <div class="card-subtitle">Inserisci Nome e Cognome del cliente: l'indirizzo email e la password verranno creati automaticamente.</div>
                 
-                <!-- 1. SELETTORE DOMINIO / PROVIDER -->
-                <div class="cred-group">
-                    <div class="cred-label">1. Scegli Provider / Dominio Email:</div>
+                <!-- PASSO 1: DATI ANAGRAFICI -->
+                <div class="cred-step-box">
+                    <div class="cred-step-title"><span class="step-badge">PASSO 1</span> Inserisci Nome e Cognome:</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 8px;">
+                        <div>
+                            <div class="cred-label">Cognome Cliente:</div>
+                            <input type="text" id="inCognome" class="cred-input" placeholder="Es. Rossi" oninput="aggiornaCred()">
+                        </div>
+                        <div>
+                            <div class="cred-label">Nome Cliente:</div>
+                            <input type="text" id="inNome" class="cred-input" value="$NomeCliente" placeholder="Es. Mario" oninput="aggiornaCred()">
+                        </div>
+                    </div>
+                    <div>
+                        <div class="cred-label">Cellulare / Telefono (Opzionale):</div>
+                        <input type="tel" id="inTelefono" class="cred-input" placeholder="Es. 333 1234567" oninput="segnaModificato()">
+                    </div>
+                </div>
+
+                <!-- PASSO 2: SELEZIONE DOMINIO EMAIL -->
+                <div class="cred-step-box">
+                    <div class="cred-step-title"><span class="step-badge">PASSO 2</span> Scegli il tipo di email da creare:</div>
                     <div class="dom-selector">
-                        <button type="button" class="dom-btn active" onclick="setDomain('outlook.it', 'Microsoft', this)">@outlook.it</button>
-                        <button type="button" class="dom-btn" onclick="setDomain('hotmail.com', 'Hotmail', this)">@hotmail.com</button>
+                        <button type="button" class="dom-btn active" onclick="setDomain('outlook.it', 'Microsoft', this)">@outlook.it (Consigliato)</button>
                         <button type="button" class="dom-btn" onclick="setDomain('gmail.com', 'Google', this)">@gmail.com</button>
-                        <button type="button" class="dom-btn" onclick="setDomain('proton.me', 'Proton', this)">@proton.me</button>
                         <button type="button" class="dom-btn" onclick="setDomain('libero.it', 'Libero', this)">@libero.it</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('proton.me', 'Proton', this)">@proton.me</button>
+                        <button type="button" class="dom-btn" onclick="setDomain('hotmail.com', 'Hotmail', this)">@hotmail.com</button>
                         <button type="button" class="dom-btn" onclick="setDomain('icloud.com', 'iCloud', this)">@icloud.com</button>
                     </div>
                 </div>
 
-                <!-- 2. COGNOME, NOME E TELEFONO -->
-                <div class="cred-group">
-                    <div class="cred-label">2. Dati Cliente:</div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px;">
-                        <input type="text" id="inCognome" class="cred-input" placeholder="Cognome (es. Rossi)" oninput="aggiornaCred()">
-                        <input type="text" id="inNome" class="cred-input" value="$NomeCliente" placeholder="Nome (es. Mario)" oninput="aggiornaCred()">
+                <!-- PASSO 3: CREDENZIALI GENERATE IN AUTOMATICO -->
+                <div class="cred-step-box" style="border-color: #EE7203; background: rgba(238, 114, 3, 0.08);">
+                    <div class="cred-step-title" style="color: #fed7aa;"><span class="step-badge">PASSO 3</span> Credenziali Create (Gia' Pronte per l'uso):</div>
+                    
+                    <div style="margin-bottom: 12px;">
+                        <div class="cred-label" style="color: #fed7aa;">Indirizzo Email Creato:</div>
+                        <div class="cred-box">
+                            <input type="text" id="inEmail" class="cred-input cred-mono" value="$Email" oninput="segnaModificato()">
+                            <button type="button" class="btn-copy" onclick="copia('inEmail', 'Email copiata!')">&#128203; COPIA EMAIL</button>
+                        </div>
                     </div>
-                    <div style="display: grid; grid-template-columns: 1fr; gap: 6px;">
-                        <input type="tel" id="inTelefono" class="cred-input" placeholder="Cellulare / Telefono (es. 3331234567)" oninput="segnaModificato()">
+
+                    <div>
+                        <div class="cred-label" style="color: #fed7aa; display: flex; justify-content: space-between; align-items: center;">
+                            <span>Password Iniziale Consigliata:</span>
+                            <span style="display: flex; gap: 6px;">
+                                <button type="button" class="btn-mini-action" onclick="togglePassVis()" title="Mostra o nascondi la password">&#128065; Mostra</button>
+                                <button type="button" class="btn-mini-action" onclick="generaPassCasuale()" title="Genera un'altra password casuale">&#127922; Nuova</button>
+                            </span>
+                        </div>
+                        <div class="cred-box">
+                            <input type="password" id="inPass" class="cred-input cred-mono" value="$Password" oninput="segnaModificato()">
+                            <button type="button" class="btn-copy" onclick="copia('inPass', 'Password copiata!')">&#128203; COPIA PASSWORD</button>
+                        </div>
                     </div>
                 </div>
 
-                <!-- 3. EMAIL RISULTANTE -->
-                <div class="cred-group">
-                    <div class="cred-label">3. Email Generata:</div>
-                    <div class="cred-box">
-                        <input type="text" id="inEmail" class="cred-input" value="$Email" oninput="segnaModificato()">
-                        <button type="button" class="btn-copy" onclick="copia('inEmail', 'Email copiata!')">&#128203; Copia</button>
-                    </div>
-                </div>
-
-                <!-- 4. PASSWORD INIZIALE -->
-                <div class="cred-group">
-                    <div class="cred-label">
-                        <span>4. Password Iniziale Consigliata:</span>
-                        <span>
-                            <button type="button" class="btn-mini-action" onclick="togglePassVis()" title="Mostra/Nascondi">&#128065;</button>
-                            <button type="button" class="btn-mini-action" onclick="generaPassCasuale()" title="Genera password sicura">&#127922;</button>
-                        </span>
-                    </div>
-                    <div class="cred-box">
-                        <input type="password" id="inPass" class="cred-input" value="$Password" oninput="segnaModificato()">
-                        <button type="button" class="btn-copy" onclick="copia('inPass', 'Password copiata!')">&#128203; Copia</button>
-                    </div>
-                </div>
-
-                <!-- 5. SERVIZI DA ATTIVARE NELLA SEQUENZA AUTOMATICA -->
-                <div class="cred-group" style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px; margin-top: 6px;">
-                    <div class="cred-label" style="margin-bottom: 6px; color: #fed7aa; font-weight: 700;">&#9881; Servizi Acquistati da Attivare:</div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
-                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                <!-- PASSO 4: SERVIZI ACQUISTATI -->
+                <div class="cred-step-box">
+                    <div class="cred-step-title"><span class="step-badge">PASSO 4</span> Servizi Acquistati dal Cliente sullo Scontrino:</div>
+                    <div class="services-grid">
+                        <label class="svc-item">
                             <input type="checkbox" id="chkSvcProton" checked> <span>&#9993; Email Proton</span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                        <label class="svc-item">
                             <input type="checkbox" id="chkSvcOffice"> <span>&#128230; Card Office 365</span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                        <label class="svc-item">
                             <input type="checkbox" id="chkSvcMcAfee"> <span>&#128737; Card McAfee</span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                        <label class="svc-item">
                             <input type="checkbox" id="chkSvcNorton"> <span>&#128737; Card Norton</span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 5px; grid-column: span 2; cursor: pointer;">
-                            <input type="checkbox" id="chkSvcCyber" checked> <span>&#128274; Unieuro Cyber Protection</span>
+                        <label class="svc-item" style="grid-column: 1 / -1; border-color: #EE7203;">
+                            <input type="checkbox" id="chkSvcCyber" checked> <span>&#128274; Unieuro Cyber Protection (Incluso)</span>
                         </label>
                     </div>
                 </div>
 
-                <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
-                    <button type="button" id="btnAvviaAuto" class="btn-scheda" style="background: #16a34a; font-weight: 700; font-size: 13px; padding: 10px 14px; width: 100%; border: none; cursor: pointer; text-align: center; border-radius: 6px; color: #fff;" onclick="avviaSetupAutomatico()">&#128640; AVVIA SETUP AUTOMATICO (Zero Clic)</button>
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
-                        <button type="button" id="btnSalvaCred" class="btn-scheda" style="background: #EE7203; border: none; font-size: 11px; padding: 6px 12px; cursor: pointer;" onclick="salvaCredenziali()">&#128190; Salva per Scheda Consegna</button>
-                        <button type="button" class="btn-quick" onclick="copiaRiepilogoCred()">&#128203; Copia Tutto per Ticket</button>
+                <!-- PULSANTE PRINCIPALE DI SALVATAGGIO (UNICO ED EVIDENTE) -->
+                <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 10px;">
+                    <button type="button" id="btnSalvaCred" class="btn-action-primary" onclick="salvaCredenziali()">
+                        &#128190; SALVA DATI E PROCEDI (Pronto per la Scheda di Consegna)
+                    </button>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button type="button" class="btn-quick" style="flex: 1;" onclick="copiaRiepilogoCred()">
+                            &#128203; Copia Dati per il Ticket di Negozio
+                        </button>
+                        <button type="button" id="btnAvviaAuto" class="btn-quick" style="flex: 1; border-color: #16a34a; color: #4ade80;" onclick="avviaSetupAutomatico()">
+                            &#128640; Avvia Configurazione Automatica
+                        </button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- VISTA 3: PORTALI 1-CLICK -->
+        <!-- VISTA 3: PORTALI 1-CLICK (GRANDI PULSANTI AD ACCESSO RAPIDO) -->
         <div id="view-tab-portali" class="section-view">
             <div class="card">
                 <h2>
                     <span class="title-left"><span class="bar"></span> &#127760; Portali Servizi &amp; Attivazione (1-Click)</span>
-                    <span style="font-size: 10px; color: #94a3b8;">Apertura istantanea</span>
+                    <span style="font-size: 12px; color: #94a3b8;">Apertura Rapida</span>
                 </h2>
-                <div style="background: rgba(14, 165, 233, 0.12); border: 1px solid #0284c7; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
-                    <div style="font-size: 11px; color: #38bdf8;">
-                        <strong>&#129302; Assistente Agente IA</strong>: Apertura rapida &amp; compilazione intelligente. Stop con avviso sonoro sui codici OTP/SMS.
-                    </div>
-                </div>
-                <input type="text" class="portal-filter" id="portalSearch" placeholder="&#128269; Cerca portale o servizio..." oninput="filtraPortali()">
+                <div class="card-subtitle">Clicca sul pulsante del servizio da aprire nel browser per la registrazione o il riscatto della card:</div>
+                
+                <input type="text" class="portal-filter" id="portalSearch" placeholder="&#128269; Cerca un sito o servizio..." oninput="filtraPortali()">
                 
                 <div class="links-grid" id="portalLinksGrid">
                     <!-- SEZIONE 1: ACCOUNT & EMAIL -->
                     <div class="portal-divider" style="margin-top: 0;"><span>&#128100; Creazione Account &amp; Email</span></div>
                     <a href="https://account.microsoft.com" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="microsoft outlook account">
                         <span><span class="icon">&#128100;</span> 1. Account Microsoft / Outlook</span>
-                        <span class="arrow">&rarr;</span>
+                        <span class="portal-tag">APRI SITO &rarr;</span>
                     </a>
                     <a href="https://accounts.google.com/signup" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="google gmail account">
                         <span><span class="icon">&#128231;</span> 2. Account Google / Gmail</span>
-                        <span class="arrow">&rarr;</span>
+                        <span class="portal-tag">APRI SITO &rarr;</span>
                     </a>
                     <a href="https://account.proton.me/signup" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="proton mail account">
                         <span><span class="icon">&#128274;</span> 3. Account Proton Mail</span>
-                        <span class="arrow">&rarr;</span>
+                        <span class="portal-tag">APRI SITO &rarr;</span>
                     </a>
                     <a href="https://registrazione.libero.it" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="libero mail registrazione">
                         <span><span class="icon">&#128236;</span> 4. Account Libero Mail</span>
-                        <span class="arrow">&rarr;</span>
+                        <span class="portal-tag">APRI SITO &rarr;</span>
                     </a>
 
                     <!-- SEZIONE 2: PRODUTTIVITA' & OFFICE -->
                     <div class="portal-divider"><span>&#128230; Produttivit&agrave; &amp; Licenze Office</span></div>
-                    <a href="https://microsoft365.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="office microsoft 365 setup pin riscatto">
+                    <a href="https://microsoft365.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="office microsoft 365 setup pin riscatto card">
                         <span><span class="icon">&#128230;</span> 5. Riscatto Card Microsoft 365 / Office</span>
-                        <span class="arrow">&rarr;</span>
+                        <span class="portal-tag">APRI SITO &rarr;</span>
                     </a>
                     <a href="https://account.microsoft.com/services" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="office microsoft download installa account abbonamento">
-                        <span><span class="icon">&#128229;</span> 6. Installa Office da Account Microsoft</span>
-                        <span class="arrow">&rarr;</span>
+                        <span><span class="icon">&#128229;</span> 6. Scarica Office da Account Microsoft</span>
+                        <span class="portal-tag">APRI SITO &rarr;</span>
                     </a>
 
                     <!-- SEZIONE 3: ANTIVIRUS DA CARD -->
                     <div class="portal-divider"><span>&#128737; Sicurezza &amp; Antivirus da Card</span></div>
                     <a href="https://www.mcafee.com/activate" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="mcafee activate antivirus card">
                         <span><span class="icon">&#128737;</span> 7. Attivazione Card McAfee</span>
-                        <span class="arrow">&rarr;</span>
+                        <span class="portal-tag">APRI SITO &rarr;</span>
                     </a>
                     <a href="https://www.norton.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn" data-name="norton setup antivirus card">
                         <span><span class="icon">&#128737;</span> 8. Attivazione Card Norton</span>
-                        <span class="arrow">&rarr;</span>
+                        <span class="portal-tag">APRI SITO &rarr;</span>
                     </a>
 
                     <!-- SEZIONE 4: SERVIZIO UNIEURO -->
                     <div class="portal-divider"><span>&#128274; Servizio Esclusivo Unieuro</span></div>
                     <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" rel="noopener noreferrer" class="portal-btn highlight" data-name="unieuro cyber protection covercare">
                         <span><span class="icon">&#128274;</span> 9. Unieuro Cyber Protection</span>
-                        <span class="arrow">&rarr;</span>
+                        <span class="portal-tag" style="background:#EE7203; color:#fff;">APRI SITO &rarr;</span>
                     </a>
                 </div>
             </div>
@@ -1635,7 +2126,7 @@ function Open-PannelloOperatore {
     </div>
 
     <!-- TOAST POPUP FLUTTUANTE -->
-    <div id="toastEl" class="toast">&#10003; Azione completata!</div>
+    <div id="toastEl" class="toast">&#10003; Operazione completata!</div>
 
     <script>
         var currentDomain = 'outlook.it';
@@ -1655,7 +2146,7 @@ function Open-PannelloOperatore {
             if (el) el.innerText = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
         }, 1000);
 
-        // SUONO DI COMPLETAMENTO (Web Audio API synthesis senza file esterni)
+        // SUONO DI COMPLETAMENTO (Web Audio API senza file esterni)
         function playChime() {
             if (!audioEnabled) return;
             try {
@@ -1683,10 +2174,10 @@ function Open-PannelloOperatore {
             audioEnabled = !audioEnabled;
             var btn = document.getElementById('btnSoundToggle');
             if (btn) {
-                btn.innerHTML = audioEnabled ? '&#128276; Audio' : '&#128277; Muto';
+                btn.innerHTML = audioEnabled ? '&#128276; Suoni' : '&#128277; Muto';
                 btn.style.color = audioEnabled ? '#93c5fd' : '#64748b';
             }
-            showToast(audioEnabled ? 'Audio notifiche attivo' : 'Audio notifiche disattivato');
+            showToast(audioEnabled ? 'Avvisi sonori attivati' : 'Avvisi sonori disattivati');
         }
 
         function showToast(msg) {
@@ -1739,7 +2230,7 @@ function Open-PannelloOperatore {
                 inp.value = pass;
                 inp.type = 'text';
                 manualEdit = true;
-                showToast('Generata password casuale sicura');
+                showToast('Nuova password generata con successo!');
             }
         }
 
@@ -1911,25 +2402,25 @@ function Open-PannelloOperatore {
                 setTimeout(function() { if (a.parentNode) a.parentNode.removeChild(a); }, 200);
             } catch(e) {}
             
-            showToast('\u2713 Credenziali salvate per la Scheda!');
+            showToast('Dati cliente salvati con successo!');
             var btn = document.getElementById('btnSalvaCred');
             if (btn) {
                 var old = btn.innerHTML;
-                btn.innerHTML = '&#10003; Salvato!';
-                btn.style.background = '#16a34a';
+                btn.innerHTML = '&#10003; DATI SALVATI!';
+                btn.style.background = '#15803d';
                 setTimeout(function() {
                     btn.innerHTML = old;
-                    btn.style.background = '#EE7203';
+                    btn.style.background = '#16a34a';
                 }, 3000);
             }
         }
 
         function avviaSetupAutomatico() {
             salvaCredenziali();
-            showToast('\uD83D\uDE80 Setup Automatico Avviato! Il sistema procede in autonomia.');
+            showToast('Configurazione automatica avviata!');
             var btn = document.getElementById('btnAvviaAuto');
             if (btn) {
-                btn.innerHTML = '&#10003; Setup in corso...';
+                btn.innerHTML = '&#10003; In corso...';
                 btn.style.background = '#0284c7';
             }
         }
