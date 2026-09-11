@@ -1247,6 +1247,32 @@ function Open-PannelloOperatore {
             white-space: nowrap;
         }
         @keyframes pulse { 0% { opacity: 0.92; transform: scale(1); } 50% { opacity: 1; transform: scale(1.02); } 100% { opacity: 0.92; transform: scale(1); } }
+        .badge-conn-ok {
+            background: #14532d;
+            border: 1px solid #22c55e;
+            color: #dcfce7;
+            font-weight: 700;
+            font-size: 12px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+        .badge-conn-off {
+            background: rgba(153, 27, 27, 0.4);
+            border: 1px solid #ef4444;
+            color: #fca5a5;
+            font-weight: 700;
+            font-size: 12px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
 
         /* RIEPILOGO HARDWARE */
         .hw-bar {
@@ -1795,6 +1821,7 @@ function Open-PannelloOperatore {
                 </div>
             </div>
             <div class="header-actions">
+                <div id="badgeConn" class="badge-conn-off">&#9888; Non Connesso</div>
                 <button type="button" id="btnSoundToggle" class="btn-audio" onclick="toggleAudio()" title="Suono fine configurazione">&#128276; Suoni</button>
                 <div id="badgeLive" class="badge-live">&#9889; Setup in corso</div>
             </div>
@@ -2055,6 +2082,20 @@ function Open-PannelloOperatore {
                         <button type="button" id="btnAvviaAuto" class="btn-quick" style="flex: 1; border-color: #16a34a; color: #4ade80;" onclick="avviaSetupAutomatico()">
                             &#128640; Avvia Configurazione Automatica
                         </button>
+                    </div>
+                    <div id="offlineNoticeBox" style="background: rgba(238, 114, 3, 0.12); border: 1.5px solid #EE7203; border-radius: 8px; padding: 12px 14px; margin-top: 4px; display: none;">
+                        <div style="color: #fed7aa; font-weight: 800; font-size: 13.5px; margin-bottom: 4px;">&#9888; Script PC Facile non ancora avviato su questo computer</div>
+                        <div style="color: #cbd5e1; font-size: 12.5px; margin-bottom: 10px; line-height: 1.4;">
+                            Per far eseguire le operazioni a questo PC, avvia <strong>PC Facile.bat</strong> come amministratore. Appena avviato, la pagina si collegher&agrave; automaticamente in tempo reale.
+                        </div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <a href="https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/PC%20Facile.bat" download="PC Facile.bat" class="btn-quick" style="flex: 1; min-width: 200px; text-decoration: none; text-align: center; border-color: #EE7203; color: #fed7aa; font-weight: 700;">
+                                &#128229; Scarica "PC Facile.bat" (1-Click)
+                            </a>
+                            <button type="button" class="btn-quick" onclick="copiaComandoAvvio()" style="flex: 1; min-width: 180px; border-color: #0284c7; color: #93c5fd;">
+                                &#128203; Copia Comando (Win+R)
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2423,8 +2464,65 @@ function Open-PannelloOperatore {
             return true;
         }
 
+        var isScriptConnected = false;
+        var lastStatusPing = 0;
+
+        function setConnected(connected) {
+            isScriptConnected = connected;
+            var b = document.getElementById('badgeConn');
+            var box = document.getElementById('offlineNoticeBox');
+            if (connected) {
+                if (b) {
+                    b.className = 'badge-conn-ok';
+                    b.innerHTML = '&#9679; Connesso al PC';
+                }
+                if (box) box.style.display = 'none';
+            } else {
+                if (b) {
+                    b.className = 'badge-conn-off';
+                    b.innerHTML = '&#9888; Non Connesso';
+                }
+                if (box) box.style.display = 'block';
+            }
+        }
+
+        function copiaComandoAvvio() {
+            var cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::SecurityProtocol=[System.Net.SecurityProtocolType]::Tls12; irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/PC%20Facile.bat -OutFile `$env:TEMP\\pcfacile.bat; Start-Process `$env:TEMP\\pcfacile.bat"';
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(cmd).then(function() {
+                    showToast('Comando copiato! Premi Win+R, incolla e premi Invio.');
+                });
+            }
+        }
+
+        function checkConnection() {
+            fetch('http://127.0.0.1:8899/status', { method: 'GET', mode: 'cors' })
+                .then(function(r) {
+                    if (r.ok) {
+                        lastStatusPing = new Date().getTime();
+                        setConnected(true);
+                    }
+                })
+                .catch(function() {
+                    if (new Date().getTime() - lastStatusPing > 3500) {
+                        setConnected(false);
+                    }
+                });
+        }
+        setInterval(checkConnection, 1500);
+        checkConnection();
+
         function avviaSetupAutomatico() {
             if (!salvaCredenziali()) return;
+            if (!isScriptConnected) {
+                showToast('ATTENZIONE: Avvia prima "PC Facile.bat" sul computer!');
+                var box = document.getElementById('offlineNoticeBox');
+                if (box) {
+                    box.style.display = 'block';
+                    box.scrollIntoView({ behavior: 'smooth' });
+                }
+                return;
+            }
             showToast('Configurazione automatica avviata!');
             var btn = document.getElementById('btnAvviaAuto');
             if (btn) {
@@ -2436,6 +2534,8 @@ function Open-PannelloOperatore {
         // MOTORE DI SINCRONIZZAZIONE LIVE CON POWERSHELL
         function applyStatus(data) {
             if (!data) return;
+            lastStatusPing = new Date().getTime();
+            setConnected(true);
             
             var pct = data.Percentuale !== undefined ? data.Percentuale : (data.percentuale || 0);
             var bar = document.getElementById('progressBarFill');
@@ -2618,6 +2718,9 @@ function Get-CredenzialiSalvatePannello {
                     }
                 } else {
                     $res.StatusCode = 200
+                    $bytes = [System.Text.Encoding]::UTF8.GetBytes('{"status":"running","ok":true}')
+                    $res.ContentType = "application/json"
+                    $res.OutputStream.Write($bytes, 0, $bytes.Length)
                     $res.Close()
                 }
             }

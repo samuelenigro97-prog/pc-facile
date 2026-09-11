@@ -18,7 +18,15 @@ riavvio**.
 
 ---
 
-## 1. Scarica il launcher
+## 1. Web App Online & Download Launcher
+
+Puoi accedere alla **Web App Unificata** da qualsiasi computer o browser di negozio:
+👉 **[https://samuelenigro97-prog.github.io/pc-facile/](https://samuelenigro97-prog.github.io/pc-facile/)**
+
+Dalla Web App puoi:
+- Generare automaticamente credenziali cliente, email e password sicura.
+- Accedere a tutti i portali di attivazione a 1-click (Microsoft, Office 365, McAfee, Norton, Covercare).
+- Scaricare al volo **`PC Facile.bat`** sul PC da configurare con un solo click.
 
 Ti basta **UN file**: `PC Facile.bat`.
 
