@@ -1973,8 +1973,11 @@ function Open-PannelloOperatore {
                         </div>
                     </div>
                     <div>
-                        <div class="cred-label">Cellulare / Telefono (Opzionale):</div>
-                        <input type="tel" id="inTelefono" class="cred-input" placeholder="Es. 333 1234567" oninput="segnaModificato()">
+                        <div class="cred-label" style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>Cellulare / Telefono Cliente:</span>
+                            <span style="color: #ef4444; font-weight: 800; font-size: 11px;">(OBBLIGATORIO PER CYBER PROTECTION) *</span>
+                        </div>
+                        <input type="tel" id="inTelefono" class="cred-input" placeholder="Es. 333 1234567 (richiesto per attivazione)" oninput="segnaModificato(); autoSyncCred(); this.style.borderColor=''; this.style.boxShadow='';">
                     </div>
                 </div>
 
@@ -2256,7 +2259,8 @@ function Open-PannelloOperatore {
         function copiaRiepilogoCred() {
             var email = document.getElementById('inEmail') ? document.getElementById('inEmail').value : '';
             var pass = document.getElementById('inPass') ? document.getElementById('inPass').value : '';
-            var text = 'Account: ' + email + ' | Password: ' + pass + ' (Provider: ' + currentProviderName + ')';
+            var tel = document.getElementById('inTelefono') ? document.getElementById('inTelefono').value.trim() : '';
+            var text = 'Account: ' + email + ' | Password: ' + pass + (tel ? ' | Tel: ' + tel : '') + ' (Provider: ' + currentProviderName + ')';
             navigator.clipboard.writeText(text).then(function() {
                 showToast('Dati account copiati per ticket!');
             });
@@ -2334,7 +2338,8 @@ function Open-PannelloOperatore {
                     Provider: currentProviderName,
                     Cliente: cliente,
                     Nome: nome,
-                    Cognome: cognome
+                    Cognome: cognome,
+                    Telefono: telefono
                 };
                 try {
                     fetch('http://127.0.0.1:8899/cred', {
@@ -2359,6 +2364,17 @@ function Open-PannelloOperatore {
             var mcafee = document.getElementById('chkSvcMcAfee') ? document.getElementById('chkSvcMcAfee').checked : false;
             var norton = document.getElementById('chkSvcNorton') ? document.getElementById('chkSvcNorton').checked : false;
             var cyber = document.getElementById('chkSvcCyber') ? document.getElementById('chkSvcCyber').checked : false;
+
+            if (cyber && (!telefono || telefono.replace(/\D/g, '').length < 6)) {
+                showToast('ATTENZIONE: Inserisci il cellulare (obbligatorio per Cyber Protection)!');
+                var tEl = document.getElementById('inTelefono');
+                if (tEl) {
+                    tEl.focus();
+                    tEl.style.borderColor = '#ef4444';
+                    tEl.style.boxShadow = '0 0 0 3px rgba(239, 68, 68, 0.4)';
+                }
+                return false;
+            }
 
             var payload = {
                 Email: email,
@@ -2404,10 +2420,11 @@ function Open-PannelloOperatore {
                     btn.style.background = '#16a34a';
                 }, 3000);
             }
+            return true;
         }
 
         function avviaSetupAutomatico() {
-            salvaCredenziali();
+            if (!salvaCredenziali()) return;
             showToast('Configurazione automatica avviata!');
             var btn = document.getElementById('btnAvviaAuto');
             if (btn) {
@@ -4080,9 +4097,18 @@ function Invoke-BrowserAutoSignup {
     # 5. CATENA REGISTRAZIONE SERVIZIO UNIEURO CYBER PROTECTION (COVERCARE) (SE SELEZIONATO)
     if ($doCyber) {
         $tel = if ($Global:telefonoCliente) { $Global:telefonoCliente } else { "" }
-        if (-not $tel) {
-            $tIn = (Attendi-Risposta "Numero di Telefono/Cellulare Cliente per Cyber Protection (es. 3331234567, INVIO per saltare)").Trim()
-            if ($tIn) { $tel = $tIn; $Global:telefonoCliente = $tIn }
+        while (-not $tel) {
+            $tIn = (Attendi-Risposta "Numero di Cellulare Cliente per Cyber Protection (OBBLIGATORIO, es. 3331234567 - 'S' per saltare)").Trim()
+            if ($tIn -match "^[Ss]$") {
+                Write-Info "Cellulare saltato dall'operatore (la registrazione su Covercare potrebbe richiedere l'inserimento manuale)."
+                break
+            }
+            if ($tIn) {
+                $tel = $tIn
+                $Global:telefonoCliente = $tIn
+                break
+            }
+            Write-Errore "ATTENZIONE: Il cellulare e' obbligatorio per Cyber Protection! Inserisci il numero di telefono."
         }
 
         Write-Host ""
@@ -4090,7 +4116,7 @@ function Invoke-BrowserAutoSignup {
         Write-Host "Dati pronti per la registrazione del servizio con l'email appena creata:" -ForegroundColor White
         Write-Host "  - Nome / Cognome : $NomeCliente" -ForegroundColor Cyan
         Write-Host "  - Email Cliente  : $emailProton" -ForegroundColor Cyan
-        Write-Host "  - Cellulare      : $(if ($tel) { $tel } else { 'Non specificato' })" -ForegroundColor Cyan
+        Write-Host "  - Cellulare      : $(if ($tel) { $tel } else { 'NON SPECIFICATO' })" -ForegroundColor $(if ($tel) { 'Cyan' } else { 'Yellow' })
         Write-Host "  - Password       : $passGenerata" -ForegroundColor Yellow
         Write-Host ""
 
@@ -8043,6 +8069,7 @@ per averlo sempre a disposizione in caso di necessita'.
                     <h3>&#128100; Dati Cliente &amp; Garanzia</h3>
                     <table class="info-table">
                         <tr><td>Cliente:</td><td><strong>$clienteDisplay</strong></td></tr>
+                        $(if ($Global:telefonoCliente) { "<tr><td>Cellulare / Tel:</td><td><strong>$([System.Net.WebUtility]::HtmlEncode($Global:telefonoCliente))</strong></td></tr>" })
                         <tr><td>Nome Computer:</td><td><code>$pcDisplay</code></td></tr>
                         <tr><td>Seriale / S/N:</td><td><strong>$($hwInfo.Seriale)</strong></td></tr>
                         <tr><td>Garanzia Legale:</td><td><strong style="color:#0284c7;">2 Anni (fino al $($hwInfo.ScadenzaGaranzia))</strong></td></tr>
