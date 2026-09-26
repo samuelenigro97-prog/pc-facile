@@ -14,6 +14,8 @@ Per le istruzioni complete (download, avvio, risoluzione problemi) vedi **[LEGGI
    Apri il **[Pannello Web PC Facile](https://samuelenigro97-prog.github.io/pc-facile/)** per preparare le credenziali, monitorare l'avanzamento o accedere ai portali di attivazione a 1-click.
 2. **Sul PC da configurare**:
    Scarica **`PC Facile.bat`** (anche con il tasto di download diretto dentro la Web App) ed eseguilo come amministratore per far partire la configurazione automatica.
+3. **Wi-Fi del negozio (facoltativo)**:
+   Metti sulla chiavetta, nella cartella `wifi` accanto a `PC Facile.bat`, un `wifi.txt` copiato da [`wifi/wifi.txt.esempio`](./wifi/wifi.txt.esempio) (oppure un profilo `.xml`). Questi file contengono la password e **non** vanno nel repository (esclusi da `.gitignore`).
 
 ## Sviluppo / qualità
 

@@ -1,0 +1,5 @@
+# Configurazioni Wi-Fi del negozio: contengono la password in chiaro e NON
+# devono mai finire nel repository pubblico. Vanno solo sulla chiavetta USB.
+# Resta versionato solo il modello di esempio.
+wifi/*
+!wifi/wifi.txt.esempio

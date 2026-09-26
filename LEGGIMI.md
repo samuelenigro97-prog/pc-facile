@@ -51,6 +51,15 @@ di rinfrescarla ogni tanto, altrimenti offline resti a una versione vecchia.
 https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1
 ```
 
+**Wi-Fi automatico dalla chiavetta (facoltativo):** i file con la password del
+Wi-Fi **non sono nel repository** (è pubblico). Per far collegare da solo il PC
+alla rete del negozio, crea sulla chiavetta la cartella `wifi` accanto a
+`PC Facile.bat` e mettici `wifi.txt`, copiandolo da
+[`wifi/wifi.txt.esempio`](./wifi/wifi.txt.esempio) e inserendo SSID e password
+(in alternativa un profilo `.xml` esportato con
+`netsh wlan export profile key=clear`). Non caricare mai questi file su GitHub:
+`.gitignore` li esclude già.
+
 ---
 
 ## 2. Avvio FACILE (consigliato) — doppio click
