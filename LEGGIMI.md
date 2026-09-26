@@ -54,6 +54,9 @@ diverso) restano i file già presenti e il lavoro prosegue normalmente.
 - Il launcher non può sostituire sé stesso mentre gira: la nuova versione viene
   salvata come `PC Facile.bat.nuovo` e messa al suo posto a fine esecuzione (o
   al prossimo avvio, se chiudi la finestra prima).
+- Chiavette con un `PC Facile.bat` **vecchio** (senza auto-aggiornamento): al
+  primo avvio lo script aggiorna comunque i file e sostituisce il launcher
+  appena si chiude la sua finestra; dal giro successivo parte quello nuovo.
 - L'aggiornamento avviene solo su una chiavetta (disco rimovibile) o in una
   cartella che contiene già `setup-pc.ps1`; non quando il .bat è lanciato da
   `%TEMP%` (comando Win+R).

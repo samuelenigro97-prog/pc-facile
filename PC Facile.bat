@@ -116,9 +116,9 @@ if exist "%PS1%" (
     echo Aggiorno i file della chiavetta ^(manifest.txt^)...
     powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -AggiornaUSB -TargetDir "%TARGET_DIR%" -LauncherPath "%~f0"
     if defined USER_ARGS (
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -TargetDir "%TARGET_DIR%" %USER_ARGS%
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -TargetDir "%TARGET_DIR%" -LauncherPath "%~f0" %USER_ARGS%
     ) else (
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -TargetDir "%TARGET_DIR%"
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -TargetDir "%TARGET_DIR%" -LauncherPath "%~f0"
     )
     goto :fine
 )
@@ -126,9 +126,9 @@ if exist "%PS1%" (
 if exist "%~dp0setup-pc.ps1" (
     echo Offline: uso la copia sulla chiavetta ^(funziona al 100%% senza Internet^).
     if defined USER_ARGS (
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" -TargetDir "%TARGET_DIR%" %USER_ARGS%
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" -TargetDir "%TARGET_DIR%" -LauncherPath "%~f0" %USER_ARGS%
     ) else (
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" -TargetDir "%TARGET_DIR%"
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" -TargetDir "%TARGET_DIR%" -LauncherPath "%~f0"
     )
 ) else (
     echo.

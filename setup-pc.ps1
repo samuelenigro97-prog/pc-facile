@@ -39,6 +39,8 @@ param(
     # Aggiorna solo i file della chiavetta dal manifest.txt ed esce (usato da
     # PC Facile.bat ad ogni avvio). -LauncherPath = percorso del .bat in esecuzione.
     [switch]$AggiornaUSB,
+    # Percorso del .bat che ha lanciato lo script (passato dal launcher recente;
+    # se manca con -TargetDir, lo script e' stato avviato da un launcher vecchio).
     [string]$LauncherPath
 )
 
@@ -229,7 +231,7 @@ function Invoke-AggiornamentoUSB {
         # Download (iniettabile per i test): scarica $Url nel file $File o lancia un errore.
         [scriptblock]$Scarica = {
             param($Url, $File)
-            Invoke-WebRequest -Uri $Url -OutFile $File -UseBasicParsing -TimeoutSec 60 -Headers @{ 'Cache-Control' = 'no-cache' } -ErrorAction Stop
+            Invoke-WebRequest -Uri $Url -OutFile $File -UseBasicParsing -TimeoutSec 30 -Headers @{ 'Cache-Control' = 'no-cache' } -ErrorAction Stop
         }
     )
     $esito = [pscustomobject]@{ Ok = $false; Aggiornati = 0; GiaAggiornati = 0; Falliti = 0; InAttesa = 0 }
@@ -352,6 +354,43 @@ function Test-CartellaKitUSB {
         if ($radice -and ([System.IO.DriveInfo]::new($radice).DriveType -eq [System.IO.DriveType]::Removable)) { return $true }
     } catch {}
     return $false
+}
+
+# Sostituisce il launcher con "<launcher>.nuovo" DOPO che la finestra cmd che lo
+# esegue si e' chiusa (cmd.exe legge il .bat mentre gira: sovrascriverlo prima
+# lo corromperebbe). Serve solo per i launcher VECCHI, che non sanno fare lo
+# scambio da soli: un piccolo processo nascosto attende la fine di cmd e sposta
+# il file. Se qualcosa non va, il .nuovo resta e si riprova al prossimo avvio.
+function Start-SostituzioneLauncherDifferita {
+    param([string]$Launcher)
+    try {
+        $nuovo = "$Launcher.nuovo"
+        if (-not (Test-Path -LiteralPath $nuovo)) { return }
+        $padre = Get-CimInstance Win32_Process -Filter "ProcessId=$PID" -ErrorAction Stop
+        $cmdProc = Get-CimInstance Win32_Process -Filter "ProcessId=$($padre.ParentProcessId)" -ErrorAction Stop
+        if ($cmdProc.Name -ine 'cmd.exe') { return }
+        $l = $Launcher -replace "'", "''"
+        $n = $nuovo -replace "'", "''"
+        $comando = "try { Wait-Process -Id $($cmdProc.ProcessId) -ErrorAction SilentlyContinue } catch {}; Start-Sleep -Seconds 1; " +
+            "if (Test-Path -LiteralPath '$n') { Move-Item -LiteralPath '$n' -Destination '$l' -Force -ErrorAction SilentlyContinue }"
+        # Un'unica stringa tra virgolette: i percorsi (senza ") restano intatti.
+        Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -Command "' + $comando + '"') -ErrorAction Stop
+    } catch {}
+}
+
+# Chiavette con il VECCHIO PC Facile.bat (passa -TargetDir ma non -LauncherPath
+# e non conosce -AggiornaUSB): aggiorno qui i file una volta e sostituisco il
+# launcher appena la sua finestra si chiude; dal prossimo avvio parte il nuovo.
+if ($TargetDir -and -not $LauncherPath -and -not $AggiornaUSB -and -not $Test -and -not $Diagnostica -and
+    -not $env:PESTER_TEST -and $env:OS -eq 'Windows_NT') {
+    $kitVecchio = if ($TargetDir -match '^[A-Za-z]:$') { "$TargetDir\" } else { $TargetDir }
+    $launcherVecchio = Join-Path $kitVecchio 'PC Facile.bat'
+    if ((Test-Path -LiteralPath $launcherVecchio) -and (Test-CartellaKitUSB $kitVecchio)) {
+        try {
+            [void](Invoke-AggiornamentoUSB -Destinazione $kitVecchio -LauncherInEsecuzione $launcherVecchio)
+            Start-SostituzioneLauncherDifferita -Launcher $launcherVecchio
+        } catch {}
+    }
 }
 
 # Modalita' -AggiornaUSB (usata da PC Facile.bat ad ogni avvio): aggiorna la
@@ -4098,7 +4137,13 @@ function Invoke-PreparaUSBOffline {
     Write-Info "Aggiorno i file di PC Facile sulla chiavetta USB (manifest.txt)..."
     $aggUsb = $null
     if (-not $Test) {
-        try { $aggUsb = Invoke-AggiornamentoUSB -Destinazione $targetBase } catch {}
+        # Il launcher che sta girando (se e' sulla stessa chiavetta) non va
+        # sovrascritto: la sua nuova versione va in "PC Facile.bat.nuovo".
+        $launcherAttivo = if ($LauncherPath) { $LauncherPath } elseif ($TargetDir) { Join-Path $(if ($TargetDir -match '^[A-Za-z]:$') { "$TargetDir\" } else { $TargetDir }) 'PC Facile.bat' } else { $null }
+        try {
+            $aggUsb = Invoke-AggiornamentoUSB -Destinazione $targetBase -LauncherInEsecuzione $launcherAttivo
+            if ($launcherAttivo -and -not $LauncherPath) { Start-SostituzioneLauncherDifferita -Launcher $launcherAttivo }
+        } catch {}
     }
     if ($aggUsb -and $aggUsb.Ok) {
         Write-OK "File di avvio e script aggiornati e verificati nella radice della chiavetta."
