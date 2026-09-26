@@ -28,7 +28,8 @@ BeforeAll {
         'New-WlanProfileXml', 'Connect-AutoWiFi', 'Save-StoreWiFiProfile',
         'Invoke-BrowserAutoSignup', 'Wait-CredenzialiPannello',
         'Install-WindowsUpdateDrivers',
-        'Convert-PngToIco', 'Get-AppxPackageIcon'
+        'Convert-PngToIco', 'Get-AppxPackageIcon',
+        'Get-FileWifiManifest', 'Test-PercorsoManifestSicuro', 'Read-ManifestPcFacile', 'Invoke-AggiornamentoUSB', 'Test-CartellaKitUSB'
     )
     $allFns = $ast.FindAll({
         param($n)
@@ -643,5 +644,177 @@ Describe 'Integrita file distribuiti' {
         for ($i = 1; $i -lt $bytes.Length; $i++) { if ($bytes[$i] -eq 10 -and $bytes[$i - 1] -eq 13) { $crlf++ } }
         $lfTotali | Should -BeGreaterThan 0
         $crlf | Should -Be $lfTotali
+    }
+}
+
+Describe 'manifest.txt (file della chiavetta)' {
+    BeforeAll {
+        $script:Radice = Split-Path $PSScriptRoot -Parent
+        $script:Voci = Read-ManifestPcFacile -Testo (Get-Content (Join-Path $script:Radice 'manifest.txt') -Raw)
+    }
+    It 'elenca tutti i file necessari alla chiavetta' {
+        $nomi = $script:Voci | ForEach-Object { $_.Percorso }
+        foreach ($f in @('setup-pc.ps1', 'setup-pc.ps1.sha256', 'PC Facile.bat', 'PC Facile.command', 'setup-mac.sh', 'setup-mac.sh.sha256')) {
+            $nomi | Should -Contain $f
+        }
+    }
+    It 'ha hash identici ai file del repository (rigenera con tools/aggiorna-manifest.ps1)' {
+        foreach ($v in $script:Voci) {
+            $p = Join-Path $script:Radice $v.Percorso
+            Test-Path -LiteralPath $p | Should -BeTrue -Because $v.Percorso
+            (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLower() | Should -Be $v.Hash -Because $v.Percorso
+        }
+    }
+    It 'contiene i file Wi-Fi del negozio e ogni riga non commentata e'' valida' {
+        $righe = @((Get-Content (Join-Path $script:Radice 'manifest.txt')) | Where-Object { $_ -and -not $_.StartsWith('#') })
+        $righe.Count | Should -Be $script:Voci.Count
+        $wifi = @($script:Voci | Where-Object { $_.Percorso -match '^(?i)wifi/' } | ForEach-Object { $_.Percorso })
+        $wifi | Should -Contain 'wifi/wifi.txt'
+        $wifi | Should -Contain 'wifi/UNIEURO_EXPO.xml'
+        $wifi.Count | Should -Be 2
+    }
+}
+
+Describe 'Test-PercorsoManifestSicuro' {
+    It 'accetta percorsi relativi normali' {
+        Test-PercorsoManifestSicuro 'PC Facile.bat' | Should -BeTrue
+        Test-PercorsoManifestSicuro 'docs/index.html' | Should -BeTrue
+    }
+    It 'rifiuta assoluti, risalite e gli altri file della cartella wifi' {
+        foreach ($p in @('../fuori.txt', 'a/../../b', '/etc/passwd', 'C:\Windows\x.dll', 'WiFi\\rete.xml', 'wifi/altro.xml', 'wifi/sub/wifi.txt', 'wifi/../wifi.txt', '../wifi/wifi.txt', '/wifi/wifi.txt', '', 'a//b')) {
+            Test-PercorsoManifestSicuro $p | Should -BeFalse -Because $p
+        }
+    }
+    It 'accetta solo i file Wi-Fi del negozio (anche con \ o maiuscole diverse)' {
+        foreach ($p in @('wifi/wifi.txt', 'wifi/UNIEURO_EXPO.xml', 'WiFi\wifi.txt', 'wifi/unieuro_expo.xml')) {
+            Test-PercorsoManifestSicuro $p | Should -BeTrue -Because $p
+        }
+    }
+}
+
+Describe 'Invoke-AggiornamentoUSB' {
+    BeforeEach {
+        $script:Base1 = 'https://base1.test'
+        $script:Base2 = 'https://base2.test'
+        $root = Join-Path ([System.IO.Path]::GetTempPath()) ('pcf-usb-' + [guid]::NewGuid().ToString('N'))
+        $script:Remoto1 = Join-Path $root 'remoto1'
+        $script:Remoto2 = Join-Path $root 'remoto2'
+        $script:Usb = Join-Path $root 'usb'
+        $script:Root = $root
+        foreach ($d in @($script:Remoto1, $script:Remoto2, $script:Usb, (Join-Path $script:Usb 'wifi'))) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
+        function script:Hash([string]$p) { (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLower() }
+        # "Server" finto: mappa ogni base su una cartella locale; se il file non c'e' -> errore.
+        $mappa = @{ $script:Base1 = $script:Remoto1; $script:Base2 = $script:Remoto2 }
+        $script:Scarica = {
+            param($Url, $File)
+            $senzaQuery = ($Url -split '\?')[0]
+            foreach ($b in $mappa.Keys) {
+                if ($senzaQuery.StartsWith($b + '/')) {
+                    $rel = [uri]::UnescapeDataString($senzaQuery.Substring($b.Length + 1))
+                    $src = Join-Path $mappa[$b] $rel
+                    if (-not (Test-Path -LiteralPath $src)) { throw "404 $rel" }
+                    Copy-Item -LiteralPath $src -Destination $File -Force
+                    return
+                }
+            }
+            throw "host sconosciuto"
+        }.GetNewClosure()
+    }
+    AfterEach {
+        Remove-Item -LiteralPath $script:Root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'aggiorna i file cambiati (anche quelli Wi-Fi previsti), salta quelli uguali e non tocca altri file di wifi/ ne'' percorsi esterni' {
+        Set-Content -LiteralPath (Join-Path $script:Remoto1 'setup-pc.ps1') -Value 'nuovo'
+        Set-Content -LiteralPath (Join-Path $script:Remoto1 'LEGGIMI.md') -Value 'uguale'
+        Set-Content -LiteralPath (Join-Path $script:Usb 'setup-pc.ps1') -Value 'vecchio'
+        Set-Content -LiteralPath (Join-Path $script:Usb 'LEGGIMI.md') -Value 'uguale'
+        Set-Content -LiteralPath (Join-Path $script:Usb 'wifi\wifi.txt') -Value 'SSID=vecchio'
+        Set-Content -LiteralPath (Join-Path $script:Usb 'wifi\altro.xml') -Value 'mio profilo'
+        # Sul "server": wifi/wifi.txt (previsto), wifi/altro.xml (non previsto) e ../fuori.txt.
+        New-Item -ItemType Directory -Path (Join-Path $script:Remoto1 'wifi') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:Remoto1 'wifi\wifi.txt') -Value 'SSID=negozio'
+        Set-Content -LiteralPath (Join-Path $script:Remoto1 'wifi\altro.xml') -Value 'profilo remoto'
+        Set-Content -LiteralPath (Join-Path $script:Remoto1 'fuori.txt') -Value 'fuori'
+        $hNuovo = Hash (Join-Path $script:Remoto1 'setup-pc.ps1')
+        $hUguale = Hash (Join-Path $script:Remoto1 'LEGGIMI.md')
+        $hWifi = Hash (Join-Path $script:Remoto1 'wifi\wifi.txt')
+        $hAltro = Hash (Join-Path $script:Remoto1 'wifi\altro.xml')
+        $hFuori = Hash (Join-Path $script:Remoto1 'fuori.txt')
+        @("# commento", "$hNuovo  setup-pc.ps1", "$hUguale  LEGGIMI.md", "$hWifi  wifi/wifi.txt", "$hAltro  wifi/altro.xml", "$hFuori  ../fuori.txt") |
+            Set-Content -LiteralPath (Join-Path $script:Remoto1 'manifest.txt')
+
+        $r = Invoke-AggiornamentoUSB -Destinazione $script:Usb -Basi @($script:Base1, $script:Base2) -Scarica $script:Scarica
+        $r.Ok | Should -BeTrue
+        $r.Aggiornati | Should -Be 2
+        $r.GiaAggiornati | Should -Be 1
+        (Get-Content -LiteralPath (Join-Path $script:Usb 'setup-pc.ps1') -Raw).Trim() | Should -Be 'nuovo'
+        (Get-Content -LiteralPath (Join-Path $script:Usb 'wifi\wifi.txt') -Raw).Trim() | Should -Be 'SSID=negozio'
+        (Get-Content -LiteralPath (Join-Path $script:Usb 'wifi\altro.xml') -Raw).Trim() | Should -Be 'mio profilo'
+        Test-Path -LiteralPath (Join-Path $script:Root 'fuori.txt') | Should -BeFalse
+        @(Get-ChildItem -LiteralPath $script:Usb -Recurse -Filter '*.pcfacile-tmp').Count | Should -Be 0
+    }
+
+    It 'crea la cartella wifi sulla chiavetta se manca' {
+        Remove-Item -LiteralPath (Join-Path $script:Usb 'wifi') -Recurse -Force
+        New-Item -ItemType Directory -Path (Join-Path $script:Remoto1 'wifi') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:Remoto1 'wifi\UNIEURO_EXPO.xml') -Value '<WLANProfile/>'
+        "$(Hash (Join-Path $script:Remoto1 'wifi\UNIEURO_EXPO.xml'))  wifi/UNIEURO_EXPO.xml" |
+            Set-Content -LiteralPath (Join-Path $script:Remoto1 'manifest.txt')
+        $r = Invoke-AggiornamentoUSB -Destinazione $script:Usb -Basi @($script:Base1) -Scarica $script:Scarica
+        $r.Ok | Should -BeTrue
+        $r.Aggiornati | Should -Be 1
+        Test-Path -LiteralPath (Join-Path $script:Usb 'wifi\UNIEURO_EXPO.xml') | Should -BeTrue
+    }
+
+    It 'con hash non corrispondente lascia la copia esistente' {
+        Set-Content -LiteralPath (Join-Path $script:Remoto1 'setup-pc.ps1') -Value 'corrotto'
+        Set-Content -LiteralPath (Join-Path $script:Usb 'setup-pc.ps1') -Value 'vecchio'
+        ('0' * 64) + '  setup-pc.ps1' | Set-Content -LiteralPath (Join-Path $script:Remoto1 'manifest.txt')
+        $r = Invoke-AggiornamentoUSB -Destinazione $script:Usb -Basi @($script:Base1) -Scarica $script:Scarica
+        $r.Ok | Should -BeFalse
+        $r.Falliti | Should -Be 1
+        (Get-Content -LiteralPath (Join-Path $script:Usb 'setup-pc.ps1') -Raw).Trim() | Should -Be 'vecchio'
+        @(Get-ChildItem -LiteralPath $script:Usb -Filter '*.pcfacile-tmp').Count | Should -Be 0
+    }
+
+    It 'usa la seconda sorgente se la prima non ha il file' {
+        Set-Content -LiteralPath (Join-Path $script:Remoto2 'PC Facile.command') -Value 'mac'
+        $h = Hash (Join-Path $script:Remoto2 'PC Facile.command')
+        "$h  PC Facile.command" | Set-Content -LiteralPath (Join-Path $script:Remoto1 'manifest.txt')
+        $r = Invoke-AggiornamentoUSB -Destinazione $script:Usb -Basi @($script:Base1, $script:Base2) -Scarica $script:Scarica
+        $r.Aggiornati | Should -Be 1
+        (Get-Content -LiteralPath (Join-Path $script:Usb 'PC Facile.command') -Raw).Trim() | Should -Be 'mac'
+    }
+
+    It 'non sovrascrive il launcher in esecuzione: prepara PC Facile.bat.nuovo' {
+        Set-Content -LiteralPath (Join-Path $script:Remoto1 'PC Facile.bat') -Value 'bat nuovo'
+        Set-Content -LiteralPath (Join-Path $script:Usb 'PC Facile.bat') -Value 'bat vecchio'
+        $h = Hash (Join-Path $script:Remoto1 'PC Facile.bat')
+        "$h  PC Facile.bat" | Set-Content -LiteralPath (Join-Path $script:Remoto1 'manifest.txt')
+        $r = Invoke-AggiornamentoUSB -Destinazione $script:Usb -Basi @($script:Base1) -Scarica $script:Scarica -LauncherInEsecuzione (Join-Path $script:Usb 'PC Facile.bat')
+        $r.InAttesa | Should -Be 1
+        (Get-Content -LiteralPath (Join-Path $script:Usb 'PC Facile.bat') -Raw).Trim() | Should -Be 'bat vecchio'
+        (Get-Content -LiteralPath (Join-Path $script:Usb 'PC Facile.bat.nuovo') -Raw).Trim() | Should -Be 'bat nuovo'
+    }
+
+    It 'senza manifest raggiungibile non modifica nulla' {
+        Set-Content -LiteralPath (Join-Path $script:Usb 'setup-pc.ps1') -Value 'vecchio'
+        $r = Invoke-AggiornamentoUSB -Destinazione $script:Usb -Basi @($script:Base1, $script:Base2) -Scarica $script:Scarica
+        $r.Ok | Should -BeFalse
+        (Get-Content -LiteralPath (Join-Path $script:Usb 'setup-pc.ps1') -Raw).Trim() | Should -Be 'vecchio'
+    }
+}
+
+Describe 'Test-CartellaKitUSB' {
+    It 'rifiuta la cartella temporanea (avvio da Win+R) e accetta una cartella con setup-pc.ps1' {
+        $tmpKit = Join-Path ([System.IO.Path]::GetTempPath()) ('pcf-kit-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $tmpKit -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $tmpKit 'setup-pc.ps1') -Value 'x'
+        Test-CartellaKitUSB $tmpKit | Should -BeFalse
+        Remove-Item -LiteralPath $tmpKit -Recurse -Force
+        $kit = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests'
+        Test-CartellaKitUSB (Split-Path $PSScriptRoot -Parent) | Should -BeTrue
+        Test-CartellaKitUSB $kit | Should -BeFalse
     }
 }

@@ -35,7 +35,13 @@ param(
     # Salta la creazione del punto di ripristino (mantenuto per compatibilita')
     [switch]$skipRestore,
     # Cartella target o USB esplicita (opzionale)
-    [string]$TargetDir
+    [string]$TargetDir,
+    # Aggiorna solo i file della chiavetta dal manifest.txt ed esce (usato da
+    # PC Facile.bat ad ogni avvio). -LauncherPath = percorso del .bat in esecuzione.
+    [switch]$AggiornaUSB,
+    # Percorso del .bat che ha lanciato lo script (passato dal launcher recente;
+    # se manca con -TargetDir, lo script e' stato avviato da un launcher vecchio).
+    [string]$LauncherPath
 )
 
 if ($TargetDir) {
@@ -117,7 +123,7 @@ try {
 try {
     $Host.UI.RawUI.BackgroundColor = 'Black'
     $Host.UI.RawUI.ForegroundColor = 'Gray'
-    Clear-Host
+    if (-not $AggiornaUSB) { Clear-Host }
 } catch {}
 
 # =============================================================================
@@ -166,6 +172,244 @@ function Write-Errore {
     } else {
         Write-Host "   $SYM_ERR  $Testo" -ForegroundColor Red
     }
+}
+
+# =============================================================================
+# AGGIORNAMENTO AUTOMATICO DELLA CHIAVETTA (manifest.txt)
+# -----------------------------------------------------------------------------
+# manifest.txt (nel repository) elenca ogni file che serve sulla chiavetta con
+# il suo SHA256 (formato "sha256sum": <hash><2 spazi><percorso>). Qui scarico il
+# manifest, poi ogni file (GitHub raw, fallback jsDelivr), ne verifico l'hash e
+# SOLO dopo la verifica sostituisco la copia sulla chiavetta (file temporaneo
+# accanto + sostituzione). Se qualcosa va storto la copia esistente resta.
+# FIDUCIA: il manifest arriva dallo stesso posto dei file, quindi protegge da
+# download corrotti/troncati, NON da una manomissione del repository.
+# Nella cartella wifi\ si scrivono SOLO i file Wi-Fi elencati qui sotto
+# (Get-FileWifiManifest, scelta del proprietario: stanno nel repository e arrivano
+# sulla chiavetta); ogni altro file di wifi\ non viene mai toccato.
+# Il launcher in esecuzione non viene toccato: la nuova versione va in
+# "<launcher>.nuovo" e il .bat la mette al suo posto quando termina/riparte.
+# =============================================================================
+function Get-FileWifiManifest {
+    return @('wifi/wifi.txt', 'wifi/UNIEURO_EXPO.xml')
+}
+
+function Test-PercorsoManifestSicuro {
+    param([string]$Percorso)
+    if ([string]::IsNullOrWhiteSpace($Percorso)) { return $false }
+    $p = $Percorso.Trim() -replace '\\', '/'
+    if ($p.StartsWith('/') -or $p -match '^[A-Za-z]:' -or $p -match '[:*?"<>|]') { return $false }
+    $parti = @($p -split '/')
+    foreach ($parte in $parti) {
+        if ($parte -eq '' -or $parte -eq '.' -or $parte -eq '..') { return $false }
+    }
+    # Nella cartella wifi solo i file Wi-Fi previsti (confronto senza maiuscole).
+    if ($parti[0] -ieq 'wifi' -and -not ((Get-FileWifiManifest) -icontains ($parti -join '/'))) { return $false }
+    return $true
+}
+
+function Read-ManifestPcFacile {
+    param([string]$Testo)
+    $voci = [System.Collections.Generic.List[object]]::new()
+    if (-not $Testo) { return ,$voci }
+    foreach ($riga in ($Testo -split "`r?`n")) {
+        $r = $riga.TrimEnd()
+        if (-not $r -or $r.StartsWith('#')) { continue }
+        if ($r -match '^([0-9A-Fa-f]{64}) [ *](.+)$') {
+            $nome = $Matches[2]
+            if (Test-PercorsoManifestSicuro $nome) {
+                $voci.Add([pscustomobject]@{ Hash = $Matches[1].ToLower(); Percorso = ($nome -replace '\\', '/') })
+            }
+        }
+    }
+    return ,$voci
+}
+
+function Invoke-AggiornamentoUSB {
+    param(
+        [Parameter(Mandatory = $true)][string]$Destinazione,
+        [string[]]$Basi = @(
+            'https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main',
+            'https://cdn.jsdelivr.net/gh/samuelenigro97-prog/pc-facile@main'
+        ),
+        # Percorso del launcher .bat in esecuzione (non va sovrascritto mentre gira).
+        [string]$LauncherInEsecuzione,
+        # Download (iniettabile per i test): scarica $Url nel file $File o lancia un errore.
+        [scriptblock]$Scarica = {
+            param($Url, $File)
+            Invoke-WebRequest -Uri $Url -OutFile $File -UseBasicParsing -TimeoutSec 30 -Headers @{ 'Cache-Control' = 'no-cache' } -ErrorAction Stop
+        }
+    )
+    $esito = [pscustomobject]@{ Ok = $false; Aggiornati = 0; GiaAggiornati = 0; Falliti = 0; InAttesa = 0 }
+    try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
+
+    # "E:" (radice senza barra) e' un percorso relativo al disco: lo rendo assoluto.
+    if ($Destinazione -match '^[A-Za-z]:$') { $Destinazione += '\' }
+    if (-not (Test-Path -LiteralPath $Destinazione -PathType Container)) {
+        Write-Info "Aggiornamento chiavetta: cartella non trovata ($Destinazione)."
+        return $esito
+    }
+    $tmpDir = if ($env:TEMP) { $env:TEMP } else { [System.IO.Path]::GetTempPath() }
+    $t = (Get-Date).Ticks
+
+    # 1) Manifest: dalla prima sorgente che risponde con almeno una voce valida.
+    $voci = $null
+    foreach ($base in $Basi) {
+        $tmpMan = Join-Path $tmpDir ("pcfacile-manifest-{0}.txt" -f [guid]::NewGuid().ToString('N'))
+        try {
+            & $Scarica ($base + '/manifest.txt?t=' + $t) $tmpMan
+            $letti = Read-ManifestPcFacile -Testo ([System.IO.File]::ReadAllText($tmpMan))
+            if ($letti.Count -gt 0) { $voci = $letti; break }
+        } catch {
+        } finally {
+            Remove-Item -LiteralPath $tmpMan -Force -ErrorAction SilentlyContinue
+        }
+    }
+    if ($null -eq $voci -or $voci.Count -eq 0) {
+        Write-Info "Aggiornamento chiavetta saltato (manifest non raggiungibile): uso i file gia' presenti."
+        return $esito
+    }
+
+    $launcherPieno = $null
+    if ($LauncherInEsecuzione) { try { $launcherPieno = [System.IO.Path]::GetFullPath($LauncherInEsecuzione) } catch {} }
+
+    # 2) File per file: salto quelli gia' aggiornati, verifico i nuovi prima di sostituire.
+    foreach ($v in $voci) {
+        $dest = Join-Path $Destinazione ($v.Percorso -replace '/', [System.IO.Path]::DirectorySeparatorChar)
+        try {
+            if ((Test-Path -LiteralPath $dest -PathType Leaf) -and
+                ((Get-FileHash -LiteralPath $dest -Algorithm SHA256).Hash.ToLower() -eq $v.Hash)) {
+                $esito.GiaAggiornati++
+                continue
+            }
+            $destPieno = [System.IO.Path]::GetFullPath($dest)
+            $eLauncher = [bool]($launcherPieno -and ($destPieno -ieq $launcherPieno))
+            if ($eLauncher -and (Test-Path -LiteralPath ($dest + '.nuovo') -PathType Leaf) -and
+                ((Get-FileHash -LiteralPath ($dest + '.nuovo') -Algorithm SHA256).Hash.ToLower() -eq $v.Hash)) {
+                # Nuova versione del launcher gia' pronta da un avvio precedente.
+                $esito.InAttesa++
+                continue
+            }
+            $cartella = Split-Path $dest -Parent
+            if (-not (Test-Path -LiteralPath $cartella)) { New-Item -ItemType Directory -Path $cartella -Force | Out-Null }
+            $tmp = $dest + '.pcfacile-tmp'
+            $urlRel = (@($v.Percorso -split '/') | ForEach-Object { [uri]::EscapeDataString($_) }) -join '/'
+            $verificato = $false
+            foreach ($base in $Basi) {
+                Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+                try {
+                    & $Scarica ($base + '/' + $urlRel + '?t=' + $t) $tmp
+                    if ((Test-Path -LiteralPath $tmp) -and
+                        ((Get-FileHash -LiteralPath $tmp -Algorithm SHA256).Hash.ToLower() -eq $v.Hash)) {
+                        $verificato = $true
+                        break
+                    }
+                } catch {}
+            }
+            if (-not $verificato) {
+                Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+                $esito.Falliti++
+                Write-Info "Chiavetta: '$($v.Percorso)' non aggiornato (download o verifica SHA256 non riusciti), resta la copia attuale."
+                continue
+            }
+            if ($eLauncher) {
+                # Il .bat in esecuzione non si sovrascrive: lo metto da parte.
+                Move-Item -LiteralPath $tmp -Destination ($dest + '.nuovo') -Force -ErrorAction Stop
+                $esito.InAttesa++
+                Write-OK "Chiavetta: nuova versione di '$($v.Percorso)' pronta (attiva dal prossimo avvio)."
+                continue
+            }
+            if (Test-Path -LiteralPath $dest) {
+                try { [System.IO.File]::Replace($tmp, $dest, [NullString]::Value) }
+                catch { Move-Item -LiteralPath $tmp -Destination $dest -Force -ErrorAction Stop }
+            } else {
+                Move-Item -LiteralPath $tmp -Destination $dest -Force -ErrorAction Stop
+            }
+            $esito.Aggiornati++
+            Write-OK "Chiavetta: aggiornato '$($v.Percorso)'."
+        } catch {
+            Remove-Item -LiteralPath ($dest + '.pcfacile-tmp') -Force -ErrorAction SilentlyContinue
+            $esito.Falliti++
+            Write-Info "Chiavetta: '$($v.Percorso)' non aggiornato ($($_.Exception.Message))."
+        }
+    }
+    $esito.Ok = ($esito.Falliti -eq 0)
+    Write-Info ("Chiavetta: {0} aggiornati, {1} gia' aggiornati, {2} non riusciti." -f ($esito.Aggiornati + $esito.InAttesa), $esito.GiaAggiornati, $esito.Falliti)
+    return $esito
+}
+
+# Cartella "kit" da aggiornare in automatico dal launcher: NON la cartella
+# temporanea (avvio da Win+R) e solo se e' un disco rimovibile oppure contiene
+# gia' setup-pc.ps1 (copia offline). Evita di riempire Desktop/Download.
+function Test-CartellaKitUSB {
+    param([string]$Cartella)
+    if (-not $Cartella) { return $false }
+    if ($Cartella -match '^[A-Za-z]:$') { $Cartella += '\' }
+    if (-not (Test-Path -LiteralPath $Cartella -PathType Container)) { return $false }
+    try {
+        $piena = [System.IO.Path]::GetFullPath($Cartella).TrimEnd('\', '/')
+        foreach ($tmpBase in @($env:TEMP, $env:TMP, [System.IO.Path]::GetTempPath())) {
+            if (-not $tmpBase) { continue }
+            $tb = [System.IO.Path]::GetFullPath($tmpBase).TrimEnd('\', '/')
+            if ($piena -ieq $tb -or $piena.StartsWith($tb + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) { return $false }
+        }
+    } catch { return $false }
+    if (Test-Path -LiteralPath (Join-Path $Cartella 'setup-pc.ps1')) { return $true }
+    try {
+        $radice = [System.IO.Path]::GetPathRoot([System.IO.Path]::GetFullPath($Cartella))
+        if ($radice -and ([System.IO.DriveInfo]::new($radice).DriveType -eq [System.IO.DriveType]::Removable)) { return $true }
+    } catch {}
+    return $false
+}
+
+# Sostituisce il launcher con "<launcher>.nuovo" DOPO che la finestra cmd che lo
+# esegue si e' chiusa (cmd.exe legge il .bat mentre gira: sovrascriverlo prima
+# lo corromperebbe). Serve solo per i launcher VECCHI, che non sanno fare lo
+# scambio da soli: un piccolo processo nascosto attende la fine di cmd e sposta
+# il file. Se qualcosa non va, il .nuovo resta e si riprova al prossimo avvio.
+function Start-SostituzioneLauncherDifferita {
+    param([string]$Launcher)
+    try {
+        $nuovo = "$Launcher.nuovo"
+        if (-not (Test-Path -LiteralPath $nuovo)) { return }
+        $padre = Get-CimInstance Win32_Process -Filter "ProcessId=$PID" -ErrorAction Stop
+        $cmdProc = Get-CimInstance Win32_Process -Filter "ProcessId=$($padre.ParentProcessId)" -ErrorAction Stop
+        if ($cmdProc.Name -ine 'cmd.exe') { return }
+        $l = $Launcher -replace "'", "''"
+        $n = $nuovo -replace "'", "''"
+        $comando = "try { Wait-Process -Id $($cmdProc.ProcessId) -ErrorAction SilentlyContinue } catch {}; Start-Sleep -Seconds 1; " +
+            "if (Test-Path -LiteralPath '$n') { Move-Item -LiteralPath '$n' -Destination '$l' -Force -ErrorAction SilentlyContinue }"
+        # Un'unica stringa tra virgolette: i percorsi (senza ") restano intatti.
+        Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -Command "' + $comando + '"') -ErrorAction Stop
+    } catch {}
+}
+
+# Chiavette con il VECCHIO PC Facile.bat (passa -TargetDir ma non -LauncherPath
+# e non conosce -AggiornaUSB): aggiorno qui i file una volta e sostituisco il
+# launcher appena la sua finestra si chiude; dal prossimo avvio parte il nuovo.
+if ($TargetDir -and -not $LauncherPath -and -not $AggiornaUSB -and -not $Test -and -not $Diagnostica -and
+    -not $env:PESTER_TEST -and $env:OS -eq 'Windows_NT') {
+    $kitVecchio = if ($TargetDir -match '^[A-Za-z]:$') { "$TargetDir\" } else { $TargetDir }
+    $launcherVecchio = Join-Path $kitVecchio 'PC Facile.bat'
+    if ((Test-Path -LiteralPath $launcherVecchio) -and (Test-CartellaKitUSB $kitVecchio)) {
+        try {
+            [void](Invoke-AggiornamentoUSB -Destinazione $kitVecchio -LauncherInEsecuzione $launcherVecchio)
+            Start-SostituzioneLauncherDifferita -Launcher $launcherVecchio
+        } catch {}
+    }
+}
+
+# Modalita' -AggiornaUSB (usata da PC Facile.bat ad ogni avvio): aggiorna la
+# chiavetta dal manifest ed esce subito, senza toccare nient'altro del PC.
+if ($AggiornaUSB) {
+    $cartellaKit = if ($TargetDir) { $TargetDir } else { $PSScriptRoot }
+    if (Test-CartellaKitUSB $cartellaKit) {
+        try { [void](Invoke-AggiornamentoUSB -Destinazione $cartellaKit -LauncherInEsecuzione $LauncherPath) }
+        catch { Write-Info "Aggiornamento chiavetta non riuscito: $($_.Exception.Message)" }
+    } else {
+        Write-Info "Aggiornamento chiavetta saltato: '$cartellaKit' non e' una chiavetta/cartella PC Facile."
+    }
+    return
 }
 
 # =============================================================================
@@ -3872,32 +4116,50 @@ function Invoke-PreparaUSBOffline {
         }
     }
 
-    # Copia o scarica anche setup-pc.ps1, setup-pc.ps1.sha256, PC Facile.bat sulla chiavetta
+    # File di PC Facile sulla chiavetta: tutti quelli elencati in manifest.txt,
+    # scaricati e verificati (SHA256) prima di sostituire le copie esistenti.
+    # Se il manifest non e' raggiungibile, copio i file accanto a questo script.
     Write-Host ""
-    Write-Info "Aggiorno i file di script sulla chiavetta USB..."
-    try {
-        $scriptDest = Join-Path $targetBase "setup-pc.ps1"
-        $shaDest    = Join-Path $targetBase "setup-pc.ps1.sha256"
-        $batDest    = Join-Path $targetBase "PC Facile.bat"
-        $baseRepo   = "https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main"
-
-        if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "setup-pc.ps1"))) {
-            Copy-Item (Join-Path $PSScriptRoot "setup-pc.ps1") $scriptDest -Force -ErrorAction SilentlyContinue
-            if (Test-Path (Join-Path $PSScriptRoot "setup-pc.ps1.sha256")) {
-                Copy-Item (Join-Path $PSScriptRoot "setup-pc.ps1.sha256") $shaDest -Force -ErrorAction SilentlyContinue
+    Write-Info "Aggiorno i file di PC Facile sulla chiavetta USB (manifest.txt)..."
+    $aggUsb = $null
+    if (-not $Test) {
+        # Il launcher che sta girando (se e' sulla stessa chiavetta) non va
+        # sovrascritto: la sua nuova versione va in "PC Facile.bat.nuovo".
+        $launcherAttivo = if ($LauncherPath) { $LauncherPath } elseif ($TargetDir) { Join-Path $(if ($TargetDir -match '^[A-Za-z]:$') { "$TargetDir\" } else { $TargetDir }) 'PC Facile.bat' } else { $null }
+        try {
+            $aggUsb = Invoke-AggiornamentoUSB -Destinazione $targetBase -LauncherInEsecuzione $launcherAttivo
+            if ($launcherAttivo -and -not $LauncherPath) { Start-SostituzioneLauncherDifferita -Launcher $launcherAttivo }
+        } catch {}
+    }
+    if ($aggUsb -and $aggUsb.Ok) {
+        Write-OK "File di avvio e script aggiornati e verificati nella radice della chiavetta."
+    } else {
+        try {
+            if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "setup-pc.ps1"))) {
+                foreach ($nomeFile in @("setup-pc.ps1", "setup-pc.ps1.sha256", "PC Facile.bat", "PC Facile.command", "setup-mac.sh", "setup-mac.sh.sha256")) {
+                    $src = Join-Path $PSScriptRoot $nomeFile
+                    $dst = Join-Path $targetBase $nomeFile
+                    if ((Test-Path -LiteralPath $src) -and ([System.IO.Path]::GetFullPath($src) -ne [System.IO.Path]::GetFullPath($dst))) {
+                        Copy-Item -LiteralPath $src -Destination $dst -Force -ErrorAction SilentlyContinue
+                    }
+                }
+                # Anche i file Wi-Fi del negozio (cartella wifi\), se presenti accanto allo script.
+                foreach ($nomeWifi in (Get-FileWifiManifest)) {
+                    $rel = $nomeWifi -replace '/', [System.IO.Path]::DirectorySeparatorChar
+                    $src = Join-Path $PSScriptRoot $rel
+                    $dst = Join-Path $targetBase $rel
+                    if ((Test-Path -LiteralPath $src) -and ([System.IO.Path]::GetFullPath($src) -ne [System.IO.Path]::GetFullPath($dst))) {
+                        $cartWifi = Split-Path $dst -Parent
+                        if (-not (Test-Path -LiteralPath $cartWifi)) { New-Item -ItemType Directory -Path $cartWifi -Force -ErrorAction SilentlyContinue | Out-Null }
+                        Copy-Item -LiteralPath $src -Destination $dst -Force -ErrorAction SilentlyContinue
+                    }
+                }
+                Write-Info "Manifest non raggiungibile: copiati sulla chiavetta i file presenti accanto allo script."
+            } else {
+                Write-Info "Manifest non raggiungibile e nessuna copia locale: file di avvio non aggiornati."
             }
-            if (Test-Path (Join-Path $PSScriptRoot "PC Facile.bat")) {
-                Copy-Item (Join-Path $PSScriptRoot "PC Facile.bat") $batDest -Force -ErrorAction SilentlyContinue
-            }
-        } else {
-            try {
-                Invoke-WebRequest "$baseRepo/setup-pc.ps1" -OutFile $scriptDest -ErrorAction SilentlyContinue
-                Invoke-WebRequest "$baseRepo/setup-pc.ps1.sha256" -OutFile $shaDest -ErrorAction SilentlyContinue
-                Invoke-WebRequest "$baseRepo/PC%20Facile.bat" -OutFile $batDest -ErrorAction SilentlyContinue
-            } catch {}
-        }
-        Write-OK "File di avvio e script aggiornati nella radice della chiavetta."
-    } catch {}
+        } catch {}
+    }
 
     # Configurazione Wi-Fi Negozio / Laboratorio
     Write-Host ""

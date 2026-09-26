@@ -43,10 +43,34 @@ Tasto destro → **Salva con nome** → `PC Facile.bat`.
 Il launcher scarica **sempre l'ultima versione** da GitHub, così è aggiornato da
 solo (niente copie vecchie sulla chiavetta).
 
-**Uso OFFLINE (fallback):** se vuoi poter lavorare senza Internet, scarica anche
-`setup-pc.ps1` e mettilo **nella stessa cartella** di `PC Facile.bat`. Serve solo
-se il download fallisce: in quel caso il launcher usa la copia accanto. Ricordati
-di rinfrescarla ogni tanto, altrimenti offline resti a una versione vecchia.
+**Chiavetta sempre aggiornata (automatico):** a ogni avvio con Internet,
+`PC Facile.bat` (e su Mac `PC Facile.command`) scarica `manifest.txt` da GitHub
+e aggiorna sulla chiavetta **tutti** i file di PC Facile (`setup-pc.ps1`,
+`PC Facile.bat`, `PC Facile.command`, `setup-mac.sh`, le impronte `.sha256`,
+`LEGGIMI.md` e i file Wi-Fi del negozio `wifi/wifi.txt` e
+`wifi/UNIEURO_EXPO.xml`). Ogni file viene verificato con lo **SHA256** del manifest prima di
+sostituire la copia; se qualcosa non va (offline, download interrotto, hash
+diverso) restano i file già presenti e il lavoro prosegue normalmente.
+- Nella cartella `wifi` vengono scritti **solo** `wifi.txt` e `UNIEURO_EXPO.xml`
+  (presi dal repository): per cambiare la rete del negozio modificali su GitHub,
+  altrimenti una modifica fatta solo sulla chiavetta verrà sovrascritta al
+  prossimo avvio. Gli altri file di `wifi` non vengono mai toccati.
+- Il launcher non può sostituire sé stesso mentre gira: la nuova versione viene
+  salvata come `PC Facile.bat.nuovo` e messa al suo posto a fine esecuzione (o
+  al prossimo avvio, se chiudi la finestra prima).
+- Chiavette con un `PC Facile.bat` **vecchio** (senza auto-aggiornamento): al
+  primo avvio lo script aggiorna comunque i file e sostituisce il launcher
+  appena si chiude la sua finestra; dal giro successivo parte quello nuovo.
+- L'aggiornamento avviene solo su una chiavetta (disco rimovibile) o in una
+  cartella che contiene già `setup-pc.ps1`; non quando il .bat è lanciato da
+  `%TEMP%` (comando Win+R).
+- Il manifest arriva dallo stesso repository dei file: protegge da download
+  corrotti o troncati, **non** da una manomissione del repository.
+
+**Uso OFFLINE (fallback):** per preparare una chiavetta nuova basta copiarci
+`PC Facile.bat` e avviarlo una volta con Internet (oppure usare l'opzione
+*Prepara USB*): da lì in poi i file restano aggiornati da soli. Senza Internet il
+launcher usa la copia di `setup-pc.ps1` già presente sulla chiavetta.
 ```
 https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps1
 ```

@@ -8,6 +8,16 @@ REM  - Parte SEMPRE con ExecutionPolicy Bypass (niente errori di blocco)
 REM  - Scarica l'ultima versione da GitHub con fallback offline su USB
 REM ============================================================
 
+REM --- 0. Completa un auto-aggiornamento del launcher rimasto in sospeso ---
+REM La nuova versione (gia' verificata SHA256 dal manifest) viene salvata come
+REM "PC Facile.bat.nuovo" perche' cmd.exe legge il .bat mentre lo esegue: non si
+REM puo' sovrascrivere mentre gira. Qui (e alla fine) la metto al suo posto.
+REM Tutto dentro UN blocco tra parentesi: cmd lo legge per intero prima di
+REM eseguirlo, quindi dopo il MOVE non rilegge il vecchio file e passa al nuovo.
+if exist "%~f0.nuovo" (
+    move /y "%~f0.nuovo" "%~f0" >nul 2>&1 && "%~f0" %*
+)
+
 REM --- 1. Elevazione immediata ad amministratore (UN SOLO prompt UAC) ---
 REM "elevated"/"run" come primo argomento e' un marcatore interno del launcher:
 REM lo tolgo con SHIFT. Attenzione: SHIFT non modifica %*, quindi gli argomenti
@@ -99,13 +109,16 @@ set "TARGET_DIR=%~dp0"
 if "%TARGET_DIR:~-1%"=="\" set "TARGET_DIR=%TARGET_DIR:~0,-1%"
 
 REM %PS1% esiste solo se il download e' stato VERIFICATO (SHA256): solo allora
-REM aggiorno la copia offline sulla chiavetta.
+REM aggiorno la chiavetta con TUTTI i file elencati in manifest.txt (ognuno
+REM verificato SHA256 prima di sostituire la copia; i file Wi-Fi non si toccano).
+REM Se qualcosa non va, restano i file attuali e si prosegue comunque.
 if exist "%PS1%" (
-    copy /y "%PS1%" "%~dp0setup-pc.ps1" >nul 2>&1
+    echo Aggiorno i file della chiavetta ^(manifest.txt^)...
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -AggiornaUSB -TargetDir "%TARGET_DIR%" -LauncherPath "%~f0"
     if defined USER_ARGS (
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -TargetDir "%TARGET_DIR%" %USER_ARGS%
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -TargetDir "%TARGET_DIR%" -LauncherPath "%~f0" %USER_ARGS%
     ) else (
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -TargetDir "%TARGET_DIR%"
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -TargetDir "%TARGET_DIR%" -LauncherPath "%~f0"
     )
     goto :fine
 )
@@ -113,9 +126,9 @@ if exist "%PS1%" (
 if exist "%~dp0setup-pc.ps1" (
     echo Offline: uso la copia sulla chiavetta ^(funziona al 100%% senza Internet^).
     if defined USER_ARGS (
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" -TargetDir "%TARGET_DIR%" %USER_ARGS%
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" -TargetDir "%TARGET_DIR%" -LauncherPath "%~f0" %USER_ARGS%
     ) else (
-        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" -TargetDir "%TARGET_DIR%"
+        powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0setup-pc.ps1" -TargetDir "%TARGET_DIR%" -LauncherPath "%~f0"
     )
 ) else (
     echo.
@@ -136,3 +149,11 @@ echo ============================================================
 echo   Operazione terminata. Premi un tasto per chiudere.
 echo ============================================================
 pause >nul
+
+REM Auto-aggiornamento del launcher: sostituisco questo file con la nuova
+REM versione verificata ed esco nello STESSO blocco (cmd non rilegge il file).
+if exist "%~f0.nuovo" (
+    move /y "%~f0.nuovo" "%~f0" >nul 2>&1
+    exit /b
+)
+exit /b

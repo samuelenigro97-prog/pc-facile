@@ -4,6 +4,17 @@ Formato ispirato a [Keep a Changelog](https://keepachangelog.com/it/1.1.0/).
 
 ## [Unreleased]
 
+### Aggiunto
+- Aggiornamento automatico della chiavetta: `manifest.txt` (file + SHA256) e
+  modalità `setup-pc.ps1 -AggiornaUSB`, usata da `PC Facile.bat` a ogni avvio;
+  equivalente in `PC Facile.command` per Mac. File sostituiti solo dopo la
+  verifica SHA256; cartella `wifi` mai toccata; auto-aggiornamento sicuro del
+  launcher tramite `PC Facile.bat.nuovo`.
+- `tools/aggiorna-manifest.ps1` per rigenerare manifest e impronte; test Pester
+  che impediscono al manifest di disallinearsi.
+- *Prepara USB* usa il manifest (file verificati) invece dei download non
+  verificati.
+
 ### Corretto
 - `PC Facile.bat`: se `setup-pc.ps1.sha256` non si scarica il download viene
   scartato (prima veniva eseguito senza verifica); la copia sulla chiavetta si
