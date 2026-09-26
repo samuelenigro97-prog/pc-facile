@@ -14,6 +14,25 @@ Formato ispirato a [Keep a Changelog](https://keepachangelog.com/it/1.1.0/).
   che impediscono al manifest di disallinearsi.
 - *Prepara USB* usa il manifest (file verificati) invece dei download non
   verificati.
+- Pannello operatore: server locale in background (runspace) che risponde
+  sempre; `GET /status` restituisce avanzamento reale, fasi, hardware, seriale,
+  versione e ora di avvio, così funziona anche il pannello su GitHub Pages.
+  Stato "il PC aspetta i dati del cliente". Preflight con
+  `Access-Control-Allow-Private-Network`.
+- `tools/sincronizza-pannello.ps1` e test Pester: il pannello dentro
+  `setup-pc.ps1` resta identico a `docs/index.html`.
+
+### Modificato
+- Pannello operatore (web, locale e Mac): un solo pulsante **AVVIA
+  CONFIGURAZIONE**; lo script parte solo con dati confermati (`Conferma`,
+  cognome, nome, servizi) e non più al primo tasto digitato. Esito vero
+  dell'invio (ricevuto / rifiutato / PC non raggiunto), errori in rosso,
+  campi senza dati di esempio, schermata iniziale onesta (0%, "Script non
+  avviato"), tempo dall'avvio dello script, esito finale con elenco degli
+  avvisi, layout adatto a mezzo schermo e telefono, pulsanti da almeno 44 px,
+  etichette accessibili. Tolte le parti inutili (vedi PR).
+- Il server locale accetta dati solo dal pannello ufficiale (GitHub Pages) o
+  dal pannello aperto dallo script (`file://`).
 
 ### Corretto
 - `PC Facile.bat`: se `setup-pc.ps1.sha256` non si scarica il download viene

@@ -29,7 +29,8 @@ BeforeAll {
         'Invoke-BrowserAutoSignup', 'Wait-CredenzialiPannello',
         'Install-WindowsUpdateDrivers',
         'Convert-PngToIco', 'Get-AppxPackageIcon',
-        'Test-PercorsoManifestSicuro', 'Read-ManifestPcFacile', 'Invoke-AggiornamentoUSB', 'Test-CartellaKitUSB'
+        'Test-PercorsoManifestSicuro', 'Read-ManifestPcFacile', 'Invoke-AggiornamentoUSB', 'Test-CartellaKitUSB',
+        'Test-DatiClienteConfermati', 'Start-ServerPannello'
     )
     $allFns = $ast.FindAll({
         param($n)
@@ -324,7 +325,7 @@ Describe 'Open-PannelloOperatore' {
         Open-PannelloOperatore -NomeCliente "Mario Rossi" -Email "rossimario@outlook.it" -Password "Mario123!"
         Test-Path $testPannello | Should -BeTrue
         $content = Get-Content $testPannello -Raw
-        $content | Should -Match "Pannello Assistenza"
+        $content | Should -Match "Pannello operatore"
         $content | Should -Match "UNIEURO"
         $content | Should -Match "rossimario@outlook\.it"
         $content | Should -Match "Mario123!"
@@ -791,5 +792,131 @@ Describe 'Test-CartellaKitUSB' {
         $kit = Join-Path (Split-Path $PSScriptRoot -Parent) 'tests'
         Test-CartellaKitUSB (Split-Path $PSScriptRoot -Parent) | Should -BeTrue
         Test-CartellaKitUSB $kit | Should -BeFalse
+    }
+}
+
+Describe 'Pannello operatore: copie allineate e sorgente ASCII' {
+    It 'il pannello incorporato in setup-pc.ps1 coincide con docs/index.html' {
+        $tool = Join-Path (Split-Path $PSScriptRoot -Parent) 'tools/sincronizza-pannello.ps1'
+        & $tool -SoloVerifica | Should -BeTrue
+    }
+
+    It 'setup-pc.ps1 contiene solo caratteri ASCII (Windows PowerShell 5.1 lo legge senza BOM)' {
+        $byte = [System.IO.File]::ReadAllBytes($script:SetupPath)
+        @($byte | Where-Object { $_ -gt 127 }).Count | Should -Be 0
+    }
+
+    It 'il pannello non invia piu'' dati a ogni tasto e avvia solo con Conferma' {
+        $html = Get-Content -Raw -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'docs/index.html')
+        $html | Should -Not -Match 'autoSyncCred'
+        $html | Should -Match 'Conferma: true'
+        $html | Should -Match 'AbortController'
+        $html | Should -Not -Match 'value="Mario"'
+    }
+}
+
+Describe 'Test-DatiClienteConfermati' {
+    It 'accetta solo dati con Conferma, cognome, nome e servizi' {
+        $ok = [pscustomobject]@{ Conferma = $true; Nome = 'Mario'; Cognome = 'Rossi'; Servizi = [pscustomobject]@{ Cyber = $true } }
+        Test-DatiClienteConfermati $ok | Should -BeTrue
+        Test-DatiClienteConfermati ([pscustomobject]@{ Nome = 'Mario'; Cognome = 'Rossi'; Servizi = @{ Cyber = $true } }) | Should -BeFalse
+        Test-DatiClienteConfermati ([pscustomobject]@{ Conferma = $true; Nome = 'R'; Cognome = ''; Servizi = @{ Cyber = $true } }) | Should -BeFalse
+        Test-DatiClienteConfermati ([pscustomobject]@{ Conferma = $true; Nome = 'Mario'; Cognome = 'Rossi' }) | Should -BeFalse
+        Test-DatiClienteConfermati ([pscustomobject]@{ Conferma = 'true'; Nome = 'Mario'; Cognome = 'Rossi'; Servizi = @{ Cyber = $true } }) | Should -BeFalse
+        Test-DatiClienteConfermati $null | Should -BeFalse
+    }
+}
+
+Describe 'Server locale del pannello (runspace in background)' {
+    BeforeAll {
+        $script:Porta = Get-Random -Minimum 20000 -Maximum 40000
+        $script:Url = "http://127.0.0.1:$($script:Porta)"
+        $Global:PannelloStatus = $null
+        $Global:PannelloSync = $null
+        $Global:CredHttpListener = $null
+        Start-ServerPannello -Porta $script:Porta | Should -BeTrue
+        $script:Http = [System.Net.Http.HttpClient]::new()
+        $script:Http.Timeout = [TimeSpan]::FromSeconds(5)
+        function global:Invoke-RichiestaPannello([string]$Metodo, [string]$Percorso, [string]$Origin, [string]$Corpo, [hashtable]$Extra) {
+            $req = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::new($Metodo), "$($script:Url)$Percorso")
+            if ($Origin) { [void]$req.Headers.TryAddWithoutValidation('Origin', $Origin) }
+            if ($Extra) { foreach ($k in $Extra.Keys) { [void]$req.Headers.TryAddWithoutValidation($k, $Extra[$k]) } }
+            if ($null -ne $Corpo) { $req.Content = [System.Net.Http.StringContent]::new($Corpo, [System.Text.Encoding]::UTF8, 'application/json') }
+            $r = $script:Http.SendAsync($req).GetAwaiter().GetResult()
+            [pscustomobject]@{
+                Codice = [int]$r.StatusCode
+                Corpo  = $r.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+                Acao   = $(try { $r.Headers.GetValues('Access-Control-Allow-Origin') -join ',' } catch { '' })
+                Pna    = $(try { $r.Headers.GetValues('Access-Control-Allow-Private-Network') -join ',' } catch { '' })
+            }
+        }
+    }
+    AfterAll {
+        Stop-LocalCredServer
+        if ($script:Http) { $script:Http.Dispose() }
+        Remove-Item function:global:Invoke-RichiestaPannello -ErrorAction SilentlyContinue
+        $Global:PannelloSync = $null
+    }
+
+    It 'GET /status restituisce avanzamento reale, hardware, versione e inizio' {
+        Update-PannelloStatus -TaskId 'pulizia' -Stato 'running' -Percentuale 15 -FaseCorrente 'Pulizia' -Hardware ([ordered]@{ Modello = 'Lenovo X'; Cpu = 'i5'; Ram = '8 GB RAM'; Seriale = 'SN123' })
+        $r = Invoke-RichiestaPannello 'GET' '/status' 'https://samuelenigro97-prog.github.io'
+        $r.Codice | Should -Be 200
+        $r.Acao | Should -Be 'https://samuelenigro97-prog.github.io'
+        $j = $r.Corpo | ConvertFrom-Json
+        $j.Percentuale | Should -Be 15
+        $j.Tasks.pulizia.Stato | Should -Be 'running'
+        $j.Hardware.Seriale | Should -Be 'SN123'
+        $j.Inizio | Should -BeGreaterThan 0
+        $j.PSObject.Properties.Name | Should -Contain 'Versione'
+    }
+
+    It 'segnala InAttesaDati con -AttesaDati' {
+        Update-PannelloStatus -AttesaDati 'si'
+        ((Invoke-RichiestaPannello 'GET' '/status' 'null').Corpo | ConvertFrom-Json).InAttesaDati | Should -BeTrue
+        Update-PannelloStatus -AttesaDati 'no'
+        ((Invoke-RichiestaPannello 'GET' '/status' 'null').Corpo | ConvertFrom-Json).InAttesaDati | Should -BeFalse
+    }
+
+    It 'risponde al preflight con Access-Control-Allow-Private-Network' {
+        $r = Invoke-RichiestaPannello 'OPTIONS' '/cred' 'https://samuelenigro97-prog.github.io' $null @{ 'Access-Control-Request-Method' = 'POST'; 'Access-Control-Request-Private-Network' = 'true' }
+        $r.Codice | Should -Be 204
+        $r.Pna | Should -Be 'true'
+    }
+
+    It 'rifiuta le richieste da siti non autorizzati' {
+        $r = Invoke-RichiestaPannello 'POST' '/cred' 'https://sito-qualsiasi.example' '{"Conferma":true,"Nome":"A","Cognome":"B","Servizi":{}}'
+        $r.Codice | Should -Be 403
+        (Invoke-RichiestaPannello 'GET' '/status' 'https://sito-qualsiasi.example').Codice | Should -Be 403
+    }
+
+    It 'rifiuta dati senza Conferma o senza cognome, e non li mette in coda' {
+        (Invoke-RichiestaPannello 'POST' '/cred' 'null' '{"Nome":"Mario","Cognome":"Rossi","Servizi":{"Cyber":true}}').Codice | Should -Be 400
+        $r = Invoke-RichiestaPannello 'POST' '/cred' 'null' '{"Conferma":true,"Nome":"R","Cognome":"","Servizi":{"Cyber":true}}'
+        $r.Codice | Should -Be 400
+        ($r.Corpo | ConvertFrom-Json).motivo | Should -Match 'cognome'
+        $Global:PannelloSync.CodaCred.Count | Should -Be 0
+    }
+
+    It 'accetta i dati confermati e Get-CredenzialiSalvatePannello li applica (anche servizi)' {
+        $corpo = @{ Conferma = $true; Email = 'rossimario@outlook.it'; Password = 'Pw-123!'; Provider = 'Microsoft'; Cliente = 'Rossi Mario'; Nome = 'Mario'; Cognome = 'Rossi'; Telefono = '3331234567'; Servizi = @{ Cyber = $true; Office = $true; Proton = $false; McAfee = $false; Norton = $false } } | ConvertTo-Json -Compress
+        $r = Invoke-RichiestaPannello 'POST' '/cred' 'https://samuelenigro97-prog.github.io' $corpo
+        $r.Codice | Should -Be 200
+        ($r.Corpo | ConvertFrom-Json).ok | Should -BeTrue
+        Get-CredenzialiSalvatePannello | Should -BeTrue
+        $Global:credMsAccount | Should -Be 'rossimario@outlook.it'
+        $Global:nomeCliente | Should -Be 'Rossi Mario'
+        $Global:serviziSelezionati.Office | Should -BeTrue
+        $Global:PannelloSync.CodaCred.Count | Should -Be 0
+    }
+
+    It 'dopo Stop-LocalCredServer la porta non risponde piu''' {
+        Stop-LocalCredServer
+        # Su Linux la connessione viene rifiutata; su Windows HTTP.sys puo'
+        # rispondere lui (400/503): in entrambi i casi lo stato non arriva piu'.
+        $risposta = $null
+        try { $risposta = Invoke-RichiestaPannello 'GET' '/status' 'null' } catch { $risposta = $null }
+        if ($risposta) { $risposta.Codice | Should -Not -Be 200 }
+        $Global:CredHttpListener | Should -BeNullOrEmpty
     }
 }
