@@ -51,6 +51,12 @@ info(){  print -r -- "${C_INFO}   -> $1${C_RST}"; }
 errore(){ print -r -- "${C_ERR}   [X] $1${C_RST}"; }
 dim(){   print -r -- "${C_DIM}   $1${C_RST}"; }
 
+# ---- Escape dei valori inseriti nelle pagine HTML generate ------------------
+# html_esc: & < > " ' -> entita' HTML. sed_esc: rende sicuro un valore usato
+# come sostituzione in sed "s|...|VALORE|g" (\, | e & sono speciali).
+html_esc(){ local s="$1"; s=${s//&/&amp;}; s=${s//</&lt;}; s=${s//>/&gt;}; s=${s//\"/&quot;}; s=${s//\'/&#39;}; print -r -- "$s"; }
+sed_esc(){ local s="$1"; s=${s//$'\n'/ }; s=${s//\\/\\\\}; s=${s//[|]/\\|}; s=${s//&/\\&}; print -r -- "$s"; }
+
 # ---- Report (voce + OK/ERRORE/SALTATO/AVVISO) --------------------------------
 typeset -a REPORT_VOCI REPORT_ESITI INSTALLATE
 add_report(){ REPORT_VOCI+=("$1"); REPORT_ESITI+=("$2"); }
@@ -637,13 +643,13 @@ open_pannello_mac() {
 </html>
 EOF
 
-    # Sostituisci i placeholder con i dati reali
-    sed -i '' "s|__HW_MODEL__|${hw_model}|g" "$pannello_html" 2>/dev/null
-    sed -i '' "s|__HW_CHIP__|${hw_chip}|g" "$pannello_html" 2>/dev/null
-    sed -i '' "s|__HW_RAM__|${hw_ram}|g" "$pannello_html" 2>/dev/null
-    sed -i '' "s|__HW_SN__|${hw_sn}|g" "$pannello_html" 2>/dev/null
-    sed -i '' "s|__EMAIL__|${email_c}|g" "$pannello_html" 2>/dev/null
-    sed -i '' "s|__PASS__|${pass_c}|g" "$pannello_html" 2>/dev/null
+    # Sostituisci i placeholder con i dati reali (escape HTML + escape per sed)
+    sed -i '' "s|__HW_MODEL__|$(sed_esc "$(html_esc "$hw_model")")|g" "$pannello_html" 2>/dev/null
+    sed -i '' "s|__HW_CHIP__|$(sed_esc "$(html_esc "$hw_chip")")|g" "$pannello_html" 2>/dev/null
+    sed -i '' "s|__HW_RAM__|$(sed_esc "$(html_esc "$hw_ram")")|g" "$pannello_html" 2>/dev/null
+    sed -i '' "s|__HW_SN__|$(sed_esc "$(html_esc "$hw_sn")")|g" "$pannello_html" 2>/dev/null
+    sed -i '' "s|__EMAIL__|$(sed_esc "$(html_esc "$email_c")")|g" "$pannello_html" 2>/dev/null
+    sed -i '' "s|__PASS__|$(sed_esc "$(html_esc "$pass_c")")|g" "$pannello_html" 2>/dev/null
 
     set_split_screen_mac "$pannello_html"
 }
@@ -652,32 +658,46 @@ EOF
 # MODULO AUTOMAZIONE BROWSER (PROTON MAIL RAPIDO & MAC)
 # =============================================================================
 leggi_credenziali_salvate_mac() {
+    # Legge il JSON salvato dal pannello SENZA eval: python stampa righe
+    # "CHIAVE<TAB>valore" (tab/a capo tolti dai valori), la shell accetta solo
+    # le chiavi attese e assegna il valore come testo (nessuna espansione).
     local paths=("$HOME/Downloads/pcfacile-cred.json" "${TMPDIR:-/tmp}/pcfacile-cred.json")
+    local p res riga chiave valore
     for p in "${paths[@]}"; do
         if [[ -f "$p" ]]; then
             if command -v python3 >/dev/null 2>&1; then
-                local res
-                res="$(python3 -c "
-import json
+                res="$(python3 - "$p" 2>/dev/null <<'PYEOF'
+import json, sys
+def pulito(v):
+    return ' '.join(str(v).replace('\t', ' ').splitlines())
 try:
-    with open('$p', 'r', encoding='utf-8') as f:
+    with open(sys.argv[1], 'r', encoding='utf-8') as f:
         d = json.load(f)
-    if d.get('Email'): print('EMAIL_CLIENTE=' + repr(str(d['Email'])))
-    if d.get('Password'): print('PASS_CLIENTE=' + repr(str(d['Password'])))
-    if d.get('Cliente'): print('NOME_CLIENTE=' + repr(str(d['Cliente'])))
-    if d.get('Telefono'): print('TELEFONO_CLIENTE=' + repr(str(d['Telefono'])))
+    for k, nome in (('Email', 'EMAIL_CLIENTE'), ('Password', 'PASS_CLIENTE'),
+                    ('Cliente', 'NOME_CLIENTE'), ('Telefono', 'TELEFONO_CLIENTE')):
+        if d.get(k):
+            print(nome + '\t' + pulito(d[k]))
     svcs = d.get('Servizi', {})
     if isinstance(svcs, dict):
-        print('SVC_PROTON=' + repr('true' if svcs.get('Proton', True) else 'false'))
-        print('SVC_OFFICE=' + repr('true' if svcs.get('Office', False) else 'false'))
-        print('SVC_MCAFEE=' + repr('true' if svcs.get('McAfee', False) else 'false'))
-        print('SVC_NORTON=' + repr('true' if svcs.get('Norton', False) else 'false'))
-        print('SVC_CYBER=' + repr('true' if svcs.get('Cyber', True) else 'false'))
+        for k, nome, predef in (('Proton', 'SVC_PROTON', True), ('Office', 'SVC_OFFICE', False),
+                                ('McAfee', 'SVC_MCAFEE', False), ('Norton', 'SVC_NORTON', False),
+                                ('Cyber', 'SVC_CYBER', True)):
+            print(nome + '\t' + ('true' if svcs.get(k, predef) else 'false'))
 except Exception:
     pass
-" 2>/dev/null)"
+PYEOF
+)"
                 if [[ -n "$res" ]]; then
-                    eval "$res"
+                    while IFS= read -r riga; do
+                        chiave="${riga%%$'\t'*}"
+                        valore="${riga#*$'\t'}"
+                        case "$chiave" in
+                            EMAIL_CLIENTE|PASS_CLIENTE|NOME_CLIENTE|TELEFONO_CLIENTE|SVC_PROTON|SVC_OFFICE|SVC_MCAFEE|SVC_NORTON|SVC_CYBER)
+                                typeset -g "$chiave=$valore" ;;
+                        esac
+                    done <<< "$res"
+                    # Letto: il file contiene la password in chiaro, lo cancello.
+                    rm -f -- "$p" 2>/dev/null
                     return 0
                 fi
             fi
@@ -1185,9 +1205,14 @@ hw_s="${${(s:|:)hw}[4]}"
 batt="$(get_battery_info_mac)"
 batt_desc="${${(s:|:)batt}[2]} - ${${(s:|:)batt}[3]}"
 
+# Valori escapati per la scheda HTML (nome, credenziali e dati hardware)
+h_nome="$(html_esc "$NOME_CLIENTE")"; h_account="$(html_esc "$CRED_ACCOUNT")"; h_password="$(html_esc "$CRED_PASSWORD")"
+hw_m="$(html_esc "$hw_m")"; hw_c="$(html_esc "$hw_c")"; hw_r="$(html_esc "$hw_r")"; hw_s="$(html_esc "$hw_s")"
+batt_desc="$(html_esc "$batt_desc")"
+
 app_badges=""
 for a in "${INSTALLATE[@]}"; do
-    app_badges+="<div style='background:#fff; border:1px solid #cbd5e1; border-radius:6px; padding:4px 8px; font-size:11.5px; display:inline-block; margin:3px;'>&#10003; <strong>$a</strong></div>"
+    app_badges+="<div style='background:#fff; border:1px solid #cbd5e1; border-radius:6px; padding:4px 8px; font-size:11.5px; display:inline-block; margin:3px;'>&#10003; <strong>$(html_esc "$a")</strong></div>"
 done
 [[ -z "$app_badges" ]] && app_badges="<div style='background:#fff; border:1px solid #cbd5e1; border-radius:6px; padding:4px 8px; font-size:11.5px;'>&#10003; <strong>Applicazioni base configurate</strong></div>"
 
@@ -1196,7 +1221,7 @@ cat <<EOF > "$HTML_CONSEGNA"
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <title>Scheda Consegna Apple Mac - $NOME_CLIENTE</title>
+    <title>Scheda Consegna Apple Mac - $h_nome</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
         body { background: #f1f5f9; color: #1e293b; padding: 24px; font-size: 13px; line-height: 1.5; }
@@ -1219,8 +1244,8 @@ cat <<EOF > "$HTML_CONSEGNA"
         <div style="padding: 24px;">
             <div class="card card-cred">
                 <h3 style="color:#EE7203; margin-bottom:8px;">🔑 Credenziali &amp; Account Apple ID</h3>
-                <p><strong>Email / Apple ID:</strong> $CRED_ACCOUNT</p>
-                <p><strong>Password provvisoria:</strong> <code style="background:#fee2e2; padding:2px 6px; border-radius:4px; color:#991b1b; font-weight:bold;">$CRED_PASSWORD</code></p>
+                <p><strong>Email / Apple ID:</strong> $h_account</p>
+                <p><strong>Password provvisoria:</strong> <code style="background:#fee2e2; padding:2px 6px; border-radius:4px; color:#991b1b; font-weight:bold;">$h_password</code></p>
             </div>
             <div class="card">
                 <h3 style="margin-bottom:8px; color:#00122B;">💻 Dati Dispositivo &amp; Diagnostica</h3>
@@ -1244,6 +1269,11 @@ EOF
 
 ok "Scheda di consegna HTML creata sul Desktop: $HTML_CONSEGNA"
 update_pannello_mac_status 100 "Configurazione Mac Completata!" "Tutti i lavori terminati con successo" true
+
+# Pulizia file temporanei con credenziali in chiaro: pannello generato in /tmp
+# (email e password precompilate) ed eventuale JSON salvato dal pannello.
+# La pagina gia' aperta nel browser resta visibile. Prima del menu di riavvio.
+rm -f -- /tmp/Pannello-Operatore-Mac.html "$HOME/Downloads/pcfacile-cred.json" "${TMPDIR:-/tmp}/pcfacile-cred.json" 2>/dev/null
 
 # =============================================================================
 # MENU DI CHIUSURA: CHECK SALUTE MAC O RIAVVIO
