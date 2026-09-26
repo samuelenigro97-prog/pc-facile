@@ -622,3 +622,26 @@ Describe 'Sincronizzazione Credenziali Multi-Canale & Salvataggio Report Desktop
         $content | Should -Match 'Ottimizzato SSD'
     }
 }
+
+# Controlli di integrita' dei file distribuiti (girano in CI con gli altri test,
+# quindi non serve modificare i workflow).
+Describe 'Integrita file distribuiti' {
+    BeforeAll {
+        $script:Radice = Split-Path $PSScriptRoot -Parent
+    }
+    It 'setup-mac.sh.sha256 combacia con setup-mac.sh (verificato da PC Facile.command)' {
+        $shaFile = Join-Path $script:Radice 'setup-mac.sh.sha256'
+        Test-Path $shaFile | Should -BeTrue
+        $atteso = ((Get-Content $shaFile -Raw).Trim() -split '\s+')[0].ToLower()
+        $reale = (Get-FileHash (Join-Path $script:Radice 'setup-mac.sh') -Algorithm SHA256).Hash.ToLower()
+        $reale | Should -Be $atteso
+    }
+    It 'PC Facile.bat ha fine riga CRLF (come servito da GitHub raw)' {
+        $bytes = [System.IO.File]::ReadAllBytes((Join-Path $script:Radice 'PC Facile.bat'))
+        $lfTotali = @($bytes | Where-Object { $_ -eq 10 }).Count
+        $crlf = 0
+        for ($i = 1; $i -lt $bytes.Length; $i++) { if ($bytes[$i] -eq 10 -and $bytes[$i - 1] -eq 13) { $crlf++ } }
+        $lfTotali | Should -BeGreaterThan 0
+        $crlf | Should -Be $lfTotali
+    }
+}
