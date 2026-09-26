@@ -47,10 +47,14 @@ solo (niente copie vecchie sulla chiavetta).
 `PC Facile.bat` (e su Mac `PC Facile.command`) scarica `manifest.txt` da GitHub
 e aggiorna sulla chiavetta **tutti** i file di PC Facile (`setup-pc.ps1`,
 `PC Facile.bat`, `PC Facile.command`, `setup-mac.sh`, le impronte `.sha256`,
-`LEGGIMI.md`). Ogni file viene verificato con lo **SHA256** del manifest prima di
+`LEGGIMI.md` e i file Wi-Fi del negozio `wifi/wifi.txt` e
+`wifi/UNIEURO_EXPO.xml`). Ogni file viene verificato con lo **SHA256** del manifest prima di
 sostituire la copia; se qualcosa non va (offline, download interrotto, hash
 diverso) restano i file già presenti e il lavoro prosegue normalmente.
-- La cartella `wifi` **non viene mai** scaricata, sovrascritta né cancellata.
+- Nella cartella `wifi` vengono scritti **solo** `wifi.txt` e `UNIEURO_EXPO.xml`
+  (presi dal repository): per cambiare la rete del negozio modificali su GitHub,
+  altrimenti una modifica fatta solo sulla chiavetta verrà sovrascritta al
+  prossimo avvio. Gli altri file di `wifi` non vengono mai toccati.
 - Il launcher non può sostituire sé stesso mentre gira: la nuova versione viene
   salvata come `PC Facile.bat.nuovo` e messa al suo posto a fine esecuzione (o
   al prossimo avvio, se chiudi la finestra prima).

@@ -184,10 +184,16 @@ function Write-Errore {
 # accanto + sostituzione). Se qualcosa va storto la copia esistente resta.
 # FIDUCIA: il manifest arriva dallo stesso posto dei file, quindi protegge da
 # download corrotti/troncati, NON da una manomissione del repository.
-# I file Wi-Fi (cartella wifi\) non sono MAI scaricati, sovrascritti o cancellati.
+# Nella cartella wifi\ si scrivono SOLO i file Wi-Fi elencati qui sotto
+# (Get-FileWifiManifest, scelta del proprietario: stanno nel repository e arrivano
+# sulla chiavetta); ogni altro file di wifi\ non viene mai toccato.
 # Il launcher in esecuzione non viene toccato: la nuova versione va in
 # "<launcher>.nuovo" e il .bat la mette al suo posto quando termina/riparte.
 # =============================================================================
+function Get-FileWifiManifest {
+    return @('wifi/wifi.txt', 'wifi/UNIEURO_EXPO.xml')
+}
+
 function Test-PercorsoManifestSicuro {
     param([string]$Percorso)
     if ([string]::IsNullOrWhiteSpace($Percorso)) { return $false }
@@ -197,8 +203,8 @@ function Test-PercorsoManifestSicuro {
     foreach ($parte in $parti) {
         if ($parte -eq '' -or $parte -eq '.' -or $parte -eq '..') { return $false }
     }
-    # Mai toccare la configurazione Wi-Fi della chiavetta.
-    if ($parti[0] -ieq 'wifi') { return $false }
+    # Nella cartella wifi solo i file Wi-Fi previsti (confronto senza maiuscole).
+    if ($parti[0] -ieq 'wifi' -and -not ((Get-FileWifiManifest) -icontains ($parti -join '/'))) { return $false }
     return $true
 }
 
@@ -4134,6 +4140,17 @@ function Invoke-PreparaUSBOffline {
                     $src = Join-Path $PSScriptRoot $nomeFile
                     $dst = Join-Path $targetBase $nomeFile
                     if ((Test-Path -LiteralPath $src) -and ([System.IO.Path]::GetFullPath($src) -ne [System.IO.Path]::GetFullPath($dst))) {
+                        Copy-Item -LiteralPath $src -Destination $dst -Force -ErrorAction SilentlyContinue
+                    }
+                }
+                # Anche i file Wi-Fi del negozio (cartella wifi\), se presenti accanto allo script.
+                foreach ($nomeWifi in (Get-FileWifiManifest)) {
+                    $rel = $nomeWifi -replace '/', [System.IO.Path]::DirectorySeparatorChar
+                    $src = Join-Path $PSScriptRoot $rel
+                    $dst = Join-Path $targetBase $rel
+                    if ((Test-Path -LiteralPath $src) -and ([System.IO.Path]::GetFullPath($src) -ne [System.IO.Path]::GetFullPath($dst))) {
+                        $cartWifi = Split-Path $dst -Parent
+                        if (-not (Test-Path -LiteralPath $cartWifi)) { New-Item -ItemType Directory -Path $cartWifi -Force -ErrorAction SilentlyContinue | Out-Null }
                         Copy-Item -LiteralPath $src -Destination $dst -Force -ErrorAction SilentlyContinue
                     }
                 }

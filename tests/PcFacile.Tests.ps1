@@ -29,7 +29,7 @@ BeforeAll {
         'Invoke-BrowserAutoSignup', 'Wait-CredenzialiPannello',
         'Install-WindowsUpdateDrivers',
         'Convert-PngToIco', 'Get-AppxPackageIcon',
-        'Test-PercorsoManifestSicuro', 'Read-ManifestPcFacile', 'Invoke-AggiornamentoUSB', 'Test-CartellaKitUSB'
+        'Get-FileWifiManifest', 'Test-PercorsoManifestSicuro', 'Read-ManifestPcFacile', 'Invoke-AggiornamentoUSB', 'Test-CartellaKitUSB'
     )
     $allFns = $ast.FindAll({
         param($n)
@@ -665,10 +665,13 @@ Describe 'manifest.txt (file della chiavetta)' {
             (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLower() | Should -Be $v.Hash -Because $v.Percorso
         }
     }
-    It 'non contiene file Wi-Fi e ogni riga non commentata e'' valida' {
+    It 'contiene i file Wi-Fi del negozio e ogni riga non commentata e'' valida' {
         $righe = @((Get-Content (Join-Path $script:Radice 'manifest.txt')) | Where-Object { $_ -and -not $_.StartsWith('#') })
         $righe.Count | Should -Be $script:Voci.Count
-        ($script:Voci | Where-Object { $_.Percorso -match '^(?i)wifi/' }) | Should -BeNullOrEmpty
+        $wifi = @($script:Voci | Where-Object { $_.Percorso -match '^(?i)wifi/' } | ForEach-Object { $_.Percorso })
+        $wifi | Should -Contain 'wifi/wifi.txt'
+        $wifi | Should -Contain 'wifi/UNIEURO_EXPO.xml'
+        $wifi.Count | Should -Be 2
     }
 }
 
@@ -677,9 +680,14 @@ Describe 'Test-PercorsoManifestSicuro' {
         Test-PercorsoManifestSicuro 'PC Facile.bat' | Should -BeTrue
         Test-PercorsoManifestSicuro 'docs/index.html' | Should -BeTrue
     }
-    It 'rifiuta assoluti, risalite e la cartella wifi' {
-        foreach ($p in @('../fuori.txt', 'a/../../b', '/etc/passwd', 'C:\Windows\x.dll', 'wifi/wifi.txt', 'WiFi\\rete.xml', '', 'a//b')) {
+    It 'rifiuta assoluti, risalite e gli altri file della cartella wifi' {
+        foreach ($p in @('../fuori.txt', 'a/../../b', '/etc/passwd', 'C:\Windows\x.dll', 'WiFi\\rete.xml', 'wifi/altro.xml', 'wifi/sub/wifi.txt', 'wifi/../wifi.txt', '../wifi/wifi.txt', '/wifi/wifi.txt', '', 'a//b')) {
             Test-PercorsoManifestSicuro $p | Should -BeFalse -Because $p
+        }
+    }
+    It 'accetta solo i file Wi-Fi del negozio (anche con \ o maiuscole diverse)' {
+        foreach ($p in @('wifi/wifi.txt', 'wifi/UNIEURO_EXPO.xml', 'WiFi\wifi.txt', 'wifi/unieuro_expo.xml')) {
+            Test-PercorsoManifestSicuro $p | Should -BeTrue -Because $p
         }
     }
 }
@@ -716,30 +724,47 @@ Describe 'Invoke-AggiornamentoUSB' {
         Remove-Item -LiteralPath $script:Root -Recurse -Force -ErrorAction SilentlyContinue
     }
 
-    It 'aggiorna i file cambiati, salta quelli uguali e non tocca wifi/ ne'' percorsi esterni' {
+    It 'aggiorna i file cambiati (anche quelli Wi-Fi previsti), salta quelli uguali e non tocca altri file di wifi/ ne'' percorsi esterni' {
         Set-Content -LiteralPath (Join-Path $script:Remoto1 'setup-pc.ps1') -Value 'nuovo'
         Set-Content -LiteralPath (Join-Path $script:Remoto1 'LEGGIMI.md') -Value 'uguale'
-        Set-Content -LiteralPath (Join-Path $script:Remoto1 'wifi.txt') -Value 'SSID=finto'
         Set-Content -LiteralPath (Join-Path $script:Usb 'setup-pc.ps1') -Value 'vecchio'
         Set-Content -LiteralPath (Join-Path $script:Usb 'LEGGIMI.md') -Value 'uguale'
-        Set-Content -LiteralPath (Join-Path $script:Usb 'wifi\wifi.txt') -Value 'SSID=negozio'
+        Set-Content -LiteralPath (Join-Path $script:Usb 'wifi\wifi.txt') -Value 'SSID=vecchio'
+        Set-Content -LiteralPath (Join-Path $script:Usb 'wifi\altro.xml') -Value 'mio profilo'
+        # Sul "server": wifi/wifi.txt (previsto), wifi/altro.xml (non previsto) e ../fuori.txt.
+        New-Item -ItemType Directory -Path (Join-Path $script:Remoto1 'wifi') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:Remoto1 'wifi\wifi.txt') -Value 'SSID=negozio'
+        Set-Content -LiteralPath (Join-Path $script:Remoto1 'wifi\altro.xml') -Value 'profilo remoto'
+        Set-Content -LiteralPath (Join-Path $script:Remoto1 'fuori.txt') -Value 'fuori'
         $hNuovo = Hash (Join-Path $script:Remoto1 'setup-pc.ps1')
         $hUguale = Hash (Join-Path $script:Remoto1 'LEGGIMI.md')
-        $hWifi = Hash (Join-Path $script:Remoto1 'wifi.txt')
-        @("# commento", "$hNuovo  setup-pc.ps1", "$hUguale  LEGGIMI.md", "$hWifi  wifi/wifi.txt", "$hWifi  ../fuori.txt") |
+        $hWifi = Hash (Join-Path $script:Remoto1 'wifi\wifi.txt')
+        $hAltro = Hash (Join-Path $script:Remoto1 'wifi\altro.xml')
+        $hFuori = Hash (Join-Path $script:Remoto1 'fuori.txt')
+        @("# commento", "$hNuovo  setup-pc.ps1", "$hUguale  LEGGIMI.md", "$hWifi  wifi/wifi.txt", "$hAltro  wifi/altro.xml", "$hFuori  ../fuori.txt") |
             Set-Content -LiteralPath (Join-Path $script:Remoto1 'manifest.txt')
-        # wifi/wifi.txt e ../fuori.txt esistono sul "server": non devono comunque arrivare.
-        New-Item -ItemType Directory -Path (Join-Path $script:Remoto1 'wifi') -Force | Out-Null
-        Copy-Item (Join-Path $script:Remoto1 'wifi.txt') (Join-Path $script:Remoto1 'wifi\wifi.txt')
 
         $r = Invoke-AggiornamentoUSB -Destinazione $script:Usb -Basi @($script:Base1, $script:Base2) -Scarica $script:Scarica
         $r.Ok | Should -BeTrue
-        $r.Aggiornati | Should -Be 1
+        $r.Aggiornati | Should -Be 2
         $r.GiaAggiornati | Should -Be 1
         (Get-Content -LiteralPath (Join-Path $script:Usb 'setup-pc.ps1') -Raw).Trim() | Should -Be 'nuovo'
         (Get-Content -LiteralPath (Join-Path $script:Usb 'wifi\wifi.txt') -Raw).Trim() | Should -Be 'SSID=negozio'
+        (Get-Content -LiteralPath (Join-Path $script:Usb 'wifi\altro.xml') -Raw).Trim() | Should -Be 'mio profilo'
         Test-Path -LiteralPath (Join-Path $script:Root 'fuori.txt') | Should -BeFalse
         @(Get-ChildItem -LiteralPath $script:Usb -Recurse -Filter '*.pcfacile-tmp').Count | Should -Be 0
+    }
+
+    It 'crea la cartella wifi sulla chiavetta se manca' {
+        Remove-Item -LiteralPath (Join-Path $script:Usb 'wifi') -Recurse -Force
+        New-Item -ItemType Directory -Path (Join-Path $script:Remoto1 'wifi') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:Remoto1 'wifi\UNIEURO_EXPO.xml') -Value '<WLANProfile/>'
+        "$(Hash (Join-Path $script:Remoto1 'wifi\UNIEURO_EXPO.xml'))  wifi/UNIEURO_EXPO.xml" |
+            Set-Content -LiteralPath (Join-Path $script:Remoto1 'manifest.txt')
+        $r = Invoke-AggiornamentoUSB -Destinazione $script:Usb -Basi @($script:Base1) -Scarica $script:Scarica
+        $r.Ok | Should -BeTrue
+        $r.Aggiornati | Should -Be 1
+        Test-Path -LiteralPath (Join-Path $script:Usb 'wifi\UNIEURO_EXPO.xml') | Should -BeTrue
     }
 
     It 'con hash non corrispondente lascia la copia esistente' {
