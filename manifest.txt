@@ -1,0 +1,10 @@
+# manifest.txt - file della chiavetta PC Facile con il loro SHA256.
+# Generato da tools/aggiorna-manifest.ps1: NON modificare a mano.
+# I file Wi-Fi (wifi/) non sono mai inclusi: restano solo sulla chiavetta.
+7189963fcbf944f293ea8b61944b0fec35136c2d5ed795fd97c2384b605ff1d3  setup-pc.ps1
+eac3f21b1d111af5e212ec59aab4c42adb8d29d3b98f742aac68998ba62a817f  setup-pc.ps1.sha256
+12987dee053d8c3174202406582ce54b56abe76b73bfb857c1e027891ef490e3  PC Facile.bat
+c61e8c9b0f6c5e1a45cfafb220ac15b369fbf38f19496b3af8bb656c2305761c  PC Facile.command
+d495a1390587a5d4683650b308765d1a3c8640f0ac3379b251a9b9e3f7d49d26  setup-mac.sh
+6b51830a1374f2ecaf4360fe64cc48b9724e7fd233b434b960005f85c92d437a  setup-mac.sh.sha256
+6b20eda1e08d87b9d6197b831abe3c82f7d8968c5b506219cff54e56902ec432  LEGGIMI.md

@@ -12,3 +12,7 @@
 # "text eol=crlf" git li salvava LF e GitHub raw serviva un .bat solo-LF (cmd.exe
 # con fine riga LF sbaglia goto/etichette). "-text" = byte salvati tali e quali.
 *.bat       -text
+# File distribuiti sulla chiavetta tramite manifest.txt: byte identici tra
+# repository, GitHub raw e checkout Windows (gli hash del manifest devono tornare).
+manifest.txt text eol=lf
+LEGGIMI.md   text eol=lf

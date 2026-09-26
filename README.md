@@ -18,6 +18,7 @@ Per le istruzioni complete (download, avvio, risoluzione problemi) vedi **[LEGGI
 ## Sviluppo / qualità
 
 - **Integrità**: `PC Facile.bat` verifica lo **SHA256** dello script scaricato contro `setup-pc.ps1.sha256`. Se l'impronta non combacia **o non si riesce a scaricarla**, il download viene scartato (riprova anche dal mirror jsDelivr) e, se nessun download è verificato, si usa la copia sulla chiavetta; la copia sulla chiavetta viene aggiornata solo dopo una verifica riuscita. Su Mac `PC Facile.command` fa lo stesso con `setup-mac.sh.sha256`.
+- **Chiavetta auto-aggiornata**: `manifest.txt` elenca i file che servono sulla chiavetta con il loro SHA256; a ogni avvio `PC Facile.bat` / `PC Facile.command` li scarica, li verifica e solo allora sostituisce le copie (mai la cartella `wifi`). **Dopo aver modificato uno di questi file** esegui `pwsh ./tools/aggiorna-manifest.ps1` (rigenera `manifest.txt` e le impronte `.sha256`; i test Pester falliscono se sono disallineati).
 - **Test**: `tests/PcFacile.Tests.ps1` (Pester) verifica le funzioni pure. Esegui in locale con `Invoke-Pester ./tests`.
 - **CI**: `.github/workflows/ci.yml` gira su ogni push/PR (Windows) — controllo sintassi, PSScriptAnalyzer, Pester e verifica dell'hash.
 - **Dopo aver modificato `setup-pc.ps1`** va rigenerato l'hash:
