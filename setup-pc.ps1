@@ -184,10 +184,16 @@ function Write-Errore {
 # accanto + sostituzione). Se qualcosa va storto la copia esistente resta.
 # FIDUCIA: il manifest arriva dallo stesso posto dei file, quindi protegge da
 # download corrotti/troncati, NON da una manomissione del repository.
-# I file Wi-Fi (cartella wifi\) non sono MAI scaricati, sovrascritti o cancellati.
+# Nella cartella wifi\ si scrivono SOLO i file Wi-Fi elencati qui sotto
+# (Get-FileWifiManifest, scelta del proprietario: stanno nel repository e arrivano
+# sulla chiavetta); ogni altro file di wifi\ non viene mai toccato.
 # Il launcher in esecuzione non viene toccato: la nuova versione va in
 # "<launcher>.nuovo" e il .bat la mette al suo posto quando termina/riparte.
 # =============================================================================
+function Get-FileWifiManifest {
+    return @('wifi/wifi.txt', 'wifi/UNIEURO_EXPO.xml')
+}
+
 function Test-PercorsoManifestSicuro {
     param([string]$Percorso)
     if ([string]::IsNullOrWhiteSpace($Percorso)) { return $false }
@@ -197,8 +203,8 @@ function Test-PercorsoManifestSicuro {
     foreach ($parte in $parti) {
         if ($parte -eq '' -or $parte -eq '.' -or $parte -eq '..') { return $false }
     }
-    # Mai toccare la configurazione Wi-Fi della chiavetta.
-    if ($parti[0] -ieq 'wifi') { return $false }
+    # Nella cartella wifi solo i file Wi-Fi previsti (confronto senza maiuscole).
+    if ($parti[0] -ieq 'wifi' -and -not ((Get-FileWifiManifest) -icontains ($parti -join '/'))) { return $false }
     return $true
 }
 
@@ -415,32 +421,12 @@ function Enable-SilentElevation {
         $env:SEE_MASK_NOZONECHECKS = '1'
         [Environment]::SetEnvironmentVariable("SEE_MASK_NOZONECHECKS", "1", "Process")
 
-        # 2. Windows Attachment Manager: considera eseguibili e installer come LowRisk
-        #    Elimina la finestra modale "Apri file - Avviso di sicurezza: Impossibile verificare l'autore"
-        if (Test-Path 'HKCU:\') {
-            $assocUser = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Associations"
-            if (-not (Test-Path $assocUser)) { New-Item -Path $assocUser -Force -ErrorAction SilentlyContinue | Out-Null }
-            Set-ItemProperty -Path $assocUser -Name "LowRiskFileTypes" -Value ".exe;.bat;.cmd;.ps1;.msi;.vbs;.reg;.zip;" -Type String -ErrorAction SilentlyContinue
-
-            $attachUser = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Attachments"
-            if (-not (Test-Path $attachUser)) { New-Item -Path $attachUser -Force -ErrorAction SilentlyContinue | Out-Null }
-            Set-ItemProperty -Path $attachUser -Name "SaveZoneInformation" -Value 1 -Type DWord -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $attachUser -Name "HideZoneInfoOnProperties" -Value 1 -Type DWord -ErrorAction SilentlyContinue
-        }
-
-        # 3. UAC ConsentPromptBehaviorAdmin = 0 (Elevate without prompting)
-        #    Permette agli installer (Winget, MSI, Exe offline, driver) di elevarsi silenziosamente
-        #    senza mostrare decine di popup UAC ("Consentire a questa app di apportare modifiche?")
-        if (Test-Path 'HKLM:\') {
-            $uacKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
-            if (Test-Path $uacKey) {
-                $currPrompt = (Get-ItemProperty -Path $uacKey -Name "ConsentPromptBehaviorAdmin" -ErrorAction SilentlyContinue).ConsentPromptBehaviorAdmin
-                if ($null -ne $currPrompt -and $null -eq $Global:OrigConsentPromptAdmin) {
-                    $Global:OrigConsentPromptAdmin = $currPrompt
-                }
-                Set-ItemProperty -Path $uacKey -Name "ConsentPromptBehaviorAdmin" -Value 0 -Type DWord -ErrorAction SilentlyContinue
-            }
-        }
+        # (Rimossi: LowRiskFileTypes/SaveZoneInformation e UAC
+        #  ConsentPromptBehaviorAdmin = 0. Indebolivano la sicurezza di Windows e
+        #  facevano bloccare l'intero script dall'antivirus (AMSI:
+        #  ScriptContainedMaliciousContent). Non servono: lo script gira gia' come
+        #  amministratore, quindi gli installer avviati da qui non chiedono l'UAC,
+        #  e i file vengono comunque sbloccati con Unblock-File qui sotto.)
 
         # 4. Sblocca ricorsivamente tutti i file nella cartella corrente, TEMP e Download
         $dirsToUnblock = @($PSScriptRoot, $env:TEMP, (Get-DesktopDir), (Join-Path $env:USERPROFILE "Downloads")) |
@@ -3835,6 +3821,17 @@ function Invoke-PreparaUSBOffline {
                         Copy-Item -LiteralPath $src -Destination $dst -Force -ErrorAction SilentlyContinue
                     }
                 }
+                # Anche i file Wi-Fi del negozio (cartella wifi\), se presenti accanto allo script.
+                foreach ($nomeWifi in (Get-FileWifiManifest)) {
+                    $rel = $nomeWifi -replace '/', [System.IO.Path]::DirectorySeparatorChar
+                    $src = Join-Path $PSScriptRoot $rel
+                    $dst = Join-Path $targetBase $rel
+                    if ((Test-Path -LiteralPath $src) -and ([System.IO.Path]::GetFullPath($src) -ne [System.IO.Path]::GetFullPath($dst))) {
+                        $cartWifi = Split-Path $dst -Parent
+                        if (-not (Test-Path -LiteralPath $cartWifi)) { New-Item -ItemType Directory -Path $cartWifi -Force -ErrorAction SilentlyContinue | Out-Null }
+                        Copy-Item -LiteralPath $src -Destination $dst -Force -ErrorAction SilentlyContinue
+                    }
+                }
                 Write-Info "Manifest non raggiungibile: copiati sulla chiavetta i file presenti accanto allo script."
             } else {
                 Write-Info "Manifest non raggiungibile e nessuna copia locale: file di avvio non aggiornati."
@@ -4645,20 +4642,11 @@ try {
 # CHIUSURA FINESTRA LAUNCHER BACKGROUND & ELEVAZIONE SILENZIOSA
 # =============================================================================
 if (-not $Test -and -not $Diagnostica) {
-    # 1. Chiude la finestra orfana non elevata del launcher rimasta aperta in background
-    try {
-        $myPid = $PID
-        Get-CimInstance Win32_Process -Filter "Name = 'cmd.exe'" -ErrorAction SilentlyContinue | Where-Object {
-            $_.ProcessId -ne $myPid -and ($_.CommandLine -like "*PC Facile*" -or $_.CommandLine -like "*elevated*" -or $_.CommandLine -like "*run*")
-        } | ForEach-Object {
-            Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-        }
-        Get-Process -Name cmd -ErrorAction SilentlyContinue | Where-Object {
-            $_.Id -ne $myPid -and ($_.MainWindowTitle -eq "PC Facile" -or $_.MainWindowTitle -like "*Richiesta privilegi*")
-        } | Stop-Process -Force -ErrorAction SilentlyContinue
-    } catch {}
+    # (Rimosso: la chiusura forzata dei cmd.exe "PC Facile". Uccideva anche il
+    #  launcher che esegue questo script e il launcher attuale chiude gia' da
+    #  solo la finestra non elevata.)
 
-    # 2. Attiva subito la silent elevation (UAC zero-popup + sblocco zone) prima di mostrare il menu
+    # 2. Sblocca i file scaricati (Unblock-File) prima di mostrare il menu
     try { Enable-SilentElevation } catch {}
 }
 

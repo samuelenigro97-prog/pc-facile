@@ -6,7 +6,8 @@
 #     pwsh ./tools/aggiorna-manifest.ps1      (oppure powershell -File ...)
 # Aggiorna setup-pc.ps1.sha256, setup-mac.sh.sha256 e manifest.txt (hash
 # minuscoli, fine riga LF). I test Pester falliscono se non sono allineati.
-# I file Wi-Fi NON vanno mai nel manifest (restano solo sulla chiavetta).
+# Includono i file Wi-Fi del negozio (wifi/): scelta del proprietario, cosi'
+# arrivano in automatico sulla chiavetta.
 # =============================================================================
 $ErrorActionPreference = 'Stop'
 $radice = Split-Path $PSScriptRoot -Parent
@@ -19,7 +20,9 @@ $fileKit = @(
     'PC Facile.command',
     'setup-mac.sh',
     'setup-mac.sh.sha256',
-    'LEGGIMI.md'
+    'LEGGIMI.md',
+    'wifi/wifi.txt',
+    'wifi/UNIEURO_EXPO.xml'
 )
 
 function Get-Sha256Minuscolo([string]$Percorso) {
@@ -38,12 +41,11 @@ foreach ($script in @('setup-pc.ps1', 'setup-mac.sh')) {
 $righe = @(
     '# manifest.txt - file della chiavetta PC Facile con il loro SHA256.',
     '# Generato da tools/aggiorna-manifest.ps1: NON modificare a mano.',
-    '# I file Wi-Fi (wifi/) non sono mai inclusi: restano solo sulla chiavetta.'
+    '# Include i file Wi-Fi del negozio (wifi/wifi.txt, wifi/UNIEURO_EXPO.xml).'
 )
 foreach ($f in $fileKit) {
     $p = Join-Path $radice $f
     if (-not (Test-Path -LiteralPath $p)) { throw "File del kit mancante: $f" }
-    if ($f -match '^(?i)wifi[/\\]') { throw "I file Wi-Fi non possono stare nel manifest: $f" }
     $righe += ('{0}  {1}' -f (Get-Sha256Minuscolo $p), ($f -replace '\\', '/'))
 }
 Write-TestoLF (Join-Path $radice 'manifest.txt') (($righe -join "`n") + "`n")

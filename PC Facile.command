@@ -24,8 +24,8 @@ scarica_verificato() {
 
 # Aggiornamento automatico della chiavetta: scarica manifest.txt e ogni file
 # elencato (raw, poi jsDelivr), ne verifica lo SHA256 e solo allora sostituisce
-# la copia accanto (file temporaneo + mv, atomico). La cartella wifi/ non viene
-# mai toccata. Se qualcosa fallisce restano i file attuali. Il manifest arriva
+# la copia accanto (file temporaneo + mv, atomico). In wifi/ scrive solo
+# wifi.txt e UNIEURO_EXPO.xml (se elencati nel manifest). Se qualcosa fallisce restano i file attuali. Il manifest arriva
 # dallo stesso posto dei file: protegge da corruzioni, non da manomissioni.
 # Su macOS mv sostituisce il file (nuovo inode): anche questo .command, pur in
 # esecuzione, si aggiorna senza problemi.
@@ -46,8 +46,9 @@ aggiorna_chiavetta() {
         [[ "$riga" =~ '^[0-9a-fA-F]{64} [ *].+$' ]] || continue
         hash="${(L)riga[1,64]}"
         nome="${riga[67,-1]}"
-        # Percorsi sicuri soltanto: niente assoluti, "..", ":" e mai wifi/.
-        [[ "$nome" == /* || "$nome" == *..* || "$nome" == *:* || "${(L)nome}" == wifi/* ]] && continue
+        # Percorsi sicuri soltanto: niente assoluti, "..", ":"; in wifi/ solo i file Wi-Fi previsti.
+        [[ "$nome" == /* || "$nome" == *..* || "$nome" == *:* ]] && continue
+        if [[ "${(L)nome}" == wifi/* && "${(L)nome}" != "wifi/wifi.txt" && "${(L)nome}" != "wifi/unieuro_expo.xml" ]]; then continue; fi
         dest="./$nome"
         if [[ -f "$dest" && "$(shasum -a 256 "$dest" 2>/dev/null | awk '{print tolower($1)}')" == "$hash" ]]; then
             continue
