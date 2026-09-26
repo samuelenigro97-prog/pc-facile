@@ -349,6 +349,21 @@ Describe 'Open-PannelloOperatore' {
     }
 }
 
+Describe 'Open-PannelloOperatore (escape HTML)' {
+    It 'escapa nome, email e password inseriti negli attributi value' {
+        $testPrima = $Global:Test
+        $Global:Test = $true
+        $testPannello = Join-Path ([System.IO.Path]::GetTempPath()) "Pannello-Operatore.html"
+        Open-PannelloOperatore -NomeCliente "Mario <b>O'Neil" -Email "a&b@x.it" -Password 'P"<x>&1'
+        $content = Get-Content $testPannello -Raw
+        $content | Should -Match 'value="Mario &lt;b&gt;O&#39;Neil"'
+        $content | Should -Match 'value="a&amp;b@x.it"'
+        $content | Should -Match 'value="P&quot;&lt;x&gt;&amp;1"'
+        Remove-Item $testPannello -Force -ErrorAction SilentlyContinue
+        $Global:Test = $testPrima
+    }
+}
+
 Describe 'Update-PannelloStatus' {
     It 'scrive lo stato live in formato js senza errori' {
         Update-PannelloStatus -TaskId "pulizia" -Stato "running" -Percentuale 15 -FaseCorrente "Pulizia Bloatware" -Dettaglio "Rimozione in corso..."
@@ -390,6 +405,8 @@ Describe 'Get-CredenzialiSalvatePannello' {
         $Global:credMsAccount | Should -Be "rossimario@gmail.com"
         $Global:credMsPassword | Should -Be "Mario123!"
         $Global:provNome | Should -Be "Google"
+        # Dopo la lettura il file (password in chiaro) viene cancellato.
+        Test-Path $jsonFile | Should -BeFalse
         
         Remove-Item $jsonFile -Force -ErrorAction SilentlyContinue
     }
@@ -409,6 +426,13 @@ Describe 'New-WlanProfileXml' {
         $xml | Should -Match "<name>TestWifi</name>"
         $xml | Should -Match "<keyMaterial>TestPass123</keyMaterial>"
         $xml | Should -Match "<authentication>WPA2PSK</authentication>"
+     }
+
+    It 'escapa i caratteri speciali XML in SSID e password' {
+        $xml = New-WlanProfileXml -Ssid "Bar & Caffe" -Password 'a<b>"c''&d'
+        $xml | Should -Match "<name>Bar &amp; Caffe</name>"
+        $xml | Should -Match "<keyMaterial>a&lt;b&gt;&quot;c&apos;&amp;d</keyMaterial>"
+        { [xml]$xml } | Should -Not -Throw
     }
 }
 
