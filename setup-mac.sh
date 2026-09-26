@@ -405,30 +405,48 @@ open_pannello_mac() {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Unieuro - Pannello Assistenza Apple Mac</title>
+    <title>PC Facile - Pannello operatore Mac</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif; }
-        body { background: radial-gradient(circle at 50% 0%, #001a3d 0%, #000d20 70%, #000713 100%); color: #f8fafc; padding: 12px; min-height: 100vh; line-height: 1.4; }
+        body { background: #000d20; color: #f8fafc; padding: 12px; min-height: 100vh; line-height: 1.45; font-size: 15px; }
         .container { max-width: 980px; margin: 0 auto; }
-        .header { background: linear-gradient(135deg, rgba(0,26,58,0.95) 0%, rgba(0,43,92,0.95) 100%); backdrop-filter: blur(10px); border: 1px solid #00458C; border-radius: 12px; padding: 12px 16px; border-bottom: 3.5px solid #EE7203; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 6px 20px rgba(0,0,0,0.45); }
+        button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid #EE7203; outline-offset: 2px; }
+        .header { background: #001a3a; border: 1.5px solid #00458C; border-radius: 12px; padding: 10px 14px; border-bottom: 3.5px solid #EE7203; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
         .brand-box { display: flex; align-items: center; gap: 10px; }
-        .u-logo { background: #EE7203; color: #fff; font-weight: 900; font-size: 17px; letter-spacing: 1.2px; padding: 6px 12px; border-radius: 7px; text-transform: uppercase; }
-        .brand-titles h1 { font-size: 15.5px; color: #fff; font-weight: 700; }
-        .badge-live { background: linear-gradient(135deg, #EE7203 0%, #d95e00 100%); color: #fff; font-weight: 800; font-size: 10.5px; padding: 5px 12px; border-radius: 20px; text-transform: uppercase; }
-        .hw-bar { background: rgba(0, 20, 46, 0.8); border: 1px solid #003366; border-radius: 8px; padding: 6px 12px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: #cbd5e1; flex-wrap: wrap; }
+        .u-logo { background: #EE7203; color: #fff; font-weight: 900; font-size: 16px; letter-spacing: 1px; padding: 6px 12px; border-radius: 7px; }
+        .brand-titles h1 { font-size: 16px; color: #fff; font-weight: 700; }
+        .badge-stato { font-weight: 800; font-size: 14px; padding: 7px 14px; border-radius: 20px; border: 1.5px solid #38bdf8; background: #082f49; color: #e0f2fe; white-space: nowrap; }
+        .badge-stato.ok { border-color: #22c55e; background: #14532d; color: #dcfce7; }
+        .hw-bar { background: #00142e; border: 1px solid #003366; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; display: flex; gap: 6px 16px; font-size: 14px; color: #b6c3d4; flex-wrap: wrap; }
         .hw-val { color: #fff; font-weight: 600; }
-        .progress-card { background: linear-gradient(135deg, rgba(0,26,58,0.9) 0%, rgba(0,38,77,0.9) 100%); border: 1px solid #00458C; border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; }
-        .progress-bar-bg { background: #000c1c; border: 1px solid #003B7A; height: 11px; border-radius: 6px; overflow: hidden; }
-        .progress-bar-fill { background: linear-gradient(90deg, #EE7203 0%, #ff9d42 70%, #38bdf8 100%); height: 100%; width: 5%; border-radius: 6px; transition: width 0.4s ease; }
-        .tab-bar { display: flex; gap: 4px; margin-bottom: 10px; background: rgba(0, 20, 46, 0.95); padding: 4px; border-radius: 8px; border: 1px solid #003366; }
-        .tab-btn { flex: 1; background: transparent; border: none; color: #94a3b8; font-size: 11px; font-weight: 700; padding: 6px 10px; border-radius: 6px; cursor: pointer; }
+        .progress-card { background: #001a3a; border: 1.5px solid #00458C; border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; }
+        .progress-bar-bg { background: #000c1c; border: 1px solid #003B7A; height: 16px; border-radius: 8px; overflow: hidden; }
+        .progress-bar-fill { background: linear-gradient(90deg, #EE7203 0%, #ff9d42 100%); height: 100%; width: 0%; transition: width 0.4s ease; }
+        .banner-fine { display: none; border: 2px solid #22c55e; background: #052e16; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; font-size: 15px; }
+        .banner-fine strong { color: #4ade80; }
+        .tab-bar { display: flex; gap: 6px; margin-bottom: 10px; background: #00142e; padding: 5px; border-radius: 10px; border: 1px solid #003366; }
+        .tab-btn { flex: 1; min-height: 44px; background: transparent; border: none; color: #b6c3d4; font-size: 15px; font-weight: 700; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
         .tab-btn.active { background: #003B7A; color: #fff; }
         .section-view { display: none; }
         .section-view.active-view { display: block; }
-        .card { background: rgba(0, 31, 72, 0.85); border: 1px solid #003B7A; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
-        .portal-btn { display: flex; align-items: center; justify-content: space-between; background: #00142E; border: 1px solid #003B7A; border-radius: 6px; padding: 7px 10px; color: #f8fafc; text-decoration: none; font-size: 11.5px; margin-bottom: 5px; font-weight: 600; }
-        .cred-input { width: 100%; background: #00122B; border: 1px solid #00458C; border-radius: 6px; padding: 7px 10px; font-size: 12px; color: #fff; margin-bottom: 8px; }
-        .btn-scheda { display: inline-block; background: #22c55e; color: #fff; font-weight: 700; font-size: 12px; padding: 7px 16px; border-radius: 6px; text-decoration: none; }
+        .card { background: #001f48; border: 1px solid #003B7A; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+        .etichetta { display: block; font-size: 14px; color: #bfdbfe; font-weight: 700; margin-bottom: 4px; }
+        .dom-row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+        .dom-btn { min-height: 44px; flex: 1 1 120px; background: #1e293b; color: #e2e8f0; border: 1.5px solid #334155; padding: 8px 10px; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; }
+        .dom-btn[aria-pressed="true"] { background: #0284c7; border-color: #0284c7; color: #fff; }
+        .campi-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+        .portal-btn { min-height: 48px; display: flex; align-items: center; justify-content: space-between; background: #00142E; border: 1px solid #003B7A; border-radius: 8px; padding: 10px 12px; color: #f8fafc; text-decoration: none; font-size: 15px; margin-bottom: 8px; font-weight: 600; }
+        .cred-input { width: 100%; min-height: 44px; background: #00122B; border: 1.5px solid #00458C; border-radius: 8px; padding: 8px 12px; font-size: 16px; color: #fff; margin-bottom: 10px; }
+        .cred-input.errore { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.4); }
+        .servizi { background: #00152f; border: 1px solid #003B7A; border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+        .servizi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+        .svc { min-height: 44px; display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 15px; padding: 6px 8px; border: 1px solid #003B7A; border-radius: 8px; }
+        .svc input { width: 22px; height: 22px; accent-color: #EE7203; }
+        .btn-avvia { min-height: 52px; background: #16a34a; font-weight: 800; font-size: 17px; padding: 10px 14px; width: 100%; border: none; cursor: pointer; border-radius: 8px; color: #fff; }
+        .esito { display: none; margin-top: 8px; padding: 10px 12px; border-radius: 8px; font-size: 15px; font-weight: 700; }
+        .esito.ok { display: block; background: #052e16; border: 1.5px solid #22c55e; color: #bbf7d0; }
+        .esito.errore { display: block; background: #2a0a0a; border: 1.5px solid #ef4444; color: #fecaca; }
+        @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
     </style>
 </head>
 <body>
@@ -436,118 +454,92 @@ open_pannello_mac() {
         <div class="header">
             <div class="brand-box">
                 <div class="u-logo">UNIEURO</div>
-                <div class="brand-titles">
-                    <h1>Pannello Assistenza Apple Mac</h1>
-                    <p style="font-size:11px; color:#94a3b8;">Setup &bull; Ottimizzazione &bull; Collaudo Dedicato</p>
-                </div>
+                <div class="brand-titles"><h1>PC Facile &middot; Pannello operatore Mac</h1></div>
             </div>
-            <div id="badgeLive" class="badge-live">&#9889; Setup Mac in corso</div>
+            <div id="badgeLive" class="badge-stato" role="status">In attesa dei dati cliente</div>
         </div>
 
         <div class="hw-bar">
-            <div>🍎 <strong>Mac:</strong> <span class="hw-val">__HW_MODEL__</span></div>
-            <div>⚙️ <strong>Chip:</strong> <span class="hw-val">__HW_CHIP__ &bull; __HW_RAM__</span></div>
-            <div>🏷️ <strong>S/N:</strong> <span class="hw-val">__HW_SN__</span></div>
+            <div>Mac: <span class="hw-val">__HW_MODEL__</span></div>
+            <div>Chip: <span class="hw-val">__HW_CHIP__ &middot; __HW_RAM__</span></div>
+            <div>S/N: <span class="hw-val">__HW_SN__</span></div>
         </div>
 
         <div class="progress-card">
-            <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:12px;">
-                <span style="color:#fed7aa; font-weight:700;">&#9889; Avanzamento Configurazione Mac</span>
-                <span id="pctText" style="color:#EE7203; font-weight:900;">5%</span>
+            <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:15px;">
+                <span style="color:#fed7aa; font-weight:700;">Avanzamento configurazione</span>
+                <span id="pctText" style="color:#EE7203; font-weight:900; font-size:18px;">0%</span>
             </div>
-            <div class="progress-bar-bg">
-                <div id="barFill" class="progress-bar-fill"></div>
-            </div>
-            <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:11px;">
-                <div><span style="color:#93c5fd; font-weight:700;">FASE:</span> <span id="faseText">Inizializzazione</span></div>
-                <div id="dettText" style="color:#94a3b8; font-style:italic;">Avvio...</div>
+            <div class="progress-bar-bg"><div id="barFill" class="progress-bar-fill"></div></div>
+            <div style="margin-top:6px; font-size:14px;" aria-live="polite">
+                <div><span style="color:#b6c3d4;">Ora:</span> <strong id="faseText">In attesa</strong></div>
+                <div id="dettText" style="color:#d6dee8;"></div>
             </div>
         </div>
 
+        <div id="bannerFine" class="banner-fine" role="status">
+            <strong>&#10003; Configurazione completata.</strong> La scheda di consegna &egrave; sulla Scrivania del Mac: <strong>Scheda-Consegna-Mac.html</strong>.
+        </div>
+
         <div class="tab-bar">
-            <button class="tab-btn active" onclick="showTab('tab-cred', this)">&#128273; Account &amp; Credenziali</button>
-            <button class="tab-btn" onclick="showTab('tab-portali', this)">&#127760; Portali 1-Click</button>
-            <button class="tab-btn" onclick="showTab('tab-info', this)">&#128196; Scheda &amp; Report</button>
+            <button type="button" class="tab-btn active" onclick="showTab('tab-cred', this)">&#128100; 1. Cliente</button>
+            <button type="button" class="tab-btn" onclick="showTab('tab-portali', this)">&#127760; 2. Portali</button>
         </div>
 
         <div id="tab-cred" class="section-view active-view">
             <div class="card">
-                <h3 style="font-size:13px; margin-bottom:8px; color:#fed7aa;">&#128273; Configurazione Credenziali &amp; Dati Cliente</h3>
-                
-                <label style="font-size:11px; color:#93c5fd;">1. Provider Email:</label>
-                <div style="display:flex; gap:4px; margin-bottom:8px; flex-wrap:wrap;">
-                    <button type="button" class="dom-btn" style="background:#0284c7; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;" onclick="setDomMac('proton.me', 'Proton', this)">@proton.me</button>
-                    <button type="button" class="dom-btn" style="background:#334155; color:#cbd5e1; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;" onclick="setDomMac('icloud.com', 'iCloud', this)">@icloud.com</button>
-                    <button type="button" class="dom-btn" style="background:#334155; color:#cbd5e1; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;" onclick="setDomMac('gmail.com', 'Google', this)">@gmail.com</button>
-                    <button type="button" class="dom-btn" style="background:#334155; color:#cbd5e1; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;" onclick="setDomMac('outlook.it', 'Microsoft', this)">@outlook.it</button>
+                <span class="etichetta">Tipo di email</span>
+                <div class="dom-row">
+                    <button type="button" class="dom-btn" aria-pressed="true" onclick="setDomMac('proton.me', 'Proton', this)">@proton.me</button>
+                    <button type="button" class="dom-btn" aria-pressed="false" onclick="setDomMac('icloud.com', 'iCloud', this)">@icloud.com</button>
+                    <button type="button" class="dom-btn" aria-pressed="false" onclick="setDomMac('gmail.com', 'Google', this)">@gmail.com</button>
+                    <button type="button" class="dom-btn" aria-pressed="false" onclick="setDomMac('outlook.it', 'Microsoft', this)">@outlook.it</button>
                 </div>
 
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;">
+                <div class="campi-2">
                     <div>
-                        <label style="font-size:11px; color:#93c5fd;">Cognome:</label>
-                        <input type="text" class="cred-input" id="inCognome" placeholder="es. Rossi" oninput="aggiornaCredMac()">
+                        <label class="etichetta" for="inCognome">Cognome</label>
+                        <input type="text" class="cred-input" id="inCognome" placeholder="Es. Rossi" autocomplete="off" oninput="aggiornaCredMac()">
                     </div>
                     <div>
-                        <label style="font-size:11px; color:#93c5fd;">Nome:</label>
-                        <input type="text" class="cred-input" id="inNome" placeholder="es. Mario" oninput="aggiornaCredMac()">
+                        <label class="etichetta" for="inNome">Nome</label>
+                        <input type="text" class="cred-input" id="inNome" placeholder="Es. Mario" autocomplete="off" oninput="aggiornaCredMac()">
                     </div>
                 </div>
 
-                <div style="margin-bottom:8px;">
-                    <label style="font-size:11px; color:#93c5fd;">Cellulare / Telefono:</label>
-                    <input type="tel" class="cred-input" id="inTelefono" placeholder="es. 3331234567">
-                </div>
+                <label class="etichetta" for="inTelefono">Cellulare <span style="color:#fca5a5; font-size:13px;">(obbligatorio con Cyber Protection)</span></label>
+                <input type="tel" class="cred-input" id="inTelefono" placeholder="Es. 333 1234567" autocomplete="off" oninput="this.classList.remove('errore')">
 
-                <label style="font-size:11px; color:#93c5fd;">Email Generata:</label>
-                <input type="text" class="cred-input" id="inEmail" value="__EMAIL__">
-                <label style="font-size:11px; color:#93c5fd;">Password Consigliata:</label>
-                <input type="text" class="cred-input" id="inPass" value="__PASS__">
+                <label class="etichetta" for="inEmail">Email proposta</label>
+                <input type="text" class="cred-input" id="inEmail" value="__EMAIL__" autocomplete="off">
+                <label class="etichetta" for="inPass">Password iniziale</label>
+                <input type="text" class="cred-input" id="inPass" value="__PASS__" autocomplete="off">
 
-                <!-- SERVIZI DA ATTIVARE NELLA SEQUENZA AUTOMATICA -->
-                <div style="background: rgba(15, 23, 42, 0.4); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px; margin-top: 6px; margin-bottom: 8px;">
-                    <div style="margin-bottom: 6px; color: #fed7aa; font-weight: 700; font-size: 11px;">⚙️ Servizi Acquistati da Attivare:</div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px;">
-                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                            <input type="checkbox" id="chkSvcProton" checked> <span>✉️ Email Proton</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                            <input type="checkbox" id="chkSvcOffice"> <span>📦 Card Office 365</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                            <input type="checkbox" id="chkSvcMcAfee"> <span>🛡️ Card McAfee</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-                            <input type="checkbox" id="chkSvcNorton"> <span>🛡️ Card Norton</span>
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 5px; grid-column: span 2; cursor: pointer;">
-                            <input type="checkbox" id="chkSvcCyber" checked> <span>🔒 Unieuro Cyber Protection</span>
-                        </label>
+                <div class="servizi">
+                    <span class="etichetta" style="color:#fed7aa;">Servizi sullo scontrino</span>
+                    <div class="servizi-grid">
+                        <label class="svc"><input type="checkbox" id="chkSvcProton" checked> <span>Email Proton</span></label>
+                        <label class="svc"><input type="checkbox" id="chkSvcOffice"> <span>Card Office 365</span></label>
+                        <label class="svc"><input type="checkbox" id="chkSvcMcAfee"> <span>Card McAfee</span></label>
+                        <label class="svc"><input type="checkbox" id="chkSvcNorton"> <span>Card Norton</span></label>
+                        <label class="svc" style="grid-column: 1 / -1; border-color:#EE7203;"><input type="checkbox" id="chkSvcCyber" checked> <span>Unieuro Cyber Protection</span></label>
                     </div>
                 </div>
 
-                <button type="button" id="btnAvviaAuto" class="btn-scheda" style="background:#16a34a; font-weight:700; font-size:13px; padding:10px 14px; width:100%; border:none; cursor:pointer; text-align:center; border-radius:6px; color:#fff; margin-top:8px;" onclick="avviaAutoMac()">🚀 AVVIA SETUP AUTOMATICO (Zero Clic)</button>
-                <a href="Scheda-Consegna-Mac.html" target="_blank" class="btn-scheda" style="margin-top:6px; background:#334155;">&#128196; Apri Scheda Consegna Mac</a>
+                <button type="button" id="btnAvviaAuto" class="btn-avvia" onclick="avviaAutoMac()">&#128640; AVVIA CONFIGURAZIONE</button>
+                <div id="esitoInvio" class="esito" role="status" aria-live="polite"></div>
             </div>
         </div>
 
         <div id="tab-portali" class="section-view">
             <div class="card">
-                <h3 style="font-size:13px; margin-bottom:8px; color:#fed7aa;">&#127760; Portali di Attivazione Rapida</h3>
-                <a href="https://account.proton.me/signup?plan=free" target="_blank" class="portal-btn" style="border-color:#0284c7;"><span>🔒 1. Account Proton Mail Free</span> <span>&rarr;</span></a>
-                <a href="https://appleid.apple.com" target="_blank" class="portal-btn"><span>🍎 2. Gestione &amp; Creazione Apple ID</span> <span>&rarr;</span></a>
-                <a href="https://microsoft365.com/setup" target="_blank" class="portal-btn"><span>📦 3. Riscatto Card Office / Microsoft 365</span> <span>&rarr;</span></a>
-                <a href="https://account.microsoft.com/services" target="_blank" class="portal-btn"><span>📥 4. Installa Office da Account Microsoft</span> <span>&rarr;</span></a>
-                <a href="https://www.mcafee.com/activate" target="_blank" class="portal-btn"><span>🛡️ 5. Attivazione Card McAfee Mac</span> <span>&rarr;</span></a>
-                <a href="https://www.norton.com/setup" target="_blank" class="portal-btn"><span>🛡️ 6. Attivazione Card Norton Mac</span> <span>&rarr;</span></a>
-                <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" class="portal-btn" style="border-color:#EE7203;"><span>🔒 7. Unieuro Cyber Protection</span> <span>&rarr;</span></a>
-            </div>
-        </div>
-
-        <div id="tab-info" class="section-view">
-            <div class="card">
-                <h3 style="font-size:13px; margin-bottom:8px; color:#fed7aa;">&#128196; Scheda di Consegna Cliente</h3>
-                <p style="font-size:12px; color:#cbd5e1; margin-bottom:10px;">La scheda di consegna HTML ufficiale viene salvata automaticamente sulla Scrivania (Desktop) al termine del setup.</p>
-                <a href="Scheda-Consegna-Mac.html" target="_blank" class="btn-scheda">&#128438; Stampa Scheda Mac</a>
+                <a href="https://account.proton.me/signup?plan=free" target="_blank" rel="noopener noreferrer" class="portal-btn" style="border-color:#0284c7;"><span>Account Proton Mail (gratis)</span> <span>&rarr;</span></a>
+                <a href="https://appleid.apple.com" target="_blank" rel="noopener noreferrer" class="portal-btn"><span>Apple ID: crea o gestisci</span> <span>&rarr;</span></a>
+                <a href="https://microsoft365.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn"><span>Riscatto card Office / Microsoft 365</span> <span>&rarr;</span></a>
+                <a href="https://account.microsoft.com/services" target="_blank" rel="noopener noreferrer" class="portal-btn"><span>Installa Office dall&rsquo;account Microsoft</span> <span>&rarr;</span></a>
+                <a href="https://www.mcafee.com/activate" target="_blank" rel="noopener noreferrer" class="portal-btn"><span>Attivazione card McAfee</span> <span>&rarr;</span></a>
+                <a href="https://www.norton.com/setup" target="_blank" rel="noopener noreferrer" class="portal-btn"><span>Attivazione card Norton</span> <span>&rarr;</span></a>
+                <a href="https://unieuro-cyber-protection.covercare.it" target="_blank" rel="noopener noreferrer" class="portal-btn" style="border-color:#EE7203;"><span>Unieuro Cyber Protection</span> <span>&rarr;</span></a>
             </div>
         </div>
     </div>
@@ -566,9 +558,7 @@ open_pannello_mac() {
         function setDomMac(dom, prov, btn) {
             currentDom = dom;
             currentProv = prov;
-            document.querySelectorAll('.dom-btn').forEach(function(b){ b.style.background = '#334155'; b.style.color = '#cbd5e1'; });
-            btn.style.background = '#0284c7';
-            btn.style.color = '#fff';
+            document.querySelectorAll('.dom-btn').forEach(function(b){ b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'); });
             aggiornaCredMac();
         }
 
@@ -583,22 +573,39 @@ open_pannello_mac() {
             document.getElementById('inPass').value = cap + '123!';
         }
 
+        function mostraEsito(msg, tipo) {
+            var e = document.getElementById('esitoInvio');
+            e.innerText = msg;
+            e.className = 'esito ' + tipo;
+        }
+
+        function campoErrato(id, msg) {
+            var e = document.getElementById(id);
+            if (e) { e.classList.add('errore'); e.focus(); }
+            mostraEsito(msg, 'errore');
+        }
+
         function avviaAutoMac() {
+            ['inCognome', 'inNome', 'inTelefono'].forEach(function(id) { document.getElementById(id).classList.remove('errore'); });
             var email = document.getElementById('inEmail').value.trim();
             var pass = document.getElementById('inPass').value.trim();
-            var c = (document.getElementById('inCognome') ? document.getElementById('inCognome').value.trim() : '');
-            var n = (document.getElementById('inNome') ? document.getElementById('inNome').value.trim() : '');
-            var t = (document.getElementById('inTelefono') ? document.getElementById('inTelefono').value.trim() : '');
-            var proton = document.getElementById('chkSvcProton') ? document.getElementById('chkSvcProton').checked : true;
-            var office = document.getElementById('chkSvcOffice') ? document.getElementById('chkSvcOffice').checked : false;
-            var mcafee = document.getElementById('chkSvcMcAfee') ? document.getElementById('chkSvcMcAfee').checked : false;
-            var norton = document.getElementById('chkSvcNorton') ? document.getElementById('chkSvcNorton').checked : false;
-            var cyber = document.getElementById('chkSvcCyber') ? document.getElementById('chkSvcCyber').checked : false;
+            var c = document.getElementById('inCognome').value.trim();
+            var n = document.getElementById('inNome').value.trim();
+            var t = document.getElementById('inTelefono').value.trim();
+            var proton = document.getElementById('chkSvcProton').checked;
+            var office = document.getElementById('chkSvcOffice').checked;
+            var mcafee = document.getElementById('chkSvcMcAfee').checked;
+            var norton = document.getElementById('chkSvcNorton').checked;
+            var cyber = document.getElementById('chkSvcCyber').checked;
+            if (!c) { campoErrato('inCognome', 'Manca il cognome del cliente.'); return; }
+            if (!n) { campoErrato('inNome', 'Manca il nome del cliente.'); return; }
+            if (cyber && t.replace(/\D/g, '').length < 6) { campoErrato('inTelefono', 'Con Cyber Protection il cellulare del cliente \u00e8 obbligatorio.'); return; }
             var payload = {
+                Conferma: true,
                 Email: email,
                 Password: pass,
                 Provider: currentProv,
-                Cliente: (c + ' ' + n).trim() || 'Utente',
+                Cliente: (c + ' ' + n).trim(),
                 Nome: n,
                 Cognome: c,
                 Telefono: t,
@@ -610,6 +617,8 @@ open_pannello_mac() {
                     Cyber: cyber
                 }
             };
+            // Il Mac non ha un server locale: i dati passano con un file che lo
+            // script legge (e cancella) da Download.
             var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
             var a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
@@ -617,24 +626,31 @@ open_pannello_mac() {
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            var btn = document.getElementById('btnAvviaAuto');
-            if (btn) { btn.innerHTML = '✓ Setup in corso...'; btn.style.background = '#0284c7'; }
+            mostraEsito('\u2713 Dati salvati (file pcfacile-cred.json in Download): il terminale li legge in pochi secondi. Se il browser chiede dove salvare, scegli Download.', 'ok');
         }
 
         function applyStatus(data) {
             if (!data) return;
-            var pct = data.percentuale || 5;
+            var pct = parseInt(data.percentuale, 10) || 0;
             document.getElementById('barFill').style.width = pct + '%';
             document.getElementById('pctText').innerText = pct + '%';
             if (data.faseCorrente) document.getElementById('faseText').innerText = data.faseCorrente;
-            if (data.dettaglio) document.getElementById('dettText').innerText = data.dettaglio;
+            document.getElementById('dettText').innerText = data.dettaglio || '';
+            var b = document.getElementById('badgeLive');
+            if (data.completato === true) {
+                b.innerText = 'Completato';
+                b.className = 'badge-stato ok';
+                document.getElementById('bannerFine').style.display = 'block';
+            } else if (pct > 5) {
+                b.innerText = 'Configurazione in corso';
+            }
         }
         window.onPCFacileMacStatusUpdate = applyStatus;
 
         function poll() {
             var s = document.createElement('script');
             s.src = 'pcfacile-mac-status.js?t=' + new Date().getTime();
-            s.onload = function() { if (this.parentNode) this.parentNode.removeChild(this); };
+            s.onload = s.onerror = function() { if (this.parentNode) this.parentNode.removeChild(this); };
             document.head.appendChild(s);
         }
         setInterval(poll, 1000);
@@ -713,7 +729,7 @@ attendi_credenziali_mac() {
 
     titolo "IN ATTESA DATI DAL PANNELLO OPERATORE (A SINISTRA)"
     print -r -- "${C_CYAN}  -> Compila Cognome, Nome, Telefono e spunta i servizi nel Pannello Web a SINISTRA.${C_RST}"
-    print -r -- "${C_OK}  -> Clicca sul pulsante verde '🚀 AVVIA SETUP AUTOMATICO (Zero Clic)' per partire.${C_RST}"
+    print -r -- "${C_OK}  -> Premi il pulsante verde '🚀 AVVIA CONFIGURAZIONE' per partire.${C_RST}"
     print -r -- "${C_DIM}     (Oppure premi INVIO in questo terminale per usare i valori correnti)${C_RST}"
     print -r -- ""
 

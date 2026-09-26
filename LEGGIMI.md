@@ -24,9 +24,14 @@ Puoi accedere alla **Web App Unificata** da qualsiasi computer o browser di nego
 👉 **[https://samuelenigro97-prog.github.io/pc-facile/](https://samuelenigro97-prog.github.io/pc-facile/)**
 
 Dalla Web App puoi:
-- Generare automaticamente credenziali cliente, email e password sicura.
-- Accedere a tutti i portali di attivazione a 1-click (Microsoft, Office 365, McAfee, Norton, Covercare).
-- Scaricare al volo **`PC Facile.bat`** sul PC da configurare con un solo click.
+- Inserire i dati del cliente (cognome, nome, cellulare, servizi sullo scontrino): email e password si propongono da sole.
+- Premere **AVVIA CONFIGURAZIONE**: è l'unico pulsante che manda i dati al PC. Lo script parte (o aggiorna i dati) solo dopo questo clic, e il pannello dice se il PC li ha davvero ricevuti.
+- Seguire l'avanzamento reale (fasi, percentuale, tempo dall'avvio, hardware e seriale del PC) anche dalla pagina su GitHub, aperta **sul PC da configurare**.
+- Vedere a fine lavoro se ci sono avvisi da controllare prima della consegna.
+- Accedere ai portali di attivazione (Microsoft, Office 365, McAfee, Norton, Covercare).
+- Scaricare al volo **`PC Facile.bat`** se lo script non è ancora avviato.
+
+> Il pannello parla con lo script tramite un piccolo server locale (`127.0.0.1:8899`, raggiungibile solo dal PC stesso) che accetta dati solo dal pannello ufficiale su GitHub Pages o dalla pagina aperta dallo script. Se il browser chiede il permesso di accedere ai dispositivi della rete locale, rispondi **Consenti**.
 
 Ti basta **UN file**: `PC Facile.bat`.
 
@@ -87,7 +92,7 @@ https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/setup-pc.ps
   2. **NEL FRATTEMPO LAVORI TU**: apre in parallelo nel browser il **Pannello Operatore Tecnico** con:
       - 🔑 Credenziali cliente generate con pulsanti **Copia Email** e **Copia Password** a 1 click.
       - 🌐 Accesso rapido ai portali: Account Microsoft, Riscatto Office 365 (`microsoft365.com/setup`), Attivazione McAfee/Norton e Unieuro Cyber Protection.
-      - ⚡ Monitoraggio live sincronizzato con PowerShell e automazione con avvisi sonori.
+      - ⚡ Monitoraggio live delle fasi e un suono a lavoro finito.
   3. **CONSEGNA PRONTA**: genera sul Desktop la **Scheda Consegna Cliente HTML**, il promemoria **`NON CANCELLARE - Chiave di Ripristino BitLocker.txt`** e suona a lavoro ultimato.
 
 > **Consiglio per il banco:** La prima volta che crei la chiavetta USB, avvia con il parametro `-PreparaUSB` (o da menu con `-Menu`): scaricherà tutti i programmi (Chrome, VLC, Adobe Reader, 7-Zip, AnyDesk, Zoom, LibreOffice, tool rimozione AV) direttamente nella cartella `installers` della USB. Così i successivi PC dei clienti si installeranno al **100% OFFLINE** e in pochissimi minuti!
