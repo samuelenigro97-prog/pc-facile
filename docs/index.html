@@ -936,7 +936,7 @@
                             Per far eseguire le operazioni a questo PC, avvia <strong>PC Facile.bat</strong> come amministratore. Appena avviato, la pagina si collegher&agrave; automaticamente in tempo reale.
                         </div>
                         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                            <a href="https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/PC%20Facile.bat" download="PC Facile.bat" class="btn-quick" style="flex: 1; min-width: 200px; text-decoration: none; text-align: center; border-color: #EE7203; color: #fed7aa; font-weight: 700;">
+                            <a href="https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/PC%20Facile.bat" download="PC Facile.bat" onclick="return scaricaLauncher(event)" class="btn-quick" style="flex: 1; min-width: 200px; text-decoration: none; text-align: center; border-color: #EE7203; color: #fed7aa; font-weight: 700;">
                                 &#128229; Scarica "PC Facile.bat" (1-Click)
                             </a>
                             <button type="button" class="btn-quick" onclick="copiaComandoAvvio()" style="flex: 1; min-width: 180px; border-color: #0284c7; color: #93c5fd;">
@@ -1218,6 +1218,7 @@
                 var pass = document.getElementById('inPass').value.trim();
                 var cognome = (document.getElementById('inCognome') ? document.getElementById('inCognome').value.trim() : '');
                 var nome = (document.getElementById('inNome') ? document.getElementById('inNome').value.trim() : '');
+                var telefono = (document.getElementById('inTelefono') ? document.getElementById('inTelefono').value.trim() : '');
                 var cliente = (cognome + ' ' + nome).trim() || nome || cognome;
                 if (!cliente) return;
                 var payload = {
@@ -1333,8 +1334,36 @@
             }
         }
 
+        // Download del launcher: GitHub raw serve il .bat come text/plain da un altro
+        // dominio, quindi l'attributo download verrebbe ignorato (il file si aprirebbe
+        // come testo). raw consente CORS: lo scarico con fetch e lo salvo come Blob
+        // con il nome giusto. Se fetch non e' disponibile o fallisce, apro il link.
+        var LAUNCHER_URL = 'https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/PC%20Facile.bat';
+        function scaricaLauncher(ev) {
+            if (!window.fetch || !window.Blob || !window.URL || !URL.createObjectURL) return true;
+            if (ev && ev.preventDefault) ev.preventDefault();
+            fetch(LAUNCHER_URL, { cache: 'no-store' })
+                .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+                .then(function(b) {
+                    var url = URL.createObjectURL(new Blob([b], { type: 'application/octet-stream' }));
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'PC Facile.bat';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(function() { URL.revokeObjectURL(url); }, 10000);
+                    showToast('Download di "PC Facile.bat" avviato.');
+                })
+                .catch(function() { window.open(LAUNCHER_URL, '_blank'); });
+            return false;
+        }
+
         function copiaComandoAvvio() {
-            var cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::SecurityProtocol=[System.Net.SecurityProtocolType]::Tls12; irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/PC%20Facile.bat -OutFile `$env:TEMP\\pcfacile.bat; Start-Process `$env:TEMP\\pcfacile.bat"';
+            // Deve stare sotto i ~259 caratteri della finestra Esegui (Win+R) e non
+            // passa da cmd: $env:TEMP viene espanso da PowerShell, lo spazio nell'URL
+            // tra apici singoli viene codificato da .NET.
+            var cmd = 'powershell -nop -c "[Net.ServicePointManager]::SecurityProtocol=3072;iwr \'https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/PC Facile.bat\' -UseBasicParsing -OutFile $env:TEMP\\pcf.bat;start $env:TEMP\\pcf.bat"';
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(cmd).then(function() {
                     showToast('Comando copiato! Premi Win+R, incolla e premi Invio.');
