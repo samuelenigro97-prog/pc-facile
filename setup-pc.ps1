@@ -4723,15 +4723,28 @@ try {
 # =============================================================================
 if (-not $Test -and -not $Diagnostica) {
     # 1. Chiude la finestra orfana non elevata del launcher rimasta aperta in background
+    #    MAI i processi "antenati" di questo script: il cmd.exe elevato che esegue
+    #    PC Facile.bat e' il padre di questo PowerShell. Ucciderlo chiudeva la
+    #    finestra (Windows Terminal, predefinito su Windows 11, chiude la scheda
+    #    quando termina il processo avviato) e con essa lo script appena partito.
     try {
         $myPid = $PID
+        $antenati = New-Object 'System.Collections.Generic.HashSet[int]'
+        $tuttiProc = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+        $cur = $PID
+        for ($i = 0; $i -lt 16 -and $cur; $i++) {
+            if (-not $antenati.Add([int]$cur)) { break }
+            $p = $tuttiProc | Where-Object { $_.ProcessId -eq $cur } | Select-Object -First 1
+            if (-not $p) { break }
+            $cur = [int]$p.ParentProcessId
+        }
         Get-CimInstance Win32_Process -Filter "Name = 'cmd.exe'" -ErrorAction SilentlyContinue | Where-Object {
-            $_.ProcessId -ne $myPid -and ($_.CommandLine -like "*PC Facile*" -or $_.CommandLine -like "*elevated*" -or $_.CommandLine -like "*run*")
+            $_.ProcessId -ne $myPid -and -not $antenati.Contains([int]$_.ProcessId) -and ($_.CommandLine -like "*PC Facile*" -or $_.CommandLine -like "*elevated*" -or $_.CommandLine -like "*run*")
         } | ForEach-Object {
             Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
         }
         Get-Process -Name cmd -ErrorAction SilentlyContinue | Where-Object {
-            $_.Id -ne $myPid -and ($_.MainWindowTitle -eq "PC Facile" -or $_.MainWindowTitle -like "*Richiesta privilegi*")
+            $_.Id -ne $myPid -and -not $antenati.Contains([int]$_.Id) -and ($_.MainWindowTitle -eq "PC Facile" -or $_.MainWindowTitle -like "*Richiesta privilegi*")
         } | Stop-Process -Force -ErrorAction SilentlyContinue
     } catch {}
 
