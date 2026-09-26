@@ -17,9 +17,11 @@ Per le istruzioni complete (download, avvio, risoluzione problemi) vedi **[LEGGI
 
 ## Sviluppo / qualità
 
-- **Integrità**: `PC Facile.bat` verifica lo **SHA256** dello script scaricato contro `setup-pc.ps1.sha256`; se non combacia, scarta il download e usa la copia locale.
+- **Integrità**: `PC Facile.bat` verifica lo **SHA256** dello script scaricato contro `setup-pc.ps1.sha256`. Se l'impronta non combacia **o non si riesce a scaricarla**, il download viene scartato (riprova anche dal mirror jsDelivr) e, se nessun download è verificato, si usa la copia sulla chiavetta; la copia sulla chiavetta viene aggiornata solo dopo una verifica riuscita. Su Mac `PC Facile.command` fa lo stesso con `setup-mac.sh.sha256`.
 - **Test**: `tests/PcFacile.Tests.ps1` (Pester) verifica le funzioni pure. Esegui in locale con `Invoke-Pester ./tests`.
 - **CI**: `.github/workflows/ci.yml` gira su ogni push/PR (Windows) — controllo sintassi, PSScriptAnalyzer, Pester e verifica dell'hash.
 - **Dopo aver modificato `setup-pc.ps1`** va rigenerato l'hash:
   `(Get-FileHash ./setup-pc.ps1 -Algorithm SHA256).Hash.ToLower() | Set-Content ./setup-pc.ps1.sha256` (la CI fallisce se è disallineato).
+- **Dopo aver modificato `setup-mac.sh`** rigenera `setup-mac.sh.sha256` allo stesso modo:
+  `(Get-FileHash ./setup-mac.sh -Algorithm SHA256).Hash.ToLower() | Set-Content ./setup-mac.sh.sha256` (oppure `shasum -a 256 setup-mac.sh | cut -d' ' -f1 > setup-mac.sh.sha256`; verificato dai test Pester).
 - **Sicurezza**: distribuzione, integrità e dati sensibili sono descritti in **[SECURITY.md](./SECURITY.md)**.

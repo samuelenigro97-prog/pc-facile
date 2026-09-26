@@ -8,5 +8,7 @@
 *.md        text
 *.yml       text eol=lf
 *.psd1      text eol=lf
-# I file batch restano CRLF (formato Windows).
-*.bat       text eol=crlf
+# I file batch restano CRLF (formato Windows) ANCHE nel repository: con
+# "text eol=crlf" git li salvava LF e GitHub raw serviva un .bat solo-LF (cmd.exe
+# con fine riga LF sbaglia goto/etichette). "-text" = byte salvati tali e quali.
+*.bat       -text

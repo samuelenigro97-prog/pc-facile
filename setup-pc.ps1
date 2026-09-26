@@ -88,8 +88,18 @@ $THEME_TXT   = "White"
 
 # Rileva se il Virtual Terminal (ANSI 24-bit) e' attivo
 $vtOn = $true
+# Backup UNA TANTUM delle impostazioni console originali (lo fa anche il launcher
+# .bat prima di cambiarle): la pulizia finale le reimporta. Un backup gia'
+# presente non viene sovrascritto (conterrebbe gia' i colori modificati).
+$Global:ConsoleBackupFile = Join-Path $(if ($env:ProgramData) { $env:ProgramData } else { [System.IO.Path]::GetTempPath() }) "PCFacile\console-backup.reg"
 try {
     if (Test-Path 'HKCU:\') {
+        if (-not (Test-Path -LiteralPath $Global:ConsoleBackupFile) -and (Test-Path 'HKCU:\Console')) {
+            try {
+                New-Item -ItemType Directory -Path (Split-Path $Global:ConsoleBackupFile -Parent) -Force -ErrorAction SilentlyContinue | Out-Null
+                & reg.exe export 'HKCU\Console' $Global:ConsoleBackupFile /y 2>$null | Out-Null
+            } catch {}
+        }
         if (-not (Test-Path 'HKCU:\Console')) { New-Item -Path 'HKCU:\Console' -Force | Out-Null }
         Set-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -Value 1 -Type DWord -ErrorAction SilentlyContinue
         Set-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable00' -Value 0x002B1200 -Type DWord -ErrorAction SilentlyContinue
@@ -1128,6 +1138,16 @@ function Open-PannelloOperatore {
     
     # Inizializza subito il file di stato sincrono
     Update-PannelloStatus -Percentuale 5 -FaseCorrente "Inizializzazione Setup" -Dettaglio "Avvio pannello operatore Unieuro..."
+
+    # Escape HTML dei valori inseriti nella pagina: un apice, < o & nel nome,
+    # nella password o nei dati hardware non devono rompere/alterare il pannello.
+    $hNome     = [System.Net.WebUtility]::HtmlEncode([string]$NomeCliente)
+    $hEmail    = [System.Net.WebUtility]::HtmlEncode([string]$Email)
+    $hPassword = [System.Net.WebUtility]::HtmlEncode([string]$Password)
+    $hModello  = [System.Net.WebUtility]::HtmlEncode([string]$hwModello)
+    $hCpu      = [System.Net.WebUtility]::HtmlEncode([string]$hwCpu)
+    $hRam      = [System.Net.WebUtility]::HtmlEncode([string]$hwRam)
+    $hSeriale  = [System.Net.WebUtility]::HtmlEncode([string]$hwSeriale)
     
     try {
         $html = @"
@@ -1809,9 +1829,9 @@ function Open-PannelloOperatore {
 
         <!-- RIEPILOGO HARDWARE -->
         <div class="hw-bar">
-            <div class="hw-item">&#128187; <span>Computer:</span> <strong class="hw-val">$hwModello</strong></div>
-            <div class="hw-item">&#9881; <span>Processore &amp; RAM:</span> <strong class="hw-val">$hwCpu &bull; $hwRam</strong></div>
-            <div class="hw-item">&#127991; <span>Seriale:</span> <strong class="hw-val" id="hwSerialVal">$hwSeriale</strong> <button type="button" class="btn-hw-copy" onclick="copiaSeriale()">&#128203; Copia Seriale</button></div>
+            <div class="hw-item">&#128187; <span>Computer:</span> <strong class="hw-val">$hModello</strong></div>
+            <div class="hw-item">&#9881; <span>Processore &amp; RAM:</span> <strong class="hw-val">$hCpu &bull; $hRam</strong></div>
+            <div class="hw-item">&#127991; <span>Seriale:</span> <strong class="hw-val" id="hwSerialVal">$hSeriale</strong> <button type="button" class="btn-hw-copy" onclick="copiaSeriale()">&#128203; Copia Seriale</button></div>
         </div>
 
         <!-- MEGA-HERO PROGRESS BAR SINCRONIZZATA IN TEMPO REALE -->
@@ -1976,7 +1996,7 @@ function Open-PannelloOperatore {
                         </div>
                         <div>
                             <div class="cred-label">Nome Cliente:</div>
-                            <input type="text" id="inNome" class="cred-input" value="$NomeCliente" placeholder="Es. Mario" oninput="aggiornaCred()">
+                            <input type="text" id="inNome" class="cred-input" value="$hNome" placeholder="Es. Mario" oninput="aggiornaCred()">
                         </div>
                     </div>
                     <div>
@@ -2008,7 +2028,7 @@ function Open-PannelloOperatore {
                     <div style="margin-bottom: 12px;">
                         <div class="cred-label" style="color: #fed7aa;">Indirizzo Email Creato:</div>
                         <div class="cred-box">
-                            <input type="text" id="inEmail" class="cred-input cred-mono" value="$Email" oninput="segnaModificato()">
+                            <input type="text" id="inEmail" class="cred-input cred-mono" value="$hEmail" oninput="segnaModificato()">
                             <button type="button" class="btn-copy" onclick="copia('inEmail', 'Email copiata!')">&#128203; COPIA EMAIL</button>
                         </div>
                     </div>
@@ -2022,7 +2042,7 @@ function Open-PannelloOperatore {
                             </span>
                         </div>
                         <div class="cred-box">
-                            <input type="password" id="inPass" class="cred-input cred-mono" value="$Password" oninput="segnaModificato()">
+                            <input type="password" id="inPass" class="cred-input cred-mono" value="$hPassword" oninput="segnaModificato()">
                             <button type="button" class="btn-copy" onclick="copia('inPass', 'Password copiata!')">&#128203; COPIA PASSWORD</button>
                         </div>
                     </div>
@@ -2069,7 +2089,7 @@ function Open-PannelloOperatore {
                             Per far eseguire le operazioni a questo PC, avvia <strong>PC Facile.bat</strong> come amministratore. Appena avviato, la pagina si collegher&agrave; automaticamente in tempo reale.
                         </div>
                         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                            <a href="https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/PC%20Facile.bat" download="PC Facile.bat" class="btn-quick" style="flex: 1; min-width: 200px; text-decoration: none; text-align: center; border-color: #EE7203; color: #fed7aa; font-weight: 700;">
+                            <a href="https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/PC%20Facile.bat" download="PC Facile.bat" onclick="return scaricaLauncher(event)" class="btn-quick" style="flex: 1; min-width: 200px; text-decoration: none; text-align: center; border-color: #EE7203; color: #fed7aa; font-weight: 700;">
                                 &#128229; Scarica "PC Facile.bat" (1-Click)
                             </a>
                             <button type="button" class="btn-quick" onclick="copiaComandoAvvio()" style="flex: 1; min-width: 180px; border-color: #0284c7; color: #93c5fd;">
@@ -2351,6 +2371,7 @@ function Open-PannelloOperatore {
                 var pass = document.getElementById('inPass').value.trim();
                 var cognome = (document.getElementById('inCognome') ? document.getElementById('inCognome').value.trim() : '');
                 var nome = (document.getElementById('inNome') ? document.getElementById('inNome').value.trim() : '');
+                var telefono = (document.getElementById('inTelefono') ? document.getElementById('inTelefono').value.trim() : '');
                 var cliente = (cognome + ' ' + nome).trim() || nome || cognome;
                 if (!cliente) return;
                 var payload = {
@@ -2466,8 +2487,36 @@ function Open-PannelloOperatore {
             }
         }
 
+        // Download del launcher: GitHub raw serve il .bat come text/plain da un altro
+        // dominio, quindi l'attributo download verrebbe ignorato (il file si aprirebbe
+        // come testo). raw consente CORS: lo scarico con fetch e lo salvo come Blob
+        // con il nome giusto. Se fetch non e' disponibile o fallisce, apro il link.
+        var LAUNCHER_URL = 'https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/PC%20Facile.bat';
+        function scaricaLauncher(ev) {
+            if (!window.fetch || !window.Blob || !window.URL || !URL.createObjectURL) return true;
+            if (ev && ev.preventDefault) ev.preventDefault();
+            fetch(LAUNCHER_URL, { cache: 'no-store' })
+                .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+                .then(function(b) {
+                    var url = URL.createObjectURL(new Blob([b], { type: 'application/octet-stream' }));
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'PC Facile.bat';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(function() { URL.revokeObjectURL(url); }, 10000);
+                    showToast('Download di "PC Facile.bat" avviato.');
+                })
+                .catch(function() { window.open(LAUNCHER_URL, '_blank'); });
+            return false;
+        }
+
         function copiaComandoAvvio() {
-            var cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -Command "[System.Net.ServicePointManager]::SecurityProtocol=[System.Net.SecurityProtocolType]::Tls12; irm https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/PC%20Facile.bat -OutFile `$env:TEMP\\pcfacile.bat; Start-Process `$env:TEMP\\pcfacile.bat"';
+            // Deve stare sotto i ~259 caratteri della finestra Esegui (Win+R) e non
+            // passa da cmd: `$env:TEMP viene espanso da PowerShell, lo spazio nell'URL
+            // tra apici singoli viene codificato da .NET.
+            var cmd = 'powershell -nop -c "[Net.ServicePointManager]::SecurityProtocol=3072;iwr \'https://raw.githubusercontent.com/samuelenigro97-prog/pc-facile/main/PC Facile.bat\' -UseBasicParsing -OutFile `$env:TEMP\\pcf.bat;start `$env:TEMP\\pcf.bat"';
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(cmd).then(function() {
                     showToast('Comando copiato! Premi Win+R, incolla e premi Invio.');
@@ -2757,7 +2806,12 @@ function Get-CredenzialiSalvatePannello {
         try {
             $raw = Get-Content -LiteralPath $newest.FullName -Raw -Encoding UTF8
             $parsed = $raw | ConvertFrom-Json
-            if (& $apply $parsed) { return $true }
+            if (& $apply $parsed) {
+                # Letto e applicato: il file contiene la password in chiaro, lo
+                # cancello (insieme ad eventuali copie vecchie di clienti precedenti).
+                foreach ($vecchio in $allFiles) { Remove-Item -LiteralPath $vecchio.FullName -Force -ErrorAction SilentlyContinue }
+                return $true
+            }
         } catch {}
     }
 
@@ -4264,6 +4318,9 @@ function Test-Endpoint {
 
 function New-WlanProfileXml {
     param([string]$Ssid, [string]$Password)
+    # Escape XML: & < > ' " in SSID/password renderebbero il profilo non valido.
+    $Ssid = [System.Security.SecurityElement]::Escape($Ssid)
+    $Password = [System.Security.SecurityElement]::Escape($Password)
     return @"
 <?xml version="1.0"?>
 <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
@@ -4349,26 +4406,26 @@ function Connect-AutoWiFi {
             }
 
             # 2. Cerca file wifi.txt / wifi.ini / wifi.conf con SSID e Password
-            $txtFiles = @(Join-Path $dir "wifi.txt", Join-Path $dir "wifi.ini", Join-Path $dir "wifi.conf")
+            $txtFiles = @((Join-Path $dir "wifi.txt"), (Join-Path $dir "wifi.ini"), (Join-Path $dir "wifi.conf"))
             foreach ($txt in $txtFiles) {
                 if (Test-Path -LiteralPath $txt) {
                     $lines = Get-Content -LiteralPath $txt -ErrorAction SilentlyContinue
                     $ssid = ""
-                    $pwd = ""
+                    $wifiPass = ""
                     foreach ($l in $lines) {
                         $line = $l.Trim()
                         if ($line -match '^(SSID|RETE|WIFI)\s*[:=]\s*(.+)$') { $ssid = $Matches[2].Trim() }
-                        elseif ($line -match '^(PASS|PASSWORD|KEY|CHIAVE)\s*[:=]\s*(.+)$') { $pwd = $Matches[2].Trim() }
+                        elseif ($line -match '^(PASS|PASSWORD|KEY|CHIAVE)\s*[:=]\s*(.+)$') { $wifiPass = $Matches[2].Trim() }
                         elseif (-not $ssid -and $line -notmatch '^#' -and $line.Length -gt 0) {
                             $ssid = $line
-                        } elseif ($ssid -and -not $pwd -and $line -notmatch '^#' -and $line.Length -gt 0) {
-                            $pwd = $line
+                        } elseif ($ssid -and -not $wifiPass -and $line -notmatch '^#' -and $line.Length -gt 0) {
+                            $wifiPass = $line
                         }
                     }
-                    if ($ssid -and $pwd) {
+                    if ($ssid -and $wifiPass) {
                         Write-Info "Tentativo di connessione automatica Wi-Fi: '$ssid'..."
                         $tempXml = Join-Path $env:TEMP "wifi_auto_$([Math]::Abs((Get-Random)%10000)).xml"
-                        $xmlData = New-WlanProfileXml -Ssid $ssid -Password $pwd
+                        $xmlData = New-WlanProfileXml -Ssid $ssid -Password $wifiPass
                         [System.IO.File]::WriteAllText($tempXml, $xmlData, [System.Text.Encoding]::UTF8)
                         & netsh.exe wlan add profile filename="$tempXml" user=all 2>$null | Out-Null
                         & netsh.exe wlan connect name="$ssid" 2>$null | Out-Null
@@ -8265,13 +8322,22 @@ if ($RunReale) {
     try {
         Stop-LocalCredServer
         Restore-SilentElevation
-        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'ColorTable01' -ErrorAction SilentlyContinue
-        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'VirtualTerminalLevel' -ErrorAction SilentlyContinue
-        # Ripristino il font della console a com'era (rimuovo le chiavi del .bat).
-        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'FaceName'   -ErrorAction SilentlyContinue
-        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'FontFamily' -ErrorAction SilentlyContinue
-        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'FontWeight' -ErrorAction SilentlyContinue
-        Remove-ItemProperty -Path 'HKCU:\Console' -Name 'FontSize'   -ErrorAction SilentlyContinue
+        # Console riportata com'era: tolgo TUTTI i valori scritti dal .bat e da
+        # questo script (colori, font, VT), poi reimporto il backup originale
+        # (se presente): i valori che esistevano prima tornano identici.
+        $valoriConsole = @('VirtualTerminalLevel', 'FaceName', 'FontFamily', 'FontWeight', 'FontSize', 'ScreenColors') +
+            @(0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 14, 15 | ForEach-Object { 'ColorTable{0:D2}' -f $_ })
+        foreach ($vc in $valoriConsole) {
+            Remove-ItemProperty -Path 'HKCU:\Console' -Name $vc -ErrorAction SilentlyContinue
+        }
+        if ($Global:ConsoleBackupFile -and (Test-Path -LiteralPath $Global:ConsoleBackupFile)) {
+            & reg.exe import $Global:ConsoleBackupFile 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { Remove-Item -LiteralPath $Global:ConsoleBackupFile -Force -ErrorAction SilentlyContinue }
+        }
+        # Il pannello operatore generato in %TEMP% contiene email e password
+        # precompilate: lo cancello (la pagina gia' aperta nel browser resta).
+        $tmpPannello = Join-Path $(if ($env:TEMP) { $env:TEMP } else { [System.IO.Path]::GetTempPath() }) "Pannello-Operatore.html"
+        Remove-Item -LiteralPath $tmpPannello -Force -ErrorAction SilentlyContinue
     } catch {}
     # Lavoro COMPLETATO: via il checkpoint di ripresa sessione (contiene anche
     # le credenziali generate: non deve restare sul PC del cliente). La cartella

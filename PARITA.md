@@ -36,7 +36,7 @@ allineati come flusso e funzioni.
 ## Infrastruttura (a livello di repo, vale per entrambi)
 - **Test Pester** (`tests/`) sulle funzioni pure di `setup-pc.ps1`.
 - **CI GitHub Actions**: sintassi + PSScriptAnalyzer + Pester + verifica SHA256.
-- **SHA256** (`setup-pc.ps1.sha256`) verificato dal `.bat` allo scaricamento.
+- **SHA256** (`setup-pc.ps1.sha256`) verificato dal `.bat` allo scaricamento; `setup-mac.sh.sha256` verificato da `PC Facile.command`.
 
 ## Solo Windows (non esiste su Mac)
 - **Debloat barra Win11**: nasconde Widget, Chat, Vista attivita' e Ricerca dalla barra (registro HKCU).

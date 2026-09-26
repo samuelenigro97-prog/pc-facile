@@ -4,8 +4,11 @@
 
 `PC Facile.bat` scarica sempre l'ultima versione di `setup-pc.ps1` da `main` e
 ne verifica lo **SHA256** contro `setup-pc.ps1.sha256` pubblicato accanto allo
-script: se non combacia (download corrotto o troncato) scarta il file e usa la
-copia locale sulla chiavetta. L'hash rileva le corruzioni ma, essendo
+script: se l'impronta non combacia (download corrotto o troncato) **oppure non
+si riesce a scaricarla**, il file viene scartato e, in mancanza di un download
+verificato, si usa la copia locale sulla chiavetta. La copia sulla chiavetta
+viene aggiornata solo con un download verificato. Su Mac `PC Facile.command`
+applica la stessa regola a `setup-mac.sh` con `setup-mac.sh.sha256`. L'hash rileva le corruzioni ma, essendo
 pubblicato nello stesso repository, **non sostituisce una firma digitale**.
 
 Quando è disponibile un certificato aziendale di code signing, firmare
